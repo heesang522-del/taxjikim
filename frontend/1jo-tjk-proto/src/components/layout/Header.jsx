@@ -106,7 +106,6 @@ const BellButton = styled.button`
 `
 
 const NAV_ITEMS = [
-  { to: '/', label: '홈', end: true },
   { to: '/calculator', label: '세금 계산·시뮬레이션' },
   { to: '/community', label: '커뮤니티' },
   { to: '/support', label: '고객센터' },
