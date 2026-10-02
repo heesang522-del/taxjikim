@@ -1,0 +1,13 @@
+{
+  "tabs": [
+    { "id": "info", "label": "정보 공유" },
+    { "id": "tips", "label": "팁 게시판" },
+    { "id": "notice", "label": "공지사항" },
+    { "id": "archive", "label": "자료실" }
+  ],
+  "posts": [
+    { "id": 1, "board": "info", "tag": "정보공유", "tone": "primary", "title": "2026년 프리랜서 종합소득세 신고 시 꼭 알아야 할 3가지 변경사항", "author": "절세마스터", "views": 1420, "comments": 12, "time": "10분 전" },
+    { "id": 2, "board": "tips", "tag": "팁", "tone": "success", "title": "유튜버 장비 구입비용 필요경비 인정받는 노하우 공유", "author": "크리에이터A", "views": 2150, "comments": 24, "time": "1시간 전" },
+    { "id": 3, "board": "notice", "tag": "공지", "tone": "danger", "title": "[점검 안내] 국세청 연계 API 시스템 점검 및 서비스 일시 중단 안내", "author": "관리자", "views": 3400, "comments": 0, "time": "어제" }
+  ]
+}

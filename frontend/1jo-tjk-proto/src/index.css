@@ -1,0 +1,73 @@
+/* HTML 시안의 색상 팔레트 (Tailwind slate / indigo 기준). 라이트 모드만 사용한다 */
+:root {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --border-soft: #f1f5f9;
+  --fill: #f1f5f9;
+  --fill-hover: #e2e8f0;
+
+  --text: #1e293b;
+  --text-h: #0f172a;
+  --text-muted: #64748b;
+  --text-faint: #94a3b8;
+
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-bg: #eef2ff;
+  --primary-border: #e0e7ff;
+  --primary-dark: #312e81;
+  --primary-light: #c7d2fe;
+
+  --success: #059669;
+  --success-bg: #ecfdf5;
+  --warn: #d97706;
+  --warn-bg: #fffbeb;
+  --danger: #e11d48;
+  --danger-bg: #fff1f2;
+  --danger-border: #fecdd3;
+
+  --income: #6366f1;
+  --expense: #f43f5e;
+
+  --shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+
+  font: 16px/1.5 'Pretendard', system-ui, 'Segoe UI', Roboto, sans-serif;
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  color: var(--text-h);
+}
+
+button {
+  font: inherit;
+}

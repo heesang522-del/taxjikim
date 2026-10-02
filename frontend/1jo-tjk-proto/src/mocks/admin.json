@@ -1,0 +1,15 @@
+{
+  "model": { "accuracy": 0.912, "recall": 0.874 },
+  "data": { "transactionCount": 1284 },
+  "ops": [
+    { "id": "members", "label": "총 회원수", "value": "34,250명", "tone": "default" },
+    { "id": "visitors", "label": "오늘 방문자", "value": "4,120명", "tone": "default" },
+    { "id": "inquiries", "label": "처리 대기 1:1 문의", "value": "14건", "tone": "danger" },
+    { "id": "reports", "label": "신고된 게시글/댓글", "value": "3건", "tone": "warn" }
+  ],
+  "users": [
+    { "id": 1, "name": "baduser99 (홍*동)", "desc": "크리에이터 | 경고 3회 누적", "groupMsg": "사용자 그룹이 VIP로 변경되었습니다.", "banMsg": "해당 사용자가 차단(Ban) 처리되었습니다." },
+    { "id": 2, "name": "devking (김*수)", "desc": "개발자 | 정상 활동중", "groupMsg": "사용자 그룹이 변경되었습니다.", "banMsg": "차단 처리되었습니다." }
+  ],
+  "inquiry": { "id": 1042, "title": "[문의 #1042] 종합소득세 환급금 지급일 문의", "status": "답변 대기", "meta": "작성자: freelancer01 | 2026.03.28 10:22" }
+}

@@ -1,0 +1,4 @@
+{
+  "model": { "accuracy": 0.912, "recall": 0.874 },
+  "data": { "transactionCount": 1284 }
+}

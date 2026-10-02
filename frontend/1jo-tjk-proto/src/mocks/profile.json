@@ -1,0 +1,13 @@
+{
+  "name": "김프리",
+  "nickname": "김프리",
+  "userId": "userid123",
+  "email": "freelancer@taxflow.co.kr",
+  "job": "개발자 프리랜서",
+  "emailVerified": true,
+  "yearly": [
+    { "year": "2026년 (진행중)", "income": 45000000, "expense": 12500000 },
+    { "year": "2025년 (확정)", "income": 78000000, "expense": 22000000 },
+    { "year": "2024년 (확정)", "income": 62000000, "expense": 18500000 }
+  ]
+}

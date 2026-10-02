@@ -1,0 +1,17 @@
+{
+  "stats": [
+    { "id": "saving", "icon": "trendingUp", "tone": "success", "label": "평균 절세 금액", "value": "1,240,000원" },
+    { "id": "users", "icon": "users", "tone": "primary", "label": "활동중인 프리랜서", "value": "34,250명" },
+    { "id": "files", "icon": "fileText", "tone": "warn", "label": "엑셀/PDF 자동 분석 건수", "value": "182,900건" }
+  ],
+  "notices": [
+    { "id": 1, "title": "[공지] 2026년 귀속 종합소득세 신고 가이드 업데이트", "date": "2026.03.28" },
+    { "id": 2, "title": "[이벤트] 크리에이터 종합소득세 환급 무료 진단 서비스 오픈", "date": "2026.03.25" },
+    { "id": 3, "title": "[가이드] 프리랜서 사업자 등록 시기 판단 기준 총정리", "date": "2026.03.20" }
+  ],
+  "popularPosts": [
+    { "id": 1, "title": "개발자 프리랜서 장비 구입비 필요경비 처리 꿀팁 공유합니다", "views": 1240 },
+    { "id": 2, "title": "유튜버/스트리머 광고 수입 부가세 신고 어떻게 하시나요?", "views": 980 },
+    { "id": 3, "title": "프리랜서 3.3% 원천징수 환급금 조회 방법 완벽 가이드", "views": 850 }
+  ]
+}
