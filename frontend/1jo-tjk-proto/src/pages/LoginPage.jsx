@@ -19,7 +19,7 @@ export default function LoginPage() {
   const linkStyle = { color: 'var(--text-muted)', fontWeight: 600 }
 
   return (
-    <AuthCard icon="logIn" title="로그인" description="TaxFlow 서비스에 오신 것을 환영합니다.">
+    <AuthCard icon="logIn" title="로그인" description="TaxJikim 서비스에 오신 것을 환영합니다.">
       <form onSubmit={handleSubmit}>
         <Stack $gap={16}>
           <Field>
