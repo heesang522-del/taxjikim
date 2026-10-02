@@ -123,7 +123,7 @@ export default function Header({ onOpenNotifications }) {
             <Icon name="calculator" />
           </span>
           <span>
-            TaxFlow <Badge>프로토타입</Badge>
+            TaxJikim <Badge>프로토타입</Badge>
           </span>
         </Brand>
         <Nav>
