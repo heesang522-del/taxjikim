@@ -1,7 +1,7 @@
-package com.post.post.service;
+package com.kh.back.post.service;
 
-import com.post.post.dto.FileMetaDataDto;
-import com.post.post.mapper.FileMapper;
+import com.kh.back.post.dto.FileMetaDataDto;
+import com.kh.back.post.mapper.FileMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;

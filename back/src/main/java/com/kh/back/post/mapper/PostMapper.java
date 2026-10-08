@@ -1,8 +1,8 @@
-package com.post.post.mapper;
+package com.kh.back.post.mapper;
 
-import com.post.post.dto.FileMetaDataDto;
-import com.post.post.dto.PostDto;
-import com.post.post.dto.PostImageDto;
+import com.kh.back.post.dto.FileMetaDataDto;
+import com.kh.back.post.dto.PostDto;
+import com.kh.back.post.dto.PostImageDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 

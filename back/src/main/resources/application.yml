@@ -25,3 +25,16 @@ mybatis:
 logging:
   level:
     com.kh.back: debug
+
+# 🌟 S3Config에서 참조하는 AWS S3 설정 추가
+aws:
+  s3:
+    bucket: your-bucket-name
+    access-key: "YOUR_AWS_ACCESS_KEY"
+    secret-key: "YOUR_AWS_SECRET_KEY"
+    region: ap-northeast-2
+
+# 🌟 파일 업로드 디렉토리 설정 추가
+file:
+  upload-dir:
+    post: "C:/uploads/post"

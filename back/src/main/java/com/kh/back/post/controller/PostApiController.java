@@ -1,31 +1,21 @@
-package com.post.post.controller;
+package com.kh.back.post.controller;
 
-import com.post.common.dto.ApiResponse;
-import com.post.post.dto.ChunkDto;
-import com.post.post.dto.PostDto;
-import com.post.post.service.PostService;
+import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.post.dto.ChunkDto;
+import com.kh.back.post.dto.PostDto;
+import com.kh.back.post.service.PostService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/posts")
 public class PostApiController {
-
-    // 임시 청크가 저장될 폴더 경로 (환경에 맞게 수정)
-    private final String TEMP_DIR = "C:/uploads/temp/";
-    // 최종 병합된 파일이 저장될 폴더 경로
-    private final String UPLOAD_DIR = "C:/uploads/files/";
 
     private final PostService postService;
 
@@ -54,7 +44,7 @@ public class PostApiController {
         result.put("totalPages", totalPages);
         result.put("hasNext", page < totalPages);
 
-        return ApiResponse.success(result);
+        return ApiResponse.ok(result); // success -> ok 로 변경
     }
 
     /**
@@ -65,10 +55,7 @@ public class PostApiController {
         Map<String, Object> response = new HashMap<>();
 
         try {
-            // 🌟 컨트롤러에서 직접 병합하던 로직을 PostService로 위임합니다.
-            // PostService 내부에서 마지막 청크일 경우 병합 + 임시폴더 삭제 + file_meta DB 저장을 모두 수행합니다.
             String savedFileName = postService.processChunkUpload(dto);
-
             boolean completed = (savedFileName != null);
 
             Map<String, Object> data = new HashMap<>();
@@ -88,7 +75,7 @@ public class PostApiController {
     }
 
     /**
-     * 3. 게시글 신규 등록 API (multipart/form-data 및 폼 전송 모두 허용)
+     * 3. 게시글 신규 등록 API
      */
     @PostMapping(consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
     public ResponseEntity<?> createPost(
@@ -140,7 +127,7 @@ public class PostApiController {
     }
 
     /**
-     * 4. 게시글 수정 API (multipart/form-data 및 폼 전송 모두 허용)
+     * 4. 게시글 수정 API
      */
     @PostMapping(value = {"/{postId}", "/{postId}/update"}, consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
     public ApiResponse<Void> updatePost(
@@ -185,14 +172,15 @@ public class PostApiController {
         postDto.setOtherCost(otherCost);
 
         postService.updateWithFiles(postDto, deleteImageIds, savedFileNames);
-        return ApiResponse.success(null);
+        return ApiResponse.ok(null); // success -> ok 로 변경
     }
+
     /**
      * 5. 게시글 삭제 API
      */
     @DeleteMapping("/{postId}")
     public ApiResponse<Void> deletePost(@PathVariable Long postId) {
         postService.deleteById(postId);
-        return ApiResponse.success(null);
+        return ApiResponse.ok(null); // success -> ok 로 변경
     }
 }

@@ -1,10 +1,10 @@
-package com.post.post.controller;
+package com.kh.back.post.controller;
 
-import com.post.common.response.PageRequest;
-import com.post.common.response.PageResponse;
-import com.post.common.util.SavedFile;
-import com.post.post.dto.PostDto;
-import com.post.post.service.PostService;
+import com.kh.back.common.response.PageRequest;
+import com.kh.back.common.response.PageResponse;
+import com.kh.back.common.util.SavedFile;
+import com.kh.back.post.dto.PostDto;
+import com.kh.back.post.service.PostService;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
@@ -37,7 +37,7 @@ public class PostController {
 
         PageResponse pageResponse = postService.getPostPage(pageRequest, sort, keyword);
 
-        model.addAttribute("posts", pageResponse.getList());
+        model.addAttribute("posts", pageResponse.getContent());
         model.addAttribute("paging", pageResponse);
         model.addAttribute("sort", sort);
         model.addAttribute("keyword", keyword);

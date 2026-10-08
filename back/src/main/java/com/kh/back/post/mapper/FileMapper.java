@@ -1,6 +1,6 @@
-package com.post.post.mapper;
+package com.kh.back.post.mapper;
 import org.apache.ibatis.annotations.Mapper;
-import com.post.post.dto.FileMetaDataDto;
+import com.kh.back.post.dto.FileMetaDataDto;
 
 @Mapper
 public interface FileMapper {

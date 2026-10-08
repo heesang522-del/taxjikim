@@ -1,4 +1,4 @@
-package com.post.post.dto;
+package com.kh.back.post.dto;
 
 
 import org.springframework.web.multipart.MultipartFile;

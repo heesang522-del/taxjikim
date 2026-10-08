@@ -1,6 +1,6 @@
-package com.post.post.controller;
+package com.kh.back.post.controller;
 
-import com.post.post.service.CloudFileService;
+import com.kh.back.post.service.CloudFileService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

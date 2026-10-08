@@ -1,14 +1,13 @@
-package com.post.post.service;
-
-import com.post.common.response.PageRequest;
-import com.post.common.response.PageResponse;
-import com.post.common.util.FileUploadUtil;
-import com.post.common.util.SavedFile;
-import com.post.common.validation.PostValidator;
-import com.post.post.dto.ChunkDto;
-import com.post.post.dto.PostDto;
-import com.post.post.dto.PostImageDto;
-import com.post.post.mapper.PostMapper;
+package com.kh.back.post.service;
+import com.kh.back.common.response.PageRequest;
+import com.kh.back.common.response.PageResponse;
+import com.kh.back.common.util.FileUploadUtil;
+import com.kh.back.common.util.SavedFile;
+import com.kh.back.common.validation.PostValidator;
+import com.kh.back.post.dto.ChunkDto;
+import com.kh.back.post.dto.PostDto;
+import com.kh.back.post.dto.PostImageDto;
+import com.kh.back.post.mapper.PostMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +18,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -95,7 +92,7 @@ public class PostService {
                 tempDirFile.delete();
             }
 // 5. DB에 파일 메타데이터 저장 (DTO 방식)
-            com.post.post.dto.FileMetaDataDto fileMetaDataDto = new com.post.post.dto.FileMetaDataDto();
+            com.kh.back.post.dto.FileMetaDataDto fileMetaDataDto = new com.kh.back.post.dto.FileMetaDataDto();
             fileMetaDataDto.setOriginalFileName(dto.getOriginalName());
             fileMetaDataDto.setStoredFileName(savedFileName);
             fileMetaDataDto.setFilePath(UPLOAD_DIR + savedFileName);
