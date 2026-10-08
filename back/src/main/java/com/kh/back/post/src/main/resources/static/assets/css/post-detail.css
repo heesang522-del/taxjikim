@@ -1,0 +1,31 @@
+.zt-main-preview-wrapper {
+    position: relative; /* 버튼 배치를 위한 기준 설정 */
+}
+
+.zt-slider-btn {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    font-size: 18px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-radius: 4px;
+    z-index: 10;
+}
+
+.zt-slider-btn:hover {
+    background-color: rgba(0, 0, 0, 0.8);
+}
+
+.zt-prev-btn {
+    left: 10px;
+}
+
+.zt-next-btn {
+    right: 10px;
+
+< link rel = "stylesheet" href = "/css/common.css" > < link rel = "stylesheet" href = "/css/post-detail.css" > < script src = "/js/common.js" > < / script >
+}
