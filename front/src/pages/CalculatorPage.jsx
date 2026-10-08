@@ -63,11 +63,13 @@ export default function CalculatorPage() {
   }
 
   function handleAdd() {
+    // 옵션을 불러오기 전에는 거래를 추가하지 않고, Compiler의 사전 계산도 안전하게 처리한다.
+    if (!options) return
     addTransaction({
       type: '지출',
       date: '2026-03-15',
       description: '',
-      category: options.categories[1],
+      category: options?.categories?.[1] ?? '',
       amount: '',
     })
   }

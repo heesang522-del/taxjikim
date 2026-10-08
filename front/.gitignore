@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# 로컬 이전 백업과 npm 캐시는 저장소에 올리지 않는다.
+migration-backup/
+.npm-cache/

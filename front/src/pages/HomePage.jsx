@@ -1,34 +1,44 @@
-import { useEffect, useState } from 'react';
-import { getCompanies } from '../api/companyApi';
+import HeroSection from '../components/home/HeroSection'
+import StatsSection from '../components/home/StatsSection'
+import PreviewListCard from '../components/home/PreviewListCard'
+import AsyncBoundary from '../components/AsyncBoundary'
+import MockBadge from '../components/MockBadge'
+import { Badge, Grid, Row, Stack } from '../components/ui'
+import { useApi } from '../utils/useApi'
+import { getHomeData } from '../api/home'
 
-// 연결 확인용 화면. 종목 5개가 보이면 React → proxy → 백엔드 연결이 된 것이다.
-function HomePage() {
-  const [items, setItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-
-  useEffect(() => {
-    getCompanies(1, 5)
-      .then((res) => setItems(res.data.data))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false));
-  }, []);
-
-  if (loading) return <p>불러오는 중…</p>;
-  if (error) return <p>연결 실패: {error}</p>;
+export default function HomePage() {
+  const { status, data } = useApi(getHomeData)
 
   return (
-    <section>
-      <h2>연결 확인</h2>
-      <ul>
-        {items.map((c) => (
-          <li key={c.code}>
-            {c.code} {c.name}
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
+    <Stack $gap={32}>
+      <HeroSection />
+      <AsyncBoundary status={status}>
+        <Stack $gap={24}>
+          <Row $justify="flex-end">
+            <MockBadge />
+          </Row>
+          <StatsSection stats={data?.stats ?? []} />
+          <Grid $cols={2} $gap={24}>
+            <PreviewListCard
+              icon="megaphone"
+              iconColor="var(--primary)"
+              title="공지사항 및 주요 소식"
+              items={data?.notices ?? []}
+              to="/community"
+              renderMeta={(n) => <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>{n.date}</span>}
+            />
+            <PreviewListCard
+              icon="flame"
+              iconColor="var(--expense)"
+              title="실시간 인기 정보 공유"
+              items={data?.popularPosts ?? []}
+              to="/community"
+              renderMeta={(p) => <Badge>조회 {p.views.toLocaleString('ko-KR')}</Badge>}
+            />
+          </Grid>
+        </Stack>
+      </AsyncBoundary>
+    </Stack>
+  )
 }
-
-export default HomePage;
