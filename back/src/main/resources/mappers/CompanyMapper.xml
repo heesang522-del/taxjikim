@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- namespace 는 Mapper 인터페이스의 전체 경로와 같아야 한다 -->
+<mapper namespace="com.kh.back.company.mapper.CompanyMapper">
+
+    <select id="findAll" resultType="CompanyDto">
+        SELECT code, name, sectorCode, sectorName, market, marketCap
+        FROM company
+        ORDER BY code
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM company
+    </select>
+
+    <select id="findByCode" resultType="CompanyDto">
+        SELECT code, name, sectorCode, sectorName, market, marketCap
+        FROM company
+        WHERE code = #{code}
+    </select>
+
+</mapper>
