@@ -1,0 +1,38 @@
+# 비밀값과 개인 PC 환경 설정 (예시 파일은 공유)
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.local
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+
+# Python 가상환경, 캐시, 로컬 데이터와 학습 결과
+나중에 건드려야함
+
+# IntelliJ IDEA
+**/.idea/
+*.iml
+*.iws
+*.ipr
+
+# VS Code
+**/.vscode/*
+!**/.vscode/extensions.json
+
+# 운영체제 임시 파일
+**/.DS_Store
+**/Thumbs.db
+
+# Vim 편집기 임시 파일
+*.swp
+*.swo
+
+# 실행 로그
+*.log
+*.log.*
+**/logs/
