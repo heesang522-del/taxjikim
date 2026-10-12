@@ -1,4 +1,4 @@
-package com.example.practice.chat;
+package com.kh.back.chat;
 
 
 import org.springframework.stereotype.Component;
@@ -32,7 +32,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         room.computeIfAbsent(roomId, k -> ConcurrentHashMap.newKeySet()).add(session);
 
 
-        System.out.println("[브라우저 연결] : " + session.getId() + "/ room=" + roomId);
+        System.out.println("[브라우저 연결] : " + session.getId() + "/ roomname : " + roomId);
 
     }
 
@@ -73,11 +73,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             if (members.isEmpty()) {
                 room.remove(roomId);
             }
+            System.out.println("[브라우저 종료] : " + session.getId() + "/ room=" + roomId);
     }
 
     // /ws/chat/{roomId}로 핸드셰이크 요청시 파싱용 메서드
     private String extractRoomId(WebSocketSession session) {
         String path = session.getUri().getPath(); // "/ws/chat/room1"
         return path.substring(path.lastIndexOf('/') + 1);
+
     }
 }

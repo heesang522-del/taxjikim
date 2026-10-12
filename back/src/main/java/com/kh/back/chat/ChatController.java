@@ -1,4 +1,4 @@
-package com.example.practice.chat;
+package com.kh.back.chat;
 
 public class ChatController {
 
