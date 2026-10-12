@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.member.repository.MemberRepository">
+
+    <!-- 회원 가입 -->
+    <insert id="insertMember" parameterType="com.kh.back.member.dto.MemberDto">
+        INSERT INTO member (
+            member_id, member_password, nickname, member_name, member_phone, member_email, profile_image
+        ) VALUES (
+                     #{memberId}, #{memberPassword}, #{nickname}, #{memberName},
+                     #{memberPhone}, #{memberEmail}, #{profileImage}
+                 )
+    </insert>
+
+    <!-- 중복 확인 쿼리 -->
+    <select id="countByMemberId" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM member WHERE member_id = #{memberId}
+    </select>
+
+    <select id="countByNickname" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM member WHERE nickname = #{nickname}
+    </select>
+
+    <select id="countByMemberEmail" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM member WHERE member_email = #{memberEmail}
+    </select>
+
+    <!-- 회원 단건 조회 -->
+    <select id="findByMemberId" parameterType="string" resultType="com.kh.back.member.dto.MemberDto">
+        SELECT
+            id              AS id,
+            member_id       AS memberId,
+            member_password AS memberPassword,
+            nickname,
+            member_name     AS memberName,
+            member_phone    AS memberPhone,
+            member_email    AS memberEmail,
+            profile_image   AS profileImage,
+            member_role     AS memberRole,
+            member_status   AS memberStatus,
+            created_at      AS createdAt,
+            updated_at      AS updatedAt,
+            deleted_at      AS deletedAt
+        FROM member
+        WHERE member_id = #{memberId}
+    </select>
+
+    <select id="findById" parameterType="long" resultType="com.kh.back.member.dto.MemberDto">
+        SELECT
+            id              AS id,
+            member_id       AS memberId,
+            member_password AS memberPassword,
+            nickname,
+            member_name     AS memberName,
+            member_phone    AS memberPhone,
+            member_email    AS memberEmail,
+            profile_image   AS profileImage,
+            member_role     AS memberRole,
+            member_status   AS memberStatus,
+            created_at      AS createdAt,
+            updated_at      AS updatedAt,
+            deleted_at      AS deletedAt
+        FROM member
+        WHERE id = #{id}
+    </select>
+
+    <!-- 로그인 아이디로 실제 회원 PK 조회 -->
+    <select id="findIdByMemberId" parameterType="string" resultType="int">
+        SELECT id
+        FROM member
+        WHERE member_id = #{memberId}
+    </select>
+
+    <select id="findMemberIdByNameAndEmail" resultType="string">
+        SELECT member_id
+        FROM member
+        WHERE member_name = #{memberName}
+          AND member_email = #{memberEmail}
+            LIMIT 1
+    </select>
+
+    <!-- 비밀번호 변경 -->
+    <update id="updatePassword">
+        UPDATE member
+        SET member_password = #{memberPassword},
+            updated_at = NOW()
+        WHERE member_id = #{memberId}
+    </update>
+
+    <update id="updateMemberFields" parameterType="com.kh.back.member.dto.MemberDto">
+        UPDATE member
+        <set>
+            <if test="nickname != null">nickname = #{nickname},</if>
+            <if test="memberPhone != null">member_phone = #{memberPhone},</if>
+            <if test="memberEmail != null">member_email = #{memberEmail},</if>
+            <if test="profileImage != null">profile_image = #{profileImage},</if>
+            updated_at = NOW()
+        </set>
+        WHERE member_id = #{memberId}
+    </update>
+
+    <update id="updateProfileImage">
+        UPDATE member
+        SET profile_image = #{profileImage},
+            updated_at = NOW()
+        WHERE member_id = #{memberId}
+    </update>
+
+    <!-- 계정 상태 관리 (탈퇴 / 휴면 / 복구) -->
+    <update id="deleteMember">
+        UPDATE member
+        SET member_status = 'DELETED',
+            deleted_at = NOW()
+        WHERE member_id = #{memberId}
+    </update>
+
+    <delete id="deleteExpiredMembers">
+        DELETE FROM member
+        WHERE member_status = 'DELETED'
+          AND deleted_at &lt;= #{cutoffDate}
+    </delete>
+
+    <update id="updateLastLoginAt">
+        UPDATE member
+        SET last_login_at = NOW()
+        WHERE member_id = #{memberId}
+    </update>
+
+    <update id="convertToDormantAccounts">
+        UPDATE member
+        SET member_status = 'DORMANT'
+        WHERE member_id IN (
+            SELECT temp.member_id FROM (
+               SELECT member_id
+               FROM member
+               WHERE member_status = 'ACTIVE'
+                 AND (
+                   last_login_at &lt; #{cutoffDate}
+                       OR (last_login_at IS NULL AND created_at &lt; #{cutoffDate})
+                   )
+           ) AS temp
+        )
+    </update>
+
+    <update id="activateDormantAccount">
+        UPDATE member
+        SET member_status = 'ACTIVE',
+            last_login_at = NOW()
+        WHERE member_id = #{memberId}
+    </update>
+
+    <update id="cancelDeleteMember">
+        UPDATE member
+        SET member_status = 'ACTIVE',
+            deleted_at = NULL,
+            last_login_at = NOW()
+        WHERE member_id = #{memberId}
+    </update>
+</mapper>

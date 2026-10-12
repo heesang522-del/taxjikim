@@ -1,9 +1,36 @@
 spring:
+  config:
+    # back 폴더에서 실행한다. 외부 키 파일 경로는 JWT_SECRET_FILE로 변경할 수 있다.
+    import: "optional:file:${JWT_SECRET_FILE:./config/jwt-secret.properties}"
+  flyway:
+    enabled: false
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    # Gmail 앱 비밀번호를 환경변수로 제공한다.
+    properties:
+      mail:
+        smtp:
+          auth: true
+          connectiontimeout: 5000
+          timeout: 5000
+          starttls:
+            enable: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   datasource:
     url: jdbc:mysql://${DB_HOST:192.168.10.16}:3306/TAXJIKIM?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: ${DB_USERNAME:server}
     password: ${DB_PASSWORD:server}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 시작 시 연결 풀의 초기 연결 생성을 기다리지 않는다.
+      minimum-idle: 0
+      initialization-fail-timeout: -1
   jpa:
     hibernate:
       ddl-auto: update
@@ -14,7 +41,7 @@ spring:
 
 # 서버 포트 (React 의 vite.config.js API_TARGET 과 같아야 한다)
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 mybatis:
   # Mapper XML 위치
@@ -42,3 +69,13 @@ aws:
 file:
   upload-dir:
     post: "C:/uploads/post"
+# 회원 정리·휴면 처리 주기. 실제 실행에는 @EnableScheduling이 필요하다.
+# 별도 zone 지정이 없으므로 JVM의 시간대를 기준으로 실행한다.
+custom:
+  cron: "0 0 3 * * *"
+
+jwt:
+  # 로컬 키 파일 또는 JWT_SECRET 환경변수의 Base64 키를 사용한다.
+  secret: ${JWT_SECRET}
+  access-token-expiration: 1800000 # 30분, 밀리초
+  refresh-token-expiration: 1209600000 # 14일, 밀리초
