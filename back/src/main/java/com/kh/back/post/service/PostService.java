@@ -205,26 +205,27 @@ public class PostService {
         int totalCount = postMapper.countAll(keyword);
         List<PostDto> list = postMapper.findPage(sort, keyword, pageRequest.getOffset(), pageRequest.getSize());
 
-        for (PostDto post : list) {
-            post.setImages(postMapper.findImagesByPostId(post.getPostId()));
-        }
+        populateImages(list);
         return new PageResponse(list, totalCount, pageRequest);
     }
 
     public List<PostDto> findPage(String sort, String keyword, int offset, int size) {
         List<PostDto> list = postMapper.findPage(sort, keyword, offset, size);
-        for (PostDto post : list) {
-            post.setImages(postMapper.findImagesByPostId(post.getPostId()));
-        }
+        populateImages(list);
         return list;
     }
 
     public List<PostDto> findAll(String sort, String keyword) {
         List<PostDto> list = postMapper.findAll(sort);
-        for (PostDto post : list) {
+        populateImages(list);
+        return list;
+    }
+
+    // 목록 조회 방식이 달라도 게시글별 이미지는 같은 흐름으로 채운다.
+    private void populateImages(List<PostDto> posts) {
+        for (PostDto post : posts) {
             post.setImages(postMapper.findImagesByPostId(post.getPostId()));
         }
-        return list;
     }
 
     public void delete(Long postId) {

@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -89,24 +90,7 @@ public class PostApiController {
             @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
     ) {
         try {
-            String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank()) ? savedFileNamesJson : savedFileNamesAlt;
-
-            List<String> savedFileNames = new java.util.ArrayList<>();
-            if (jsonStr != null && !jsonStr.isBlank() && !jsonStr.equals("[]")) {
-                String cleaned = jsonStr.trim();
-                if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
-                    cleaned = cleaned.substring(1, cleaned.length() - 1);
-                }
-                if (!cleaned.isBlank()) {
-                    String[] parts = cleaned.split(",");
-                    for (String part : parts) {
-                        String fileName = part.trim().replaceAll("^\"|\"$", "");
-                        if (!fileName.isEmpty()) {
-                            savedFileNames.add(fileName);
-                        }
-                    }
-                }
-            }
+            List<String> savedFileNames = parseSavedFileNames(savedFileNamesJson, savedFileNamesAlt);
 
             PostDto postDto = new PostDto();
             postDto.setTitle(title);
@@ -143,24 +127,7 @@ public class PostApiController {
             @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
     ) throws IOException {
 
-        String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank()) ? savedFileNamesJson : savedFileNamesAlt;
-
-        List<String> savedFileNames = new java.util.ArrayList<>();
-        if (jsonStr != null && !jsonStr.isBlank() && !jsonStr.equals("[]")) {
-            String cleaned = jsonStr.trim();
-            if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
-                cleaned = cleaned.substring(1, cleaned.length() - 1);
-            }
-            if (!cleaned.isBlank()) {
-                String[] parts = cleaned.split(",");
-                for (String part : parts) {
-                    String fileName = part.trim().replaceAll("^\"|\"$", "");
-                    if (!fileName.isEmpty()) {
-                        savedFileNames.add(fileName);
-                    }
-                }
-            }
-        }
+        List<String> savedFileNames = parseSavedFileNames(savedFileNamesJson, savedFileNamesAlt);
 
         PostDto postDto = new PostDto();
         postDto.setPostId(postId);
@@ -173,6 +140,30 @@ public class PostApiController {
 
         postService.updateWithFiles(postDto, deleteImageIds, savedFileNames);
         return ApiResponse.ok(null); // success -> ok 로 변경
+    }
+
+    // 등록과 수정에서 같은 파일명 처리 규칙을 사용한다.
+    private List<String> parseSavedFileNames(String savedFileNamesJson, String savedFileNamesAlt) {
+        String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank())
+                ? savedFileNamesJson : savedFileNamesAlt;
+        List<String> savedFileNames = new ArrayList<>();
+        if (jsonStr == null || jsonStr.isBlank() || jsonStr.equals("[]")) {
+            return savedFileNames;
+        }
+
+        String cleaned = jsonStr.trim();
+        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+            cleaned = cleaned.substring(1, cleaned.length() - 1);
+        }
+        if (!cleaned.isBlank()) {
+            for (String part : cleaned.split(",")) {
+                String fileName = part.trim().replaceAll("^\"|\"$", "");
+                if (!fileName.isEmpty()) {
+                    savedFileNames.add(fileName);
+                }
+            }
+        }
+        return savedFileNames;
     }
 
     /**
