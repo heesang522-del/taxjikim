@@ -1,7 +1,4 @@
 spring:
-  config:
-    # back 폴더에서 실행한다. 외부 키 파일 경로는 JWT_SECRET_FILE로 변경할 수 있다.
-    import: "optional:file:${JWT_SECRET_FILE:./config/jwt-secret.properties}"
   mail:
     host: smtp.gmail.com
     port: 587
@@ -21,9 +18,9 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   datasource:
-    url: jdbc:mysql://${DB_HOST:192.168.10.16}:3306/TAXJIKIM?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: ${DB_USERNAME:server}
-    password: ${DB_PASSWORD:server}
+    url: jdbc:mysql://${DB_HOST}:3306/TAXJIKIM?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 # 서버 포트 (React 의 vite.config.js API_TARGET 과 같아야 한다)
@@ -62,7 +59,6 @@ custom:
   cron: "0 0 3 * * *"
 
 jwt:
-  # 로컬 키 파일 또는 JWT_SECRET 환경변수의 Base64 키를 사용한다.
-  secret: ${JWT_SECRET}
+  secret: my-temporary-secret-key-for-jwt-authentication-demo-project-2026-safe
   access-token-expiration: 1800000 # 30분, 밀리초
   refresh-token-expiration: 1209600000 # 14일, 밀리초
