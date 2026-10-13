@@ -1,9 +1,9 @@
-package com.kh.back.member.controller;
+package com.kh.back.user.controller;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.security.LoginSessionRepository;
-import com.kh.back.member.dto.MemberDto;
-import com.kh.back.member.service.MemberService;
+import com.kh.back.user.dto.UserDto;
+import com.kh.back.user.service.UserService;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -23,38 +23,38 @@ import java.security.Principal;
 
 
 @Controller
-@RequestMapping("/member")
+@RequestMapping("/user")
 @RequiredArgsConstructor
-public class MemberController {
+public class UserController {
 
-    private final MemberService memberService;
+    private final UserService userService;
     private final LoginSessionRepository loginSessionRepository;
 
     /* ================= 1. 페이지 이동 (GET) ================= */
 
     @GetMapping("/join-step1")
     public String joinStep1() {
-        return "member/join-step1";
+        return "user/join-step1";
     }
 
     @GetMapping("/join-step2")
     public String joinStep2() {
-        return "member/join-step2";
+        return "user/join-step2";
     }
 
     @GetMapping("/mypage")
     public String mypageForm(@AuthenticationPrincipal CustomUserDetails user, @RequestParam(defaultValue = "1") Integer page,
             Model model) {
-        MemberDto memberDto = user.getMemberDto();
-        Long pkId = (memberDto.getId() != null) ? memberDto.getId() : 0;
+        UserDto userDto = user.getUserDto();
+        Long pkId = (userDto.getUserId() != null) ? userDto.getUserId() : 0;
 
         return "mypage/main"; // WEB-INF/views/mypage/main.jsp
     }
 
     @GetMapping("/settings")
     public String settingsForm(@AuthenticationPrincipal CustomUserDetails user, Model model) {
-        MemberDto memberDto = memberService.getMemberById(user.getUsername());
-        model.addAttribute("memberDto", memberDto);
+        UserDto userDto = userService.getUserByLoginId(user.getUsername());
+        model.addAttribute("userDto", userDto);
 
         return "mypage/settings"; // WEB-INF/views/mypage/settings.jsp
     }
@@ -62,40 +62,35 @@ public class MemberController {
     /* ================= 2. 정보 처리 및 변경 (POST) ================= */
 
     @PostMapping("/join")
-    public String join(MemberDto memberDto, @RequestParam(value = "profile", required = false) MultipartFile profileFile) {
-        memberService.joinMember(memberDto, profileFile);
+    public String join(UserDto userDto, @RequestParam(value = "profile", required = false) MultipartFile profileFile) {
+        userService.joinUser(userDto, profileFile);
         return "redirect:/auth/login";
     }
 
     @PostMapping("/updateNickname")
     public String updateNickname(String nickname, Principal principal) {
         // DB 업데이트만 수행 (세션 저장 로직 전면 제거)
-        memberService.updateNickname(principal.getName(), nickname);
-        return "redirect:/member/settings";
+        userService.updateNickname(principal.getName(), nickname);
+        return "redirect:/user/settings";
     }
 
-    @PostMapping("/updatePhone")
-    public String updatePhone(@RequestParam("memberPhone") String memberPhone, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        memberService.updatePhone(userDetails.getUsername(), memberPhone);
-        return "redirect:/member/settings";
-    }
 
     @PostMapping("/updateEmail")
-    public String updateEmail(@RequestParam("memberEmail") String memberEmail, @AuthenticationPrincipal CustomUserDetails userDetails) {
-        memberService.updateEmail(userDetails.getUsername(), memberEmail);
-        return "redirect:/member/settings";
+    public String updateEmail(@RequestParam("email") String email, @AuthenticationPrincipal CustomUserDetails userDetails) {
+        userService.updateEmail(userDetails.getUsername(), email);
+        return "redirect:/user/settings";
     }
 
-    @PostMapping("/updateProfileImage")
-    public String updateProfileImage(
+    @PostMapping("/updateProfileImageUrl")
+    public String updateProfileImageUrl(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(value = "deleteProfile", defaultValue = "false") boolean deleteProfile,
             @RequestParam(value = "profile", required = false) MultipartFile profileFile,
             RedirectAttributes redirectAttributes) {
 
-        memberService.updateProfileImage(userDetails.getMemberDto().getMemberId(), profileFile, deleteProfile);
+        userService.updateProfileImageUrl(userDetails.getUserDto().getLoginId(), profileFile, deleteProfile);
         redirectAttributes.addFlashAttribute("message", "프로필 이미지가 변경되었습니다.");
-        return "redirect:/member/settings";
+        return "redirect:/user/settings";
     }
 
     @PostMapping("/updatePasswordInSettings")
@@ -106,16 +101,16 @@ public class MemberController {
             RedirectAttributes rttr) {
 
         try {
-            memberService.updatePasswordInSettings(userDetails.getUsername(), currentPassword, newPassword);
+            userService.updatePasswordInSettings(userDetails.getUsername(), currentPassword, newPassword);
             rttr.addFlashAttribute("successMessage", "비밀번호가 변경되었습니다.");
         } catch (IllegalArgumentException e) {
             rttr.addFlashAttribute("errorMessage", e.getMessage());
         }
-        return "redirect:/member/settings";
+        return "redirect:/user/settings";
     }
 
     @PostMapping("/delete")
-    public String deleteMember(
+    public String deleteUser(
             @RequestParam("password") String password,
             HttpServletRequest request,
             HttpServletResponse response,
@@ -126,19 +121,19 @@ public class MemberController {
             return "redirect:/auth/login";
         }
 
-        String memberId = userDetails.getUsername();
-        boolean isPasswordMatch = memberService.checkPassword(memberId, password);
+        String loginId = userDetails.getUsername();
+        boolean isPasswordMatch = userService.checkPassword(loginId, password);
 
         if (!isPasswordMatch) {
             rttr.addFlashAttribute("errorMessage", "비밀번호가 일치하지 않습니다.");
-            return "redirect:/member/settings";
+            return "redirect:/user/settings";
         }
 
         try {
-            memberService.deleteMember(memberId);
+            userService.deleteUser(loginId);
 
             // 1. Redis에서 Refresh Token 삭제
-            loginSessionRepository.revokeCurrentSession(userDetails.getMemberDto().getId());
+            loginSessionRepository.revokeCurrentSession(userDetails.getUserDto().getUserId());
 
             // 2. 브라우저의 refreshToken 쿠키 만료 처리
             Cookie[] cookies = request.getCookies();
@@ -163,7 +158,7 @@ public class MemberController {
         } catch (Exception e) {
             e.printStackTrace();
             rttr.addFlashAttribute("errorMessage", "탈퇴 처리 중 오류가 발생했습니다.");
-            return "redirect:/member/settings";
+            return "redirect:/user/settings";
         }
     }
 }

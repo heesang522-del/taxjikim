@@ -1,6 +1,6 @@
 package com.kh.back.auth.controller;
 
-import com.kh.back.auth.repository.MemberSecurityRepository;
+import com.kh.back.auth.mapper.UserSecurityMapper;
 import com.kh.back.auth.security.LoginAttemptService;
 import com.kh.back.auth.security.LoginUnlockTokenService;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +21,7 @@ public class AuthController {
 
     private final LoginUnlockTokenService unlockTokenService;
     private final LoginAttemptService loginAttemptService;
-    private final MemberSecurityRepository memberSecurityRepository;
+    private final UserSecurityMapper userSecurityMapper;
 
     /* ================= 1. 기본 인증 페이지 ================= */
 
@@ -48,15 +48,15 @@ public class AuthController {
     // 이메일 링크를통한 계정 잠금 해제 (AccountUnlockController 통합)
     @GetMapping("/unlock-account")
     public String unlockAccount(@RequestParam("token") String token, RedirectAttributes redirectAttributes) {
-        String memberId = unlockTokenService.getMemberIdByToken(token);
+        String loginId = unlockTokenService.getLoginIdByToken(token);
 
-        if (memberId == null) {
+        if (loginId == null) {
             String errorMsg = URLEncoder.encode("만료되었거나 유효하지 않은 해제 링크입니다. 다시 시도해 주세요.", StandardCharsets.UTF_8);
             return "redirect:/auth/login?error=true&exception=" + errorMsg;
         }
 
-        memberSecurityRepository.unlockAccount(memberId);
-        loginAttemptService.loginSucceeded(memberId);
+        userSecurityMapper.unlockAccount(loginId);
+        loginAttemptService.loginSucceeded(loginId);
         unlockTokenService.invalidateToken(token);
 
         String successMsg = URLEncoder.encode("계정 잠금이 성공적으로 해제되었습니다. 다시 로그인해 주세요.", StandardCharsets.UTF_8);
@@ -66,32 +66,32 @@ public class AuthController {
     // 휴면 계정 해제 페이지
     @GetMapping("/unlock-dormant")
     public String unlockDormantPage(
-            @RequestParam(value = "memberId", required = false) String memberId,
-            @RequestParam(value = "memberEmail", required = false) String memberEmail,
+            @RequestParam(value = "loginId", required = false) String loginId,
+            @RequestParam(value = "email", required = false) String email,
             Model model) {
 
-        if (memberId == null || memberEmail == null) {
+        if (loginId == null || email == null) {
             return "redirect:/auth/login";
         }
 
-        model.addAttribute("memberId", memberId);
-        model.addAttribute("memberEmail", memberEmail);
+        model.addAttribute("loginId", loginId);
+        model.addAttribute("email", email);
         return "account/unlock-dormant"; // WEB-INF/views/account/unlock-dormant.jsp
     }
 
     // 탈퇴 취소/복구 페이지
     @GetMapping("/restore-account")
     public String restoreAccountPage(
-            @RequestParam(value = "memberId", required = false) String memberId,
-            @RequestParam(value = "memberEmail", required = false) String memberEmail,
+            @RequestParam(value = "loginId", required = false) String loginId,
+            @RequestParam(value = "email", required = false) String email,
             Model model) {
 
-        if (memberId == null || memberEmail == null) {
+        if (loginId == null || email == null) {
             return "redirect:/auth/login";
         }
 
-        model.addAttribute("memberId", memberId);
-        model.addAttribute("memberEmail", memberEmail);
+        model.addAttribute("loginId", loginId);
+        model.addAttribute("email", email);
         return "account/restore-account"; // WEB-INF/views/account/restore.jsp
     }
 }

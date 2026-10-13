@@ -1,8 +1,8 @@
 package com.kh.back.auth.dto;
 
 public record LoginRequestDto(
-        String memberId,
-        String memberPassword,
+        String loginId,
+        String password,
         boolean rememberMe
 ) {
 }

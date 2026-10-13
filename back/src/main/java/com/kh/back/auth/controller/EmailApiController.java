@@ -21,7 +21,7 @@ public class EmailApiController {
     // 1. 단순 이메일 인증번호 발송 (회원가입)
     @PostMapping("/send-code")
     public ResponseEntity<?> sendVerificationCode(@RequestBody Map<String, String> request) {
-        String email = request.get("memberEmail");
+        String email = request.get("email");
         try {
             emailVerificationService.sendVerificationCode(email);
             return ResponseEntity.ok(Map.of("success", true, "message", "인증번호가 발송되었습니다."));
@@ -33,7 +33,7 @@ public class EmailApiController {
     // 2. 인증번호 검증 API
     @PostMapping("/verify-code")
     public ResponseEntity<?> verifyCode(@RequestBody Map<String, String> request) {
-        String email = request.get("memberEmail");
+        String email = request.get("email");
         String code = request.get("code");
 
         try {

@@ -36,12 +36,12 @@ public class JwtTokenProvider {
     }
 
     // Access Token 생성
-    public String generateAccessToken(Long memberNumber, String sessionId) {
+    public String generateAccessToken(Long userId, String sessionId) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + accessTokenExpiration);
 
         return Jwts.builder()
-                .subject(memberNumber.toString())
+                .subject(userId.toString())
                 .claim("sid", sessionId)
                 .claim("type", "access")
                 .issuedAt(now)
@@ -51,13 +51,13 @@ public class JwtTokenProvider {
     }
 
     // JwtTokenProvider 내 메서드 수정
-    public RefreshTokenDto generateRefreshToken(Long memberNumber, String sessionId) {
+    public RefreshTokenDto generateRefreshToken(Long userId, String sessionId) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + refreshTokenExpiration);
         String jti = UUID.randomUUID().toString();
 
         String refreshToken = Jwts.builder()
-                .subject(memberNumber.toString())
+                .subject(userId.toString())
                 .id(jti)
                 .claim("sid", sessionId)
                 .claim("type", "refresh")
@@ -88,7 +88,7 @@ public class JwtTokenProvider {
                     .verifyWith(secretKey)
                     .build()
                     .parseSignedClaims(token);
-            getMemberNumber(token);
+            getUserId(token);
             return true;
         } catch (SecurityException | SignatureException e) {
             log.error("잘못된 JWT 서명입니다.");
@@ -104,14 +104,14 @@ public class JwtTokenProvider {
         return false;
     }
 
-    public Long getMemberNumber(String token) {
+    public Long getUserId(String token) {
         Claims claims = getClaims(token);
         if (claims.containsKey("role")) {
             throw new IllegalArgumentException("기존 형식의 토큰입니다. 다시 로그인해 주세요.");
         }
-        Long memberNumber = Long.valueOf(claims.getSubject());
-        if (memberNumber <= 0) throw new IllegalArgumentException("유효하지 않은 회원 번호입니다.");
-        return memberNumber;
+        Long userId = Long.valueOf(claims.getSubject());
+        if (userId <= 0) throw new IllegalArgumentException("유효하지 않은 회원 번호입니다.");
+        return userId;
     }
     private Claims getClaims(String token) {
         return Jwts.parser()

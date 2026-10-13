@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.auth.mapper.UserSecurityMapper">
+
+    <!-- 1. 계정 잠금 처리 (USER_STATUS -> 'LOCKED') -->
+    <update id="lockAccount">
+        UPDATE `user`
+        SET USER_STATUS = 'LOCKED'
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <!-- 2. 계정 잠금 해제 (USER_STATUS -> 'ACTIVE') -->
+    <update id="unlockAccount">
+        UPDATE `user`
+        SET USER_STATUS = 'ACTIVE'
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+</mapper>

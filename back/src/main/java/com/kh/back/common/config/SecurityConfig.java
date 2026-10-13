@@ -6,7 +6,7 @@ import com.kh.back.auth.service.AuthCookieService;
 import com.kh.back.auth.service.AuthService;
 import com.kh.back.common.security.JwtAuthenticationFilter;
 import com.kh.back.common.security.JwtTokenProvider;
-import com.kh.back.member.service.MemberService;
+import com.kh.back.user.service.UserService;
 import jakarta.servlet.http.Cookie;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -26,7 +26,7 @@ import org.springframework.security.web.savedrequest.NullRequestCache;
 public class SecurityConfig {
 
     private final CustomAuthenticationProvider customAuthenticationProvider;
-    private final MemberService memberService;
+    private final UserService userService;
     private final AuthService authService;
 
     // Redis 서비스 및 JWT 토큰 프로바이더 주입
@@ -38,7 +38,7 @@ public class SecurityConfig {
     // (JwtAuthenticationFilter.java 클래스의 @Component 어노테이션은 반드시 삭제되어 있어야 합니다!)
     @Bean
     public JwtAuthenticationFilter jwtAuthenticationFilter() {
-        return new JwtAuthenticationFilter(jwtTokenProvider, memberService, authService, loginSessionRepository, authCookieService);
+        return new JwtAuthenticationFilter(jwtTokenProvider, userService, authService, loginSessionRepository, authCookieService);
     }
 
     @Bean
@@ -81,11 +81,11 @@ public class SecurityConfig {
                                 "/css/**", "/js/**", "/images/**", "/uploads/**", "/error"
                         ).permitAll()
                         .requestMatchers(
-                                "/member/update**", "/member/delete", "/member/mypage", "/member/settings"
+                                "/user/update**", "/user/delete", "/user/mypage", "/user/settings"
                         ).authenticated()
                         .requestMatchers(
                                 "/", "/api/**",
-                                "/auth/**", "/member/**"
+                                "/auth/**", "/user/**"
                         ).permitAll()
                         .requestMatchers(
                                 "/index"
@@ -93,9 +93,9 @@ public class SecurityConfig {
                         .anyRequest().permitAll()
                 )
 
-                // 4. 로그아웃 설정 (기존 URL: /member/logout 유지, POST 요청 시에만 실행)
+                // 4. 로그아웃 설정 (기존 URL: /user/logout 유지, POST 요청 시에만 실행)
                 .logout(logout -> logout
-                        .logoutUrl("/member/logout")
+                        .logoutUrl("/user/logout")
                         .logoutSuccessUrl("/")
                         .clearAuthentication(true)
                         .addLogoutHandler((request, response, authentication) -> {
@@ -110,8 +110,8 @@ public class SecurityConfig {
                                         String token = cookie.getValue();
 
                                         if (jwtTokenProvider.validateToken(token)) {
-                                            Long memberNumber = jwtTokenProvider.getMemberNumber(token);
-                                            loginSessionRepository.endSessionIfCurrent(memberNumber, jwtTokenProvider.getSessionId(token));
+                                            Long userId = jwtTokenProvider.getUserId(token);
+                                            loginSessionRepository.endSessionIfCurrent(userId, jwtTokenProvider.getSessionId(token));
                                         }
 
                                         authCookieService.clearRefreshToken(response);

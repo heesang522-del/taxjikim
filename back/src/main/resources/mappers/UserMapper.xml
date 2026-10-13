@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.user.mapper.UserMapper">
+
+    <!-- 회원 가입 -->
+    <insert id="insertUser" parameterType="com.kh.back.user.dto.UserDto" useGeneratedKeys="true" keyProperty="userId" keyColumn="USER_ID">
+        INSERT INTO `user` (LOGIN_ID, PASSWORD, NAME, NICKNAME, EMAIL, BIRTH_DATE, PROFILE_IMAGE_URL)
+        VALUES (#{loginId}, #{password}, #{name}, #{nickname}, #{email}, #{birthDate}, #{profileImageUrl})
+    </insert>
+
+    <!-- 중복 확인 쿼리 -->
+    <select id="countByLoginId" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM `user` WHERE LOGIN_ID = #{loginId}
+    </select>
+
+    <select id="countByNickname" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM `user` WHERE NICKNAME = #{nickname}
+    </select>
+
+    <select id="countByEmail" parameterType="string" resultType="int">
+        SELECT COUNT(*) FROM `user` WHERE EMAIL = #{email}
+    </select>
+
+    <!-- 회원 단건 조회 -->
+    <select id="findByLoginId" parameterType="string" resultType="com.kh.back.user.dto.UserDto">
+        SELECT
+            USER_ID AS userId,
+            LOGIN_ID       AS loginId,
+            PASSWORD AS password,
+            NICKNAME AS nickname,
+            NAME     AS name,
+            EMAIL    AS email,
+            PROFILE_IMAGE_URL   AS profileImageUrl,
+            USER_ROLE     AS userRole,
+            USER_STATUS   AS userStatus,
+            CREATED_AT      AS createdAt,
+            UPDATED_AT      AS updatedAt,
+            DELETED_AT      AS deletedAt,
+            BIRTH_DATE AS birthDate,
+            LAST_LOGIN_AT AS lastLoginAt
+        FROM `user`
+        WHERE LOGIN_ID = #{loginId}
+    </select>
+
+    <select id="findById" parameterType="long" resultType="com.kh.back.user.dto.UserDto">
+        SELECT
+            USER_ID AS userId,
+            LOGIN_ID       AS loginId,
+            PASSWORD AS password,
+            NICKNAME AS nickname,
+            NAME     AS name,
+            EMAIL    AS email,
+            PROFILE_IMAGE_URL   AS profileImageUrl,
+            USER_ROLE     AS userRole,
+            USER_STATUS   AS userStatus,
+            CREATED_AT      AS createdAt,
+            UPDATED_AT      AS updatedAt,
+            DELETED_AT      AS deletedAt,
+            BIRTH_DATE AS birthDate,
+            LAST_LOGIN_AT AS lastLoginAt
+        FROM `user`
+        WHERE USER_ID = #{userId}
+    </select>
+
+    <!-- 로그인 아이디로 실제 회원 PK 조회 -->
+    <select id="findUserIdByLoginId" parameterType="string" resultType="long">
+        SELECT USER_ID
+        FROM `user`
+        WHERE LOGIN_ID = #{loginId}
+    </select>
+
+    <select id="findLoginIdByNameAndEmail" resultType="string">
+        SELECT LOGIN_ID
+        FROM `user`
+        WHERE NAME = #{name}
+          AND EMAIL = #{email}
+            LIMIT 1
+    </select>
+
+    <!-- 비밀번호 변경 -->
+    <update id="updatePassword">
+        UPDATE `user`
+        SET PASSWORD = #{password},
+            UPDATED_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <update id="updateUserFields" parameterType="com.kh.back.user.dto.UserDto">
+        UPDATE `user`
+        <set>
+            <if test="birthDate != null">BIRTH_DATE = #{birthDate},</if>
+            <if test="nickname != null">NICKNAME = #{nickname},</if>
+            <if test="email != null">EMAIL = #{email},</if>
+            <if test="profileImageUrl != null">PROFILE_IMAGE_URL = #{profileImageUrl},</if>
+            UPDATED_AT = NOW()
+        </set>
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <update id="updateProfileImageUrl">
+        UPDATE `user`
+        SET PROFILE_IMAGE_URL = #{profileImageUrl},
+            UPDATED_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <!-- 계정 상태 관리 (탈퇴 / 휴면 / 복구) -->
+    <update id="deleteUser">
+        UPDATE `user`
+        SET USER_STATUS = 'DELETED',
+            DELETED_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <delete id="deleteExpiredUsers">
+        DELETE FROM `user`
+        WHERE USER_STATUS = 'DELETED'
+          AND DELETED_AT &lt;= #{cutoffDate}
+    </delete>
+
+    <update id="updateLastLoginAt">
+        UPDATE `user`
+        SET LAST_LOGIN_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <update id="convertToDormantAccounts">
+        UPDATE `user`
+        SET USER_STATUS = 'DORMANT'
+        WHERE LOGIN_ID IN (
+            SELECT temp.LOGIN_ID FROM (
+               SELECT LOGIN_ID
+               FROM `user`
+               WHERE USER_STATUS = 'ACTIVE'
+                 AND (
+                   LAST_LOGIN_AT &lt; #{cutoffDate}
+                       OR (LAST_LOGIN_AT IS NULL AND CREATED_AT &lt; #{cutoffDate})
+                   )
+           ) AS temp
+        )
+    </update>
+
+    <update id="activateDormantAccount">
+        UPDATE `user`
+        SET USER_STATUS = 'ACTIVE',
+            LAST_LOGIN_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+
+    <update id="cancelDeleteUser">
+        UPDATE `user`
+        SET USER_STATUS = 'ACTIVE',
+            DELETED_AT = NULL,
+            LAST_LOGIN_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+    </update>
+</mapper>

@@ -16,7 +16,8 @@ public class LoginSessionRepository {
     }
 
     private final StringRedisTemplate redisTemplate;
-    private static final String PREFIX = "LOGIN:member-number:";
+    // 회원 고유 번호로 로그인 세션을 구분한다. 로그인 아이디와 혼용하지 않는다.
+    private static final String PREFIX = "LOGIN:user-id:";
     private static final DefaultRedisScript<Long> LOGIN_SCRIPT = new DefaultRedisScript<>("""
             redis.call('DEL', KEYS[1])
             redis.call('HSET', KEYS[1], 'sid', ARGV[1], 'jti', ARGV[2])
@@ -40,18 +41,18 @@ public class LoginSessionRepository {
             return redis.call('DEL', KEYS[1])
             """, Long.class);
 
-    public void replaceCurrentSession(Long memberNumber, String sessionId, String jti, long timeoutMillis) {
+    public void replaceCurrentSession(Long userId, String sessionId, String jti, long timeoutMillis) {
         requirePositiveTimeout(timeoutMillis);
-        redisTemplate.execute(LOGIN_SCRIPT, List.of(PREFIX + memberNumber),
+        redisTemplate.execute(LOGIN_SCRIPT, List.of(PREFIX + userId),
                 sessionId, jti == null ? "" : jti, Long.toString(timeoutMillis));
     }
-    public boolean isCurrentSession(Long memberNumber, String sessionId) {
-        return sessionId != null && sessionId.equals(redisTemplate.opsForHash().get(PREFIX + memberNumber, "sid"));
+    public boolean isCurrentSession(Long userId, String sessionId) {
+        return sessionId != null && sessionId.equals(redisTemplate.opsForHash().get(PREFIX + userId, "sid"));
     }
-    public RotationResult rotateRefreshToken(Long memberNumber, String sessionId, String currentJti,
+    public RotationResult rotateRefreshToken(Long userId, String sessionId, String currentJti,
                                    String newJti, long timeoutMillis) {
         requirePositiveTimeout(timeoutMillis);
-        Long result = redisTemplate.execute(ROTATE_SCRIPT, List.of(PREFIX + memberNumber),
+        Long result = redisTemplate.execute(ROTATE_SCRIPT, List.of(PREFIX + userId),
                 sessionId, currentJti, newJti, Long.toString(timeoutMillis));
         if (result == null) throw new IllegalStateException("Redis 세션 확인에 실패했습니다.");
         // Lua의 숫자 결과는 저장소 내부에서만 해석합니다.
@@ -62,11 +63,11 @@ public class LoginSessionRepository {
             default -> throw new IllegalStateException("알 수 없는 Redis 토큰 교체 결과입니다.");
         };
     }
-    public void endSessionIfCurrent(Long memberNumber, String sessionId) {
-        if (sessionId != null) redisTemplate.execute(LOGOUT_SCRIPT, List.of(PREFIX + memberNumber), sessionId);
+    public void endSessionIfCurrent(Long userId, String sessionId) {
+        if (sessionId != null) redisTemplate.execute(LOGOUT_SCRIPT, List.of(PREFIX + userId), sessionId);
     }
     // 회원 탈퇴 등 계정 전체의 로그인 종료에 사용합니다.
-    public void revokeCurrentSession(Long memberNumber) { redisTemplate.delete(PREFIX + memberNumber); }
+    public void revokeCurrentSession(Long userId) { redisTemplate.delete(PREFIX + userId); }
     private void requirePositiveTimeout(long timeoutMillis) {
         if (timeoutMillis <= 0) throw new IllegalArgumentException("만료 시간은 양수여야 합니다.");
     }

@@ -4,8 +4,8 @@ import com.kh.back.auth.dto.LoginRequestDto;
 import com.kh.back.auth.dto.LoginResponse;
 import com.kh.back.auth.service.AuthService;
 import com.kh.back.auth.service.EmailVerificationService;
-import com.kh.back.member.service.MemberService;
-import com.kh.back.member.service.MemberService.AccountRestoreType;
+import com.kh.back.user.service.UserService;
+import com.kh.back.user.service.UserService.AccountRestoreType;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -21,7 +21,7 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class AuthApiController {
 
-    private final MemberService memberService;
+    private final UserService userService;
     private final AuthService authService;
     private final EmailVerificationService emailVerificationService;
 
@@ -36,8 +36,8 @@ public class AuthApiController {
             HttpServletResponse response) {
         try {
             LoginResponse loginResponse = authService.login(
-                    requestDto.memberId(),
-                    requestDto.memberPassword(),
+                    requestDto.loginId(),
+                    requestDto.password(),
                     requestDto.rememberMe(),
                     response
             );
@@ -105,7 +105,7 @@ public class AuthApiController {
 
     @PostMapping("/send-recovery-code")
     public ResponseEntity<?> sendRecoveryCode(@RequestBody Map<String, String> request) {
-        String email = request.get("memberEmail");
+        String email = request.get("email");
         try {
             emailVerificationService.sendVerificationCode(email);
             return ResponseEntity.ok(Map.of("success", true, "message", "인증번호가 발송되었습니다."));
@@ -129,17 +129,17 @@ public class AuthApiController {
             AccountRestoreType restoreType
     ) {
         String code = request.get("code");
-        String memberId = request.get("memberId");
-        String memberEmail = request.get("memberEmail");
+        String loginId = request.get("loginId");
+        String email = request.get("email");
 
-        if (memberId == null || memberEmail == null) {
+        if (loginId == null || email == null) {
             return ResponseEntity.ok("EXPIRED");
         }
 
         try {
-            boolean isCodeValid = emailVerificationService.verifyCode(memberEmail, code);
+            boolean isCodeValid = emailVerificationService.verifyCode(email, code);
             if (isCodeValid) {
-                memberService.restoreAccountStatus(memberId, memberEmail, restoreType);
+                userService.restoreAccountStatus(loginId, email, restoreType);
                 return ResponseEntity.ok("SUCCESS");
             }
             return ResponseEntity.ok("FAIL");

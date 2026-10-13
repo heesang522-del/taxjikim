@@ -4,8 +4,8 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.security.LoginSessionRepository;
 import com.kh.back.auth.service.AuthCookieService;
 import com.kh.back.auth.service.AuthService;
-import com.kh.back.member.dto.MemberDto;
-import com.kh.back.member.service.MemberService;
+import com.kh.back.user.dto.UserDto;
+import com.kh.back.user.service.UserService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -27,7 +27,7 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
-    private final MemberService memberService;
+    private final UserService userService;
     private final AuthService authService;
     private final LoginSessionRepository loginSessionRepository;
     private final AuthCookieService authCookieService;
@@ -64,21 +64,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // 1. Access Token이 유효한 경우 -> 정상 인증
         if (accessToken != null && jwtTokenProvider.validateToken(accessToken)) {
-            Long memberNumber = jwtTokenProvider.getMemberNumber(accessToken);
+            Long userId = jwtTokenProvider.getUserId(accessToken);
             if (!jwtTokenProvider.isTokenType(accessToken, "access")
-                    || !loginSessionRepository.isCurrentSession(memberNumber, jwtTokenProvider.getSessionId(accessToken))) {
+                    || !loginSessionRepository.isCurrentSession(userId, jwtTokenProvider.getSessionId(accessToken))) {
                 rejectSession(request, response, "SESSION_REPLACED");
                 return;
             }
-            setAuthenticationToContext(memberNumber);
+            setAuthenticationToContext(userId);
         }
         // 2. Access Token은 만료/없지만 Refresh Token 쿠키가 있는 경우 -> 자동 로그인(reissue)
         else if (refreshToken != null) {
             try {
                 String newAccessToken = authService.reissue(refreshToken, response);
 
-                Long memberNumber = jwtTokenProvider.getMemberNumber(newAccessToken);
-                setAuthenticationToContext(memberNumber);
+                Long userId = jwtTokenProvider.getUserId(newAccessToken);
+                setAuthenticationToContext(userId);
             } catch (AuthenticationException e) {
                 rejectSession(request, response,
                         "SESSION_REPLACED".equals(e.getMessage()) ? "SESSION_REPLACED" : "SESSION_EXPIRED");
@@ -125,10 +125,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         return null;
     }
 
-    private void setAuthenticationToContext(Long memberNumber) {
-        MemberDto memberDto = memberService.getMemberByNumber(memberNumber);
-        if (memberDto != null && "ACTIVE".equals(memberDto.getMemberStatus())) {
-            CustomUserDetails userDetails = new CustomUserDetails(memberDto);
+    private void setAuthenticationToContext(Long userId) {
+        UserDto userDto = userService.getUserById(userId);
+        if (userDto != null && "ACTIVE".equals(userDto.getUserStatus())) {
+            CustomUserDetails userDetails = new CustomUserDetails(userDto);
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(
                             userDetails,

@@ -20,9 +20,9 @@ public class UnlockEmailService {
     /**
      * 1. [5회/10회] 로그인 실패 경고 및 조기 해제 메일 발송
      */
-    public void sendWarningEmail(String memberId, String toEmail, String failReason) {
+    public void sendWarningEmail(String loginId, String toEmail, String failReason) {
         // 해제 토큰 및 URL 생성
-        String token = unlockTokenService.createUnlockToken(memberId);
+        String token = unlockTokenService.createUnlockToken(loginId);
         String unlockUrl = "http://localhost:8080/auth/unlock-account?token=" + token;
 
         try {
@@ -34,7 +34,7 @@ public class UnlockEmailService {
 
             String htmlContent = "<div style='font-family: Arial, sans-serif; padding: 20px; border: 1px solid #ddd; border-radius: 8px;'>"
                     + "<h2 style='color: #d9534f;'>⚠️ 로그인 실패 경고 및 차단 안내</h2>"
-                    + "<p>회원님의 계정(<b>" + memberId + "</b>)으로 연속된 로그인 실패가 발생했습니다.</p>"
+                    + "<p>회원님의 계정(<b>" + loginId + "</b>)으로 연속된 로그인 실패가 발생했습니다.</p>"
                     + "<p><b>사유:</b> <span style='color: #d9534f;'>" + failReason + "</span></p>"
                     + "<p>일시 차단을 바로 해제하시려면 아래 버튼을 눌러주세요.</p>"
                     + "<p style='color: red;'><b>※ 이 링크는 15분 동안만 유효합니다.</b></p>"
@@ -45,19 +45,19 @@ public class UnlockEmailService {
 
             helper.setText(htmlContent, true);
             mailSender.send(message);
-            log.warn("[경고/해제 메일 발송 성공] 회원 ID: {}, 이메일: {}, 사유: {}", memberId, toEmail, failReason);
+            log.warn("[경고/해제 메일 발송 성공] 회원 ID: {}, 이메일: {}, 사유: {}", loginId, toEmail, failReason);
 
         } catch (MessagingException e) {
-            log.error("[경고 메일 발송 실패] 회원 ID: {}", memberId);
+            log.error("[경고 메일 발송 실패] 회원 ID: {}", loginId);
         }
     }
 
     /**
      * 계정 잠금 해제 메일 발송
      */
-    public void sendUnlockEmail(String memberId, String toEmail) {
+    public void sendUnlockEmail(String loginId, String toEmail) {
         // 1. 유효기간 15분짜리 토큰 생성
-        String token = unlockTokenService.createUnlockToken(memberId);
+        String token = unlockTokenService.createUnlockToken(loginId);
 
         // 2. 잠금 해제 URL 생성 (서버 도메인에 맞게 수정)
         String unlockUrl = "http://localhost:8080/auth/unlock-account?token=" + token;
@@ -78,10 +78,10 @@ public class UnlockEmailService {
 
             helper.setText(htmlContent, true);
             mailSender.send(message);
-            log.info("[메일 발송 성공] 회원 ID: {}, 이메일: {}", memberId, toEmail);
+            log.info("[메일 발송 성공] 회원 ID: {}, 이메일: {}", loginId, toEmail);
 
         } catch (MessagingException e) {
-            log.error("[메일 발송 실패] 회원 ID: {}", memberId);
+            log.error("[메일 발송 실패] 회원 ID: {}", loginId);
         }
     }
 }

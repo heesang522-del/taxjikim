@@ -1,7 +1,7 @@
 package com.kh.back.auth.security;
 
-import com.kh.back.member.dto.MemberDto;
-import com.kh.back.member.repository.MemberRepository;
+import com.kh.back.user.dto.UserDto;
+import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -12,17 +12,17 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {
 
-    private final MemberRepository memberRepository;
+    private final UserMapper userMapper;
 
     @Override
-    public UserDetails loadUserByUsername(String memberId) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String loginId) throws UsernameNotFoundException {
 
-        MemberDto memberDto = memberRepository.findByMemberId(memberId);
+        UserDto userDto = userMapper.findByLoginId(loginId);
 
-        if (memberDto == null) {
+        if (userDto == null) {
             throw new UsernameNotFoundException("존재하지 않는 회원입니다.");
         }
 
-        return new CustomUserDetails(memberDto);
+        return new CustomUserDetails(userDto);
     }
 }

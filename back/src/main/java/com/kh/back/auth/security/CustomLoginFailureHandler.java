@@ -1,7 +1,7 @@
 package com.kh.back.auth.security;
 
-import com.kh.back.member.dto.MemberDto;
-import com.kh.back.member.service.MemberService;
+import com.kh.back.user.dto.UserDto;
+import com.kh.back.user.service.UserService;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 @RequiredArgsConstructor
 public class CustomLoginFailureHandler implements AuthenticationFailureHandler {
 
-    private final MemberService memberService;
+    private final UserService userService;
 
     @Override
     public void onAuthenticationFailure(
@@ -26,16 +26,16 @@ public class CustomLoginFailureHandler implements AuthenticationFailureHandler {
             HttpServletResponse response,
             AuthenticationException exception) throws IOException, ServletException {
 
-        String memberId = request.getParameter("memberId");
+        String loginId = request.getParameter("loginId");
         String message = exception.getMessage();
 
         // 1. DORMANT (휴면 계정)
         if ("DORMANT".equals(message)) {
-            MemberDto member = memberService.getMemberById(memberId);
-            if (member != null) {
-                String redirectUrl = String.format("/auth/unlock-dormant?memberId=%s&memberEmail=%s",
-                        URLEncoder.encode(member.getMemberId(), StandardCharsets.UTF_8),
-                        URLEncoder.encode(member.getMemberEmail(), StandardCharsets.UTF_8));
+            UserDto user = userService.getUserByLoginId(loginId);
+            if (user != null) {
+                String redirectUrl = String.format("/auth/unlock-dormant?loginId=%s&email=%s",
+                        URLEncoder.encode(user.getLoginId(), StandardCharsets.UTF_8),
+                        URLEncoder.encode(user.getEmail(), StandardCharsets.UTF_8));
                 response.sendRedirect(redirectUrl);
                 return;
             }
@@ -43,11 +43,11 @@ public class CustomLoginFailureHandler implements AuthenticationFailureHandler {
 
         // 2. DELETED (탈퇴 대기 계정)
         if ("DELETED".equals(message)) {
-            MemberDto member = memberService.getMemberById(memberId);
-            if (member != null) {
-                String redirectUrl = String.format("/auth/restore-account?memberId=%s&memberEmail=%s",
-                        URLEncoder.encode(member.getMemberId(), StandardCharsets.UTF_8),
-                        URLEncoder.encode(member.getMemberEmail(), StandardCharsets.UTF_8));
+            UserDto user = userService.getUserByLoginId(loginId);
+            if (user != null) {
+                String redirectUrl = String.format("/auth/restore-account?loginId=%s&email=%s",
+                        URLEncoder.encode(user.getLoginId(), StandardCharsets.UTF_8),
+                        URLEncoder.encode(user.getEmail(), StandardCharsets.UTF_8));
                 response.sendRedirect(redirectUrl);
                 return;
             }

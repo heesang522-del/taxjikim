@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class LoginUnlockTokenService {
 
-    // 15분 후 자동 만료되는 토큰 저장소 (Key: UUID 토큰, Value: memberId)
+    // 15분 후 자동 만료되는 토큰 저장소 (Key: UUID 토큰, Value: loginId)
     private final Cache<String, String> unlockTokenCache = Caffeine.newBuilder()
             .expireAfterWrite(15, TimeUnit.MINUTES)
             .maximumSize(10000)
@@ -21,16 +21,16 @@ public class LoginUnlockTokenService {
     /**
      * 계정 잠금 해제용 토큰 생성 및 저장
      */
-    public String createUnlockToken(String memberId) {
+    public String createUnlockToken(String loginId) {
         String token = UUID.randomUUID().toString();
-        unlockTokenCache.put(token, memberId);
+        unlockTokenCache.put(token, loginId);
         return token;
     }
 
     /**
-     * 토큰 검증 및 memberId 추출
+     * 토큰 검증 및 loginId 추출
      */
-    public String getMemberIdByToken(String token) {
+    public String getLoginIdByToken(String token) {
         return unlockTokenCache.getIfPresent(token);
     }
 

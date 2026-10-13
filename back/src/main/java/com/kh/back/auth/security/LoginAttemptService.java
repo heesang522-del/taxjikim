@@ -20,32 +20,32 @@ public class LoginAttemptService {
             .maximumSize(10000)
             .build();
 
-    // 일시 차단 시간 저장 (memberId -> 차단 해제 시각)
+    // 일시 차단 시간 저장 (loginId -> 차단 해제 시각)
     private final ConcurrentHashMap<String, LocalDateTime> blockTimeMap = new ConcurrentHashMap<>();
 
-    public void loginSucceeded(String memberId) {
-        attemptsCache.invalidate(memberId);
-        blockTimeMap.remove(memberId);
+    public void loginSucceeded(String loginId) {
+        attemptsCache.invalidate(loginId);
+        blockTimeMap.remove(loginId);
     }
 
-    public int loginFailed(String memberId) {
-        int attempts = attemptsCache.get(memberId, k -> 0) + 1;
-        attemptsCache.put(memberId, attempts);
+    public int loginFailed(String loginId) {
+        int attempts = attemptsCache.get(loginId, k -> 0) + 1;
+        attemptsCache.put(loginId, attempts);
         return attempts;
     }
 
     // 필요할 때 외부에서 차단 시간을 걸 수 있는 전용 메서드 추가
-    public void setBlockTime(String memberId, long minutes) {
-        blockTimeMap.put(memberId, LocalDateTime.now().plusMinutes(minutes));
+    public void setBlockTime(String loginId, long minutes) {
+        blockTimeMap.put(loginId, LocalDateTime.now().plusMinutes(minutes));
     }
 
-    public long getRemainingBlockMinutes(String memberId) {
-        LocalDateTime blockedUntil = blockTimeMap.get(memberId);
+    public long getRemainingBlockMinutes(String loginId) {
+        LocalDateTime blockedUntil = blockTimeMap.get(loginId);
         if (blockedUntil == null) return 0;
 
         LocalDateTime now = LocalDateTime.now();
         if (now.isAfter(blockedUntil)) {
-            blockTimeMap.remove(memberId);
+            blockTimeMap.remove(loginId);
             return 0;
         }
 

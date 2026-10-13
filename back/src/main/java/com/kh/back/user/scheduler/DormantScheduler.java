@@ -1,6 +1,6 @@
-package com.kh.back.member.scheduler;
+package com.kh.back.user.scheduler;
 
-import com.kh.back.member.repository.MemberRepository;
+import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -14,7 +14,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class DormantScheduler {
 
-    private final MemberRepository memberRepository;
+    private final UserMapper userMapper;
 
     // 매일 새벽 3시 자동 실행
     @Scheduled(cron = "${custom.cron:*/10 * * * * *}")
@@ -27,7 +27,7 @@ public class DormantScheduler {
         log.info("기준 일시(6개월 전): {}", cutoffDate);
 
         try {
-            int updatedCount = memberRepository.convertToDormantAccounts(cutoffDate);
+            int updatedCount = userMapper.convertToDormantAccounts(cutoffDate);
             log.info("휴면 전환 완료된 회원 수: {}명", updatedCount);
         } catch (Exception e) {
             log.error("휴면 계정 자동 전환 중 오류 발생: ");
