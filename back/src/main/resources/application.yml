@@ -2,8 +2,6 @@ spring:
   config:
     # back 폴더에서 실행한다. 외부 키 파일 경로는 JWT_SECRET_FILE로 변경할 수 있다.
     import: "optional:file:${JWT_SECRET_FILE:./config/jwt-secret.properties}"
-  flyway:
-    enabled: false
   mail:
     host: smtp.gmail.com
     port: 587
@@ -27,17 +25,6 @@ spring:
     username: ${DB_USERNAME:server}
     password: ${DB_PASSWORD:server}
     driver-class-name: com.mysql.cj.jdbc.Driver
-    hikari:
-      # 시작 시 연결 풀의 초기 연결 생성을 기다리지 않는다.
-      minimum-idle: 0
-      initialization-fail-timeout: -1
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
 
 # 서버 포트 (React 의 vite.config.js API_TARGET 과 같아야 한다)
 server:
