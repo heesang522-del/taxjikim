@@ -2,7 +2,13 @@ package com.kh.back.user.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.*;
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.kh.back.common.util.DateTimeUtil;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 import java.time.LocalDate;
@@ -33,5 +39,25 @@ public class UserDto {
     private LocalDateTime updatedAt;
     private LocalDateTime deletedAt;
     private LocalDateTime lastLoginAt;
+
+    @JsonGetter("createdAt")
+    public String getCreatedAtJson() {
+        return DateTimeUtil.toSeoulString(createdAt);
+    }
+
+    @JsonGetter("updatedAt")
+    public String getUpdatedAtJson() {
+        return DateTimeUtil.toSeoulString(updatedAt);
+    }
+
+    @JsonGetter("deletedAt")
+    public String getDeletedAtJson() {
+        return DateTimeUtil.toSeoulString(deletedAt);
+    }
+
+    @JsonGetter("lastLoginAt")
+    public String getLastLoginAtJson() {
+        return DateTimeUtil.toSeoulString(lastLoginAt);
+    }
 
 }

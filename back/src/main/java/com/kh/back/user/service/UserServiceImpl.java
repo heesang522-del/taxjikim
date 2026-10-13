@@ -47,6 +47,7 @@ public class UserServiceImpl implements UserService {
     /* ================= 1. 회원가입 및 중복확인 ================= */
 
     @Transactional
+    @Override
     public void joinUser(UserDto userDto, MultipartFile profileFile) {
         // 이메일 인증 완료 여부 확인
         validateEmailVerification(userDto.getEmail());
@@ -64,14 +65,17 @@ public class UserServiceImpl implements UserService {
         emailVerificationService.removeVerification(userDto.getEmail());
     }
 
+    @Override
     public boolean isIdDuplicate(String loginId) {
         return userMapper.countByLoginId(loginId) > 0;
     }
 
+    @Override
     public boolean isNicknameDuplicate(String nickname) {
         return userMapper.countByNickname(nickname) > 0;
     }
 
+    @Override
     public boolean isEmailDuplicate(String email) {
         return userMapper.countByEmail(email) > 0;
     }
@@ -79,6 +83,7 @@ public class UserServiceImpl implements UserService {
     /* ================= 3. 회원 정보 수정 (설정 페이지) ================= */
 
     @Transactional
+    @Override
     public void updateNickname(String loginId, String nickname) {
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
@@ -87,8 +92,8 @@ public class UserServiceImpl implements UserService {
         refreshSecurityContext(loginId);
     }
 
-
     @Transactional
+    @Override
     public void updateEmail(String loginId, String email) {
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
@@ -98,20 +103,22 @@ public class UserServiceImpl implements UserService {
     }
 
     @Transactional
+    @Override
     public void updatePasswordInSettings(String loginId, String currentPassword, String newPassword) {
         UserDto user = userMapper.findByLoginId(loginId);
         if (user == null || !passwordEncoder.matches(currentPassword, user.getPassword())) {
-            throw new IllegalArgumentException("현재 비밀번호가 올바르지 않습니다.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "CURRENT_PASSWORD_INVALID", "현재 비밀번호가 올바르지 않습니다.");
         }
 
         if (passwordEncoder.matches(newPassword, user.getPassword())) {
-            throw new IllegalArgumentException("현재 비밀번호와 동일한 비밀번호로는 변경할 수 없습니다.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "PASSWORD_UNCHANGED", "현재 비밀번호와 동일한 비밀번호로는 변경할 수 없습니다.");
         }
 
         userMapper.updatePassword(loginId, passwordEncoder.encode(newPassword));
     }
 
     @Transactional
+    @Override
     public void updateProfileImageUrl(String loginId, MultipartFile profile, boolean deleteProfile) {
         UserDto currentUser = userMapper.findByLoginId(loginId);
         String oldFilePath = currentUser != null ? currentUser.getProfileImageUrl() : null;
@@ -135,16 +142,19 @@ public class UserServiceImpl implements UserService {
     /* ================= 4. 계정 상태 변경 (휴면 / 탈퇴 / 복구) ================= */
 
     @Transactional
+    @Override
     public void deleteUser(String loginId) {
         userMapper.deleteUser(loginId);
     }
 
     @Transactional
+    @Override
     public void updateLastLoginAt(String loginId) {
         userMapper.updateLastLoginAt(loginId);
     }
 
     @Transactional
+    @Override
     public void restoreAccountStatus(String loginId, String email, AccountRestoreType type) {
         if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email) || type == null) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "복구 요청 정보를 확인해주세요.");
@@ -187,10 +197,10 @@ public class UserServiceImpl implements UserService {
         emailVerificationService.removeVerification(email);
     }
 
-
     /* ================= 5. 보조 메서드 ================= */
 
     @Transactional
+    @Override
     public UserDto getUserByLoginId(String loginId) {
         UserDto userDto = userMapper.findByLoginId(loginId);
         if (userDto != null) {
@@ -199,6 +209,7 @@ public class UserServiceImpl implements UserService {
         return userDto;
     }
 
+    @Override
     public UserDto getUserById(Long userId) {
         UserDto user = userMapper.findById(userId);
         if (user != null) {
@@ -207,6 +218,7 @@ public class UserServiceImpl implements UserService {
         return user;
     }
 
+    @Override
     public boolean checkPassword(String loginId, String rawPassword) {
         UserDto userDto = userMapper.findByLoginId(loginId);
         return userDto != null && passwordEncoder.matches(rawPassword, userDto.getPassword());
@@ -214,7 +226,7 @@ public class UserServiceImpl implements UserService {
 
     private void validateEmailVerification(String email) {
         if (!emailVerificationService.isVerified(email)) {
-            throw new IllegalStateException("이메일 인증이 완료되지 않았습니다.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMAIL_NOT_VERIFIED", "이메일 인증이 완료되지 않았습니다.");
         }
     }
 }

@@ -81,7 +81,8 @@ public class SecurityConfig {
                                 "/css/**", "/js/**", "/images/**", "/uploads/**", "/error"
                         ).permitAll()
                         .requestMatchers(
-                                "/user/update**", "/user/delete", "/user/mypage", "/user/settings"
+                                "/user/update**", "/user/delete", "/user/mypage", "/user/settings",
+                                "/api/v1/users/me", "/api/v1/users/me/**"
                         ).authenticated()
                         .requestMatchers(
                                 "/", "/api/**",
