@@ -11,7 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
-import java.util.Base64;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.UUID;
 
@@ -29,8 +29,8 @@ public class JwtTokenProvider {
             @Value("${jwt.access-token-expiration}") long accessTokenExpiration,
             @Value("${jwt.refresh-token-expiration}") long refreshTokenExpiration
     ) {
-        // 한 번 생성해 보관한 Base64 키를 복원하므로 재시작 후에도 같은 키를 사용한다.
-        this.secretKey = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
+        // 원본 프로젝트와 동일하게 설정 문자열의 UTF-8 바이트를 서명키로 사용한다.
+        this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
     }
