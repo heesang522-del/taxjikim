@@ -2,7 +2,11 @@ package com.kh.back.common.security;
 
 import com.kh.back.auth.dto.RefreshTokenDto;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.MalformedJwtException;
+import io.jsonwebtoken.UnsupportedJwtException;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
 import lombok.Getter;
@@ -66,7 +70,7 @@ public class JwtTokenProvider {
                 .signWith(secretKey)
                 .compact();
 
-        // 💡 토큰 문자열과 jti를 같이 묶어서 반환
+        // � 토큰 문자열과 jti를 같이 묶어서 반환
         return new RefreshTokenDto(refreshToken, jti);
     }
 

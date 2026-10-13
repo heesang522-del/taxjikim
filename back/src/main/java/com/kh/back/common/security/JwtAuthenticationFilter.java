@@ -6,6 +6,8 @@ import com.kh.back.auth.service.AuthCookieService;
 import com.kh.back.auth.service.AuthService;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.service.UserService;
+import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.common.util.ApiResponseWriter;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.Cookie;
@@ -31,15 +33,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final AuthService authService;
     private final LoginSessionRepository loginSessionRepository;
     private final AuthCookieService authCookieService;
+    private final ApiResponseWriter apiResponseWriter;
 
-    // 💡 [추가] 정적 파일(.css, .js, .png 등) 및 파비콘 요청은 JWT 필터 검사를 생략함
+    // � [추가] 정적 파일(.css, .js, .png 등) 및 파비콘 요청은 JWT 필터 검사를 생략함
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
         String path = request.getServletPath();
 
         // 재발급은 컨트롤러에서 한 번만 처리
-        if ("/api/auth/reissue".equals(path) || "/api/auth/login".equals(path)
-                || "/auth/login".equals(path)) {
+        if ("/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
+                || "/api/v1/auth/sessions/current".equals(path)) {
             return true;
         }
         return path.endsWith(".css") ||
@@ -94,12 +97,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         SecurityContextHolder.clearContext();
         authCookieService.clearAuthenticationCookies(response);
         if (request.getServletPath().startsWith("/api/")) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json;charset=UTF-8");
             String message = "SESSION_REPLACED".equals(code)
                     ? "다른 기기에서 로그인했거나 현재 로그인이 종료되었습니다."
                     : "로그인이 만료되었습니다. 다시 로그인해 주세요.";
-            response.getWriter().write("{\"code\":\"" + code + "\",\"message\":\"" + message + "\"}");
+            apiResponseWriter.write(response, HttpServletResponse.SC_UNAUTHORIZED, ApiResponse.fail(code, message));
         } else {
             response.sendRedirect(request.getContextPath() + "/auth/login?reason=" + code);
         }

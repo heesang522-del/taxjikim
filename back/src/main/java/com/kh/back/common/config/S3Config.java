@@ -13,19 +13,25 @@ import java.net.URI;
 @Configuration
 public class S3Config {
 
-    @Value("${aws.s3.region}")
-    private String region;
+    private final String region;
 
-    // 🌟 application.yml의 aws.s3 구조에 맞게 수정
-    @Value("${aws.s3.access-key}")
-    private String accessKey;
+    // � application.yml의 aws.s3 구조에 맞게 수정
+    private final String accessKey;
 
-    // 🌟 application.yml의 aws.s3 구조에 맞게 수정
-    @Value("${aws.s3.secret-key}")
-    private String secretKey;
+    // � application.yml의 aws.s3 구조에 맞게 수정
+    private final String secretKey;
 
-    @Value("${aws.s3.endpoint:#{null}}")
-    private String endpoint;
+    private final String endpoint;
+
+    public S3Config(@Value("${aws.s3.region}") String region,
+                    @Value("${aws.s3.access-key}") String accessKey,
+                    @Value("${aws.s3.secret-key}") String secretKey,
+                    @Value("${aws.s3.endpoint:#{null}}") String endpoint) {
+        this.region = region;
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
+        this.endpoint = endpoint;
+    }
 
     @Bean
     public S3Presigner s3Presigner() {
