@@ -4,7 +4,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 @Data
-public class EmailVerificationVo {
+public class EmailVerificationDto {
     private Long id;
     private String email;
     private String code;
