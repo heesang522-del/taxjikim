@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.TaxUpload.mapper.TaxMapper">
+
+    <insert id="insertTaxTransactions" parameterType="java.util.List">
+        INSERT INTO TAX_TRANSACTIONS (
+        TAX_INPUT_ID,
+        USER_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        AMOUNT,
+        TAX_YEAR,
+        IS_EDITED
+        )
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.taxInputId},
+            #{item.userId},
+            #{item.transactionType},
+            #{item.transactionDate},
+            #{item.description},
+            #{item.category},
+            #{item.amount},
+            #{item.taxYear},
+            #{item.isEdited}
+            )
+        </foreach>
+    </insert>
+
+
+</mapper>
