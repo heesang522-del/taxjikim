@@ -38,3 +38,6 @@ out/
 
 # 개인 JWT 서명 키 (Git에 올리지 않는다)
 /config/jwt-secret.properties
+
+# 로컬 계정 복구 검증용 테스트
+/src/test/java/com/kh/back/user/service/AccountRecoveryTests.java

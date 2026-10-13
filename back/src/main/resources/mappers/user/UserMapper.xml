@@ -147,6 +147,8 @@
         SET USER_STATUS = 'ACTIVE',
             LAST_LOGIN_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
+          AND EMAIL = #{email}
+          AND USER_STATUS = 'DORMANT'
     </update>
 
     <update id="cancelDeleteUser">
@@ -155,5 +157,8 @@
             DELETED_AT = NULL,
             LAST_LOGIN_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
+          AND EMAIL = #{email}
+          AND USER_STATUS = 'DELETED'
+          AND DELETED_AT &gt; #{cutoffDate}
     </update>
 </mapper>

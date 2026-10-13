@@ -46,6 +46,7 @@ public interface UserMapper {
     // 로그인 시간 및 휴면/복구 관련
     int updateLastLoginAt(@Param("loginId") String loginId);
     int convertToDormantAccounts(@Param("cutoffDate") LocalDateTime cutoffDate);
-    int activateDormantAccount(@Param("loginId") String loginId);
-    int cancelDeleteUser(@Param("loginId") String loginId);
+    int activateDormantAccount(@Param("loginId") String loginId, @Param("email") String email);
+    int cancelDeleteUser(@Param("loginId") String loginId, @Param("email") String email,
+                         @Param("cutoffDate") LocalDateTime cutoffDate);
 }
