@@ -91,7 +91,7 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
             if (userDto != null && userDto.getEmail() != null) {
                 unlockEmailService.sendWarningEmail(loginId, userDto.getEmail(), "5회 실패 (30분 일시 차단)");
             }
-            throw new LockedException("5회 실패로 30분간 로그인이 제한됩니다. 발송된 이메일을 통해 바로 해제할 수 있습니다.");
+            throw new LockedException("5회 실패로 30분간 로그인이 제한됩니다.");
         }
 
         // 2. 10회 실패 (1시간 차단)
@@ -100,7 +100,7 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
             if (userDto != null && userDto.getEmail() != null) {
                 unlockEmailService.sendWarningEmail(loginId, userDto.getEmail(), "10회 실패 (1시간 일시 차단)");
             }
-            throw new LockedException("10회 실패로 1시간 동안 로그인이 제한됩니다. 발송된 이메일을 통해 바로 해제할 수 있습니다.");
+            throw new LockedException("10회 실패로 1시간 동안 로그인이 제한됩니다.");
         }
 
         // 3. 15회 이상 실패 시 DB 영구 잠금(LOCKED)

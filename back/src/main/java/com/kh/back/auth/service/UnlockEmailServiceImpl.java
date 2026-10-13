@@ -6,6 +6,7 @@ import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.mail.MailException;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
 
@@ -48,8 +49,9 @@ public class UnlockEmailServiceImpl implements UnlockEmailService {
             mailSender.send(message);
             log.warn("[경고/해제 메일 발송 성공] 회원 ID: {}, 이메일: {}, 사유: {}", loginId, toEmail, failReason);
 
-        } catch (MessagingException e) {
-            log.error("[경고 메일 발송 실패] 회원 ID: {}", loginId);
+        } catch (MessagingException | MailException e) {
+            // 메일 장애가 로그인 차단 응답을 서버 오류로 바꾸지 않도록 처리한다.
+            log.error("[경고 메일 발송 실패] 회원 ID: {}", loginId, e);
         }
     }
 
@@ -82,8 +84,9 @@ public class UnlockEmailServiceImpl implements UnlockEmailService {
             mailSender.send(message);
             log.info("[메일 발송 성공] 회원 ID: {}, 이메일: {}", loginId, toEmail);
 
-        } catch (MessagingException e) {
-            log.error("[메일 발송 실패] 회원 ID: {}", loginId);
+        } catch (MessagingException | MailException e) {
+            // 계정 잠금은 유지하고 메일 발송 오류는 로그로 확인한다.
+            log.error("[메일 발송 실패] 회원 ID: {}", loginId, e);
         }
     }
 }
