@@ -87,6 +87,15 @@
         WHERE LOGIN_ID = #{loginId}
     </update>
 
+    <!-- 계정 이메일과 일치하는 경우에만 비밀번호를 재설정한다. -->
+    <update id="updatePasswordByEmail">
+        UPDATE `user`
+        SET PASSWORD = #{password},
+            UPDATED_AT = NOW()
+        WHERE LOGIN_ID = #{loginId}
+          AND EMAIL = #{email}
+    </update>
+
     <update id="updateUserFields" parameterType="com.kh.back.user.dto.UserDto">
         UPDATE `user`
         <set>

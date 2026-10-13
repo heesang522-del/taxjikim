@@ -32,6 +32,10 @@ public interface UserMapper {
     void updatePassword(@Param("loginId") String loginId,
                         @Param("password") String password);
 
+    int updatePasswordByEmail(@Param("loginId") String loginId,
+                              @Param("email") String email,
+                              @Param("password") String password);
+
     // [통합] 회원 정보 동적 수정 (닉네임, 생년월일, 이메일, 프로필 이미지 등)
     void updateUserFields(UserDto user);
 
