@@ -1,8 +1,6 @@
 package com.kh.back.post.dto;
 
-
 import org.springframework.web.multipart.MultipartFile;
-
 
 public class ChunkDto {
     private MultipartFile file;

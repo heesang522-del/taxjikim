@@ -1,18 +1,26 @@
 package com.kh.back.post.dto;
 
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
 
 @Getter
 @Setter
-public class PostCreateRequest {
+@NoArgsConstructor
+public class PostUpdateRequestDto {
+    private Long postId;
     private String title;
-    private String place;
     private String content;
+
     private Long transportCost;
     private Long foodCost;
     private Long otherCost;
-    private List<String> savedFileNames; 
+    private String place;
+
     private List<Long> deleteImageIds;
+    private List<MultipartFile> imageFiles;
+
 }

@@ -1,10 +1,10 @@
-package com.kh.back.common.response;
+package com.kh.back.common.dto;
 
 import lombok.Getter;
 import java.util.List;
 
 @Getter
-public class PageResponse<T> {
+public class PageResponseDto<T> {
 
     private final List<T> content;     // 조회된 게시글 목록 데이터
     private final int totalCount;      // 전체 게시글 개수
@@ -13,7 +13,7 @@ public class PageResponse<T> {
     private final int totalPages;      // 전체 페이지 수
     private final boolean hasNext;     // 다음 페이지 존재 여부
 
-    public PageResponse(List<T> content, int totalCount, PageRequest pageRequest) {
+    public PageResponseDto(List<T> content, int totalCount, PageRequestDto pageRequest) {
         this.content = content;
         this.totalCount = totalCount;
         this.page = pageRequest.getPage();

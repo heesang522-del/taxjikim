@@ -2,12 +2,14 @@ package com.kh.back.common.validation;
 
 import com.kh.back.post.dto.PostImageDto;
 import org.springframework.stereotype.Component;
+import com.kh.back.common.exception.ApiException;
+import org.springframework.http.HttpStatus;
+import java.util.Map;
 import org.springframework.web.multipart.MultipartFile;
 import java.util.List;
 
 @Component
 public class PostValidator {
-
 
     private static final int MAX_FILE_COUNT = 10;
 
@@ -39,7 +41,7 @@ public class PostValidator {
                 : files.stream().filter(file -> !file.isEmpty()).count();
 
         if (baseCount + newFileCount > MAX_FILE_COUNT) {
-            throw new IllegalArgumentException("파일은 최대 10개까지 등록할 수 있습니다.");
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "입력값을 확인해주세요.", Map.of("files", "파일은 최대 10개까지 등록할 수 있습니다."));
         }
     }
 
@@ -57,7 +59,7 @@ public class PostValidator {
                 String lowerName = originalFilename.toLowerCase();
                 // .exe, .bat, .sh, .jsp 등 위험한 확장자 차단
                 if (lowerName.endsWith(".exe") || lowerName.endsWith(".bat") || lowerName.endsWith(".sh") || lowerName.endsWith(".jsp")) {
-                    throw new IllegalArgumentException("실행 파일(.exe, .bat, .jsp 등)은 업로드할 수 없습니다.");
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "입력값을 확인해주세요.", Map.of("files", "실행 파일(.exe, .bat, .jsp 등)은 업로드할 수 없습니다."));
                 }
             }
         }

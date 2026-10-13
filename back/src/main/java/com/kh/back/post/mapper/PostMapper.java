@@ -1,6 +1,6 @@
 package com.kh.back.post.mapper;
 
-import com.kh.back.post.dto.FileMetaDataDto;
+import com.kh.back.post.dto.FileMetadataDto;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.dto.PostImageDto;
 import org.apache.ibatis.annotations.Mapper;
@@ -19,8 +19,6 @@ public interface PostMapper {
             @Param("size") int size
     );
 
-
-
     int countAll(@Param("keyword") String keyword);
 
     PostDto findById(@Param("postId") Long postId);
@@ -28,7 +26,6 @@ public interface PostMapper {
     List<PostImageDto> findImagesByPostId(
             @Param("postId") Long postId
     );
-
 
     void save(PostDto post);
 
@@ -59,5 +56,5 @@ public interface PostMapper {
             @Param("imageOrder") int imageOrder
     );
 
-    void saveFileMeta(FileMetaDataDto metadataDto);
+    void saveFileMeta(FileMetadataDto metadataDto);
 }
