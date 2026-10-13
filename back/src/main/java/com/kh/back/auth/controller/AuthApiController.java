@@ -4,6 +4,8 @@ import com.kh.back.auth.dto.LoginRequestDto;
 import com.kh.back.auth.dto.LoginResponse;
 import com.kh.back.auth.service.AuthService;
 import com.kh.back.auth.service.EmailVerificationService;
+import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.common.exception.ApiException;
 import com.kh.back.user.service.UserService;
 import com.kh.back.user.service.UserService.AccountRestoreType;
 import jakarta.servlet.http.HttpServletResponse;
@@ -115,16 +117,16 @@ public class AuthApiController {
     }
 
     @PostMapping("/unlock-dormant")
-    public ResponseEntity<String> unlockDormant(@RequestBody Map<String, String> request) {
+    public ResponseEntity<ApiResponse<Void>> unlockDormant(@RequestBody Map<String, String> request) {
         return processAccountRestore(request, AccountRestoreType.DORMANT);
     }
 
     @PostMapping("/restore-account")
-    public ResponseEntity<String> restoreAccount(@RequestBody Map<String, String> request) {
+    public ResponseEntity<ApiResponse<Void>> restoreAccount(@RequestBody Map<String, String> request) {
         return processAccountRestore(request, AccountRestoreType.DELETE);
     }
 
-    private ResponseEntity<String> processAccountRestore(
+    private ResponseEntity<ApiResponse<Void>> processAccountRestore(
             Map<String, String> request,
             AccountRestoreType restoreType
     ) {
@@ -132,19 +134,22 @@ public class AuthApiController {
         String loginId = request.get("loginId");
         String email = request.get("email");
 
-        if (loginId == null || email == null) {
-            return ResponseEntity.ok("EXPIRED");
+        if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email) || !StringUtils.hasText(code)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "아이디, 이메일, 인증번호를 입력해주세요.");
         }
 
+        boolean isCodeValid;
         try {
-            boolean isCodeValid = emailVerificationService.verifyCode(email, code);
-            if (isCodeValid) {
-                userService.restoreAccountStatus(loginId, email, restoreType);
-                return ResponseEntity.ok("SUCCESS");
-            }
-            return ResponseEntity.ok("FAIL");
-        } catch (Exception e) {
-            return ResponseEntity.ok("FAIL");
+            isCodeValid = emailVerificationService.verifyCode(email, code);
+        } catch (IllegalArgumentException e) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_EXPIRED", "인증번호가 없거나 만료되었습니다.");
         }
+        if (!isCodeValid) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_INVALID", "인증번호가 올바르지 않습니다.");
+        }
+
+        // 업무 검증 오류는 공통 예외 처리기가 원인에 맞는 상태와 응답으로 전달한다.
+        userService.restoreAccountStatus(loginId, email, restoreType);
+        return ResponseEntity.ok(ApiResponse.<Void>ok(null));
     }
 }

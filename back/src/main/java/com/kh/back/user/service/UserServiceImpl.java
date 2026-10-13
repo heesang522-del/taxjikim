@@ -3,6 +3,7 @@ package com.kh.back.user.service;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.service.EmailVerificationService;
 import com.kh.back.common.util.FileUtil;
+import com.kh.back.common.exception.ApiException;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -11,8 +12,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.http.HttpStatus;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.time.LocalDateTime;
 
 @Service
 @RequiredArgsConstructor
@@ -142,14 +146,44 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     public void restoreAccountStatus(String loginId, String email, AccountRestoreType type) {
-        validateEmailVerification(email);
-
-        if (type == AccountRestoreType.DORMANT) {
-            userMapper.activateDormantAccount(loginId);
-        } else if (type == AccountRestoreType.DELETE) {
-            userMapper.cancelDeleteUser(loginId);
+        if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email) || type == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "복구 요청 정보를 확인해주세요.");
         }
 
+        // 이메일을 인증했다는 사실과 해당 계정의 소유자라는 사실을 함께 확인한다.
+        UserDto user = userMapper.findByLoginId(loginId);
+        if (user == null || !email.equals(user.getEmail())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "ACCOUNT_RECOVERY_REJECTED", "계정 복구 정보를 확인해주세요.");
+        }
+        if (!emailVerificationService.isVerified(email)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "EMAIL_NOT_VERIFIED", "이메일 인증이 필요합니다.");
+        }
+
+        int updatedCount;
+
+        if (type == AccountRestoreType.DORMANT) {
+            if (!"DORMANT".equals(user.getUserStatus())) {
+                throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_DORMANT", "휴면 계정만 재활성화할 수 있습니다.");
+            }
+            updatedCount = userMapper.activateDormantAccount(loginId, email);
+        } else {
+            if (!"DELETED".equals(user.getUserStatus())) {
+                throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_DELETED", "탈퇴 대기 계정만 복구할 수 있습니다.");
+            }
+            // 기존 영구 삭제 스케줄러의 30일 기준과 동일하게 복구 가능 기간을 제한한다.
+            LocalDateTime cutoffDate = LocalDateTime.now().minusDays(30);
+            if (user.getDeletedAt() == null || !user.getDeletedAt().isAfter(cutoffDate)) {
+                throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_RECOVERY_EXPIRED", "계정 복구 기간이 지났습니다.");
+            }
+            updatedCount = userMapper.cancelDeleteUser(loginId, email, cutoffDate);
+        }
+
+        // 조회 후 이메일이나 상태가 바뀌면 SQL이 갱신하지 않으므로 성공으로 처리하지 않는다.
+        if (updatedCount != 1) {
+            throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_RECOVERY_CONFLICT", "계정 상태가 변경되었습니다. 다시 확인해주세요.");
+        }
+
+        // 복구가 실제로 성공한 경우에만 인증 완료 기록을 소비한다.
         emailVerificationService.removeVerification(email);
     }
 
