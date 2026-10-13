@@ -2,14 +2,13 @@ package com.kh.back.post.service;
 
 import com.kh.back.common.dto.PageRequestDto;
 import com.kh.back.common.dto.PageResponseDto;
-import com.kh.back.common.util.FileUploadUtil;
+import com.kh.back.common.util.FileUtil;
 import com.kh.back.common.util.SavedFile;
 import com.kh.back.common.validation.PostValidator;
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.dto.PostImageDto;
 import com.kh.back.post.mapper.PostMapper;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,27 +26,25 @@ import java.util.ArrayList;
 public class PostServiceImpl implements PostService {
 
     // � 1. 청크 및 최종 파일 저장 경로 상수 선언
-    private static final String TEMP_DIR = "C:/uploads/temp/";
-    private static final String UPLOAD_DIR = "C:/uploads/files/";
+    private static final String TEMP_DIR = FileUtil.getUploadDirectory("temp") + File.separator;
+    private static final String UPLOAD_DIR = FileUtil.getUploadDirectory("files") + File.separator;
 
     private final PostMapper postMapper;
-    private final FileUploadUtil fileUploadUtil;
+    private final FileUtil fileUtil;
     private final PostValidator postValidator;
 
-    private final String postUploadDir;
+    private static final String POST_SUB_DIR = "post";
 
     private static final String WEB_PREFIX = "/uploads/post";
 
     public PostServiceImpl(
             PostMapper postMapper,
-            FileUploadUtil fileUploadUtil,
-            PostValidator postValidator,
-            @Value("${file.upload-dir.post}") String postUploadDir
+            FileUtil fileUtil,
+            PostValidator postValidator
     ) {
         this.postMapper = postMapper;
-        this.fileUploadUtil = fileUploadUtil;
+        this.fileUtil = fileUtil;
         this.postValidator = postValidator;
-        this.postUploadDir = postUploadDir;
     }
 
     /**
@@ -133,7 +130,7 @@ public class PostServiceImpl implements PostService {
             int fileOrder = 0;
             for (MultipartFile file : mediaFiles) {
                 if (file.isEmpty()) continue;
-                SavedFile savedFile = fileUploadUtil.save(file, postUploadDir, WEB_PREFIX);
+                SavedFile savedFile = fileUtil.save(file, POST_SUB_DIR, WEB_PREFIX);
                 String fileName = new File(savedFile.getPath()).getName();
 
                 PostImageDto imageDto = PostImageDto.builder()

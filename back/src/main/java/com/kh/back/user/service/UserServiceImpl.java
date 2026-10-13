@@ -17,6 +17,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import com.kh.back.common.util.SavedFile;
 
 @Service
 @RequiredArgsConstructor
@@ -26,7 +29,19 @@ public class UserServiceImpl implements UserService {
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final EmailVerificationService emailVerificationService;
-    private final FileUtil fileUtil; // 🎯 공통 파일 유틸 주입
+    private final FileUtil fileUtil;
+    private static final String PROFILE_SUB_DIR = "profile";
+    private static final String PROFILE_WEB_PREFIX = "/uploads/profile";
+
+    private String saveProfile(MultipartFile file, String oldFilePath) {
+        try {
+            SavedFile savedFile = fileUtil.save(file, PROFILE_SUB_DIR, PROFILE_WEB_PREFIX, oldFilePath);
+            return savedFile == null ? null : savedFile.getPath();
+        } catch (IOException exception) {
+            // 파일 저장 실패도 런타임 예외로 전달하여 회원 DB 작업을 롤백한다.
+            throw new UncheckedIOException("프로필 파일 저장 중 오류가 발생했습니다.", exception);
+        }
+    }
 
     // SecurityContext 내의 UserDto 정보 갱신용 보조 메서드
     private void refreshSecurityContext(String loginId) {
@@ -57,7 +72,7 @@ public class UserServiceImpl implements UserService {
         // 신규 저장이므로 oldFilePath 자리에 null 전달
         if (profileFile != null && !profileFile.isEmpty()) {
             userDto.setProfileImageUrl(
-                    fileUtil.saveFile(profileFile, "profile", null));
+                    saveProfile(profileFile, null));
         }
 
         userMapper.insertUser(userDto);
@@ -125,10 +140,14 @@ public class UserServiceImpl implements UserService {
 
         if (deleteProfile) {
             userMapper.updateProfileImageUrl(loginId, null);
-            fileUtil.deleteFile(oldFilePath);
+            try {
+                fileUtil.delete(oldFilePath, PROFILE_SUB_DIR);
+            } catch (IOException exception) {
+                throw new UncheckedIOException("프로필 파일 삭제 중 오류가 발생했습니다.", exception);
+            }
         } else if (profile != null && !profile.isEmpty()) {
             // 기존 파일 교체이므로 oldFilePath 전달
-            String newFilePath = fileUtil.saveFile(profile, "profile", oldFilePath);
+            String newFilePath = saveProfile(profile, oldFilePath);
 
             UserDto updateDto = new UserDto();
             updateDto.setLoginId(loginId);

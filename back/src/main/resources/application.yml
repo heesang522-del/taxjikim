@@ -49,10 +49,6 @@ aws:
     secret-key: "YOUR_AWS_SECRET_KEY"
     region: ap-northeast-2
 
-# 🌟 파일 업로드 디렉토리 설정 추가
-file:
-  upload-dir:
-    post: "C:/uploads/post"
 # 회원 정리·휴면 처리 주기. 실제 실행에는 @EnableScheduling이 필요하다.
 # 별도 zone 지정이 없으므로 JVM의 시간대를 기준으로 실행한다.
 custom:
