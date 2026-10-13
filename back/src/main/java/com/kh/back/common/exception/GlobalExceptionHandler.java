@@ -8,6 +8,17 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
+import org.springframework.validation.BindException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.mail.MailException;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 /**
  * 모든 Controller 에서 던져진 예외를 한곳에서 받아 실패 봉투로 응답한다.
@@ -20,7 +31,7 @@ public class GlobalExceptionHandler {
     // Service 에서 직접 던진 예외 (예: 없는 종목코드 → 404)
     @ExceptionHandler(ApiException.class)
     public ResponseEntity<ApiResponse<Void>> handleApi(ApiException e) {
-        return ResponseEntity.status(e.getStatus()).body(ApiResponse.fail(e.getCode(), e.getMessage()));
+        return ResponseEntity.status(e.getStatus()).body(ApiResponse.fail(e.getCode(), e.getMessage(), e.getFields()));
     }
 
     // 없는 주소로 요청 (예: /api/v1/abc)
@@ -32,7 +43,62 @@ public class GlobalExceptionHandler {
     // 파라미터 타입이 맞지 않음 (예: ?page=abc)
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException e) {
-        return ResponseEntity.badRequest().body(ApiResponse.fail("BAD_REQUEST", e.getName() + " 값이 올바르지 않습니다."));
+        return ResponseEntity.badRequest().body(ApiResponse.fail("VALIDATION_ERROR", "입력값을 확인해주세요.", Map.of(e.getName(), "값의 형식이 올바르지 않습니다.")));
+    }
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMissingParameter(MissingServletRequestParameterException e) {
+        return ResponseEntity.badRequest().body(ApiResponse.fail("VALIDATION_ERROR", "입력값을 확인해주세요.", Map.of(e.getParameterName(), "필수 입력 항목입니다.")));
+    }
+
+    @ExceptionHandler({HttpMessageNotReadableException.class, MissingServletRequestPartException.class})
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableInput(Exception e) {
+        return ResponseEntity.badRequest().body(ApiResponse.fail("VALIDATION_ERROR", "요청 데이터의 형식을 확인해주세요."));
+    }
+
+    @ExceptionHandler(BindException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBinding(BindException e) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        e.getFieldErrors().forEach(error -> fields.putIfAbsent(error.getField(), "값의 형식이 올바르지 않습니다."));
+        return ResponseEntity.badRequest().body(ApiResponse.fail("VALIDATION_ERROR", "입력값을 확인해주세요.", fields));
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMethod(HttpRequestMethodNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiResponse.fail("METHOD_NOT_ALLOWED", "지원하지 않는 요청 방식입니다."));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMediaType(HttpMediaTypeNotSupportedException e) {
+        return ResponseEntity.status(HttpStatus.UNSUPPORTED_MEDIA_TYPE).body(ApiResponse.fail("UNSUPPORTED_MEDIA_TYPE", "요청 데이터 형식을 확인해주세요."));
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthentication(AuthenticationException e) {
+        String code = e.getMessage() == null ? "AUTHENTICATION_FAILED" : e.getMessage();
+        String message = switch (code) {
+            case "DORMANT" -> "휴면 계정입니다. 재활성화가 필요합니다.";
+            case "DELETED" -> "탈퇴 대기 계정입니다. 계정 복구가 필요합니다.";
+            case "LOCKED" -> "계정이 잠겼습니다.";
+            case "BANNED" -> "이용이 정지된 계정입니다.";
+            case "SESSION_REPLACED" -> "현재 로그인이 종료되었습니다. 다시 로그인해주세요.";
+            default -> "인증 정보가 올바르지 않거나 만료되었습니다.";
+        };
+        if (!java.util.Set.of("DORMANT", "DELETED", "LOCKED", "BANNED", "SESSION_REPLACED").contains(code)) {
+            code = "AUTHENTICATION_FAILED";
+        }
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.fail(code, message));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataConflict(DataIntegrityViolationException e) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiResponse.fail("DATA_CONFLICT", "중복 정보 또는 다른 데이터와의 연결을 확인해주세요."));
+    }
+
+    @ExceptionHandler(MailException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMail(MailException e) {
+        log.error("메일 발송 실패", e);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiResponse.fail("MAIL_UNAVAILABLE", "메일 발송을 완료하지 못했습니다. 잠시 후 다시 시도해주세요."));
     }
 
     // 그 밖의 모든 예외 → 500. 원인은 서버 로그에만 남기고 응답에는 노출하지 않는다.

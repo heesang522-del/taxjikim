@@ -3,6 +3,8 @@ package com.kh.back.post.dto;
 import lombok.Data;
 import java.util.List;
 import java.time.LocalDateTime;
+import com.fasterxml.jackson.annotation.JsonGetter;
+import com.kh.back.common.util.DateTimeUtil;
 
 @Data
 public class PostDto {
@@ -17,13 +19,22 @@ public class PostDto {
     private int viewCount;
 
     // 날짜 및 페이징 관련 필드
-    private LocalDateTime createAt;
+    private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private String formattedCreateAt;
     private String thumbnailPath;
 
     // 이미지 리스트 필드
     private List<PostImageDto> images;
     private List<String> savedFileNames;
     private List<Long> deleteImageIds;
+
+    @JsonGetter("createdAt")
+    public String getCreatedAtJson() {
+        return DateTimeUtil.toSeoulString(createdAt);
+    }
+
+    @JsonGetter("updatedAt")
+    public String getUpdatedAtJson() {
+        return DateTimeUtil.toSeoulString(updatedAt);
+    }
 }
