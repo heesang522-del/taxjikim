@@ -4,71 +4,138 @@
 
 <mapper namespace="com.kh.back.post.mapper.PostMapper">
 
-    <!--
-      1. Post ResultMap
-      - 조회 결과를 실제 반환 타입인 PostDto의 필드에 연결합니다.
-    -->
+    <!-- 1. Post ResultMap (게시글 + 첨부파일 목록 매핑) -->
     <resultMap id="PostResultMap" type="com.kh.back.post.dto.PostDto">
-        <id property="postId" column="POST_ID"/>
-        <result property="userId" column="USER_ID"/>
-        <result property="boardType" column="BOARD_TYPE"/>
-        <result property="title" column="TITLE"/>
-        <result property="content" column="CONTENT"/>
-        <result property="viewCount" column="VIEW_COUNT"/>
-        <result property="createAt" column="CREATED_AT"/>
-        <result property="updatedAt" column="UPDATED_AT"/>
-        <result property="deletedAt" column="DELETED_AT"/>
+        <id property="postId" column="POST_ID" />
+        <result property="userId" column="USER_ID" />
+        <result property="boardType" column="BOARD_TYPE" />
+        <result property="jobCategory" column="JOB_CATEGORY" />
+        <result property="title" column="TITLE" />
+        <result property="content" column="CONTENT" />
+        <result property="isPublic" column="IS_PUBLIC" />
+        <result property="viewCount" column="VIEW_COUNT" />
+        <result property="createdAt" column="CREATED_AT" />
+        <result property="updatedAt" column="UPDATED_AT" />
+        <result property="deletedAt" column="DELETED_AT" />
 
-        <!--
-          2. FileMetaDataDto 컬렉션 매핑
-          - ofType에 방금 확인하신 FileMetaDataDto 경로를 정확히 지정합니다.
-          - javaType="java.util.List"를 통해 모호성 오류를 해결합니다.
-        -->
-        <collection property="fileList"
-                    ofType="com.kh.back.post.dto.FileMetaDataDto"
+        <!-- 첨부파일 목록 연결 -->
+        <collection property="images"
+                    ofType="com.kh.back.post.dto.FileMetadataDto"
                     javaType="java.util.List">
-            <id property="fileId" column="FILE_ID"/>
-            <!-- 게시글과 첨부파일의 동일한 컬럼 이름을 별칭으로 구분합니다. -->
-            <result property="postId" column="FILE_POST_ID"/>
-            <result property="userId" column="FILE_USER_ID"/>
-            <result property="originalFileName" column="ORIGINAL_FILE_NAME"/>
-            <result property="storedFileName" column="STORED_FILE_NAME"/>
-            <result property="filePath" column="FILE_PATH"/>
-            <result property="fileSize" column="FILE_SIZE"/>
-            <result property="fileExtension" column="FILE_EXTENSION"/>
-            <result property="fileType" column="FILE_TYPE"/>
-            <result property="createdAt" column="FILE_CREATED_AT"/>
-            <result property="deletedAt" column="FILE_DELETED_AT"/>
+            <id property="fileId" column="FILE_ID" />
+            <result property="postId" column="FILE_POST_ID" />
+            <result property="userId" column="FILE_USER_ID" />
+            <result property="originalFileName" column="ORIGINAL_FILE_NAME" />
+            <result property="storedFileName" column="STORED_FILE_NAME" />
+            <result property="filePath" column="FILE_PATH" />
+            <result property="fileSize" column="FILE_SIZE" />
+            <result property="fileExtension" column="FILE_EXTENSION" />
+            <result property="fileType" column="FILE_TYPE" />
+            <result property="createdAt" column="FILE_CREATED_AT" />
+            <result property="deletedAt" column="FILE_DELETED_AT" />
         </collection>
     </resultMap>
 
-    <!-- 3. 게시글 상세 조회 (첨부파일 목록 포함) -->
+    <!-- 2. 게시글 등록 (POSTS) - answerStatus 제외 -->
+    <insert id="save"
+            parameterType="com.kh.back.post.dto.PostDto"
+            useGeneratedKeys="true"
+            keyProperty="postId">
+        INSERT INTO POSTS (
+            USER_ID,
+            BOARD_TYPE,
+            JOB_CATEGORY,
+            TITLE,
+            CONTENT,
+            IS_PUBLIC
+        ) VALUES (
+            #{userId},
+            #{boardType},
+            #{jobCategory},
+            #{title},
+            #{content},
+            #{isPublic}
+        )
+    </insert>
+
+    <!-- 3. 첨부파일 등록 (FILE_META) -->
+    <insert id="saveFile"
+            parameterType="com.kh.back.post.dto.FileMetadataDto"
+            useGeneratedKeys="true"
+            keyProperty="fileId">
+        INSERT INTO FILE_META (
+            POST_ID,
+            USER_ID,
+            STORED_FILE_NAME,
+            FILE_PATH,
+            FILE_EXTENSION,
+            FILE_SIZE,
+            FILE_TYPE,
+            ORIGINAL_FILE_NAME
+        ) VALUES (
+            #{postId},
+            #{userId},
+            #{storedFileName},
+            #{filePath},
+            #{fileExtension},
+            #{fileSize},
+            #{fileType},
+            #{originalFileName}
+        )
+    </insert>
+
+    <!-- 4. 게시글 상세 조회 (첨부파일 목록 포함) -->
     <select id="findById" resultMap="PostResultMap">
         SELECT
-        p.POST_ID,
-        p.USER_ID,
-        p.BOARD_TYPE,
-        p.TITLE,
-        p.CONTENT,
-        p.VIEW_COUNT,
-        p.CREATED_AT,
-        p.UPDATED_AT,
-        p.DELETED_AT,
-        f.FILE_ID,
-        f.POST_ID AS FILE_POST_ID,
-        f.USER_ID AS FILE_USER_ID,
-        f.ORIGINAL_FILE_NAME,
-        f.STORED_FILE_NAME,
-        f.FILE_PATH,
-        f.FILE_SIZE,
-        f.FILE_EXTENSION,
-        f.FILE_TYPE,
-        f.CREATED_AT AS FILE_CREATED_AT,
-        f.DELETED_AT AS FILE_DELETED_AT
+            p.POST_ID,
+            p.USER_ID,
+            p.BOARD_TYPE,
+            p.JOB_CATEGORY,
+            p.TITLE,
+            p.CONTENT,
+            p.IS_PUBLIC,
+            p.VIEW_COUNT,
+            p.CREATED_AT,
+            p.UPDATED_AT,
+            p.DELETED_AT,
+            f.FILE_ID,
+            f.POST_ID AS FILE_POST_ID,
+            f.USER_ID AS FILE_USER_ID,
+            f.ORIGINAL_FILE_NAME,
+            f.STORED_FILE_NAME,
+            f.FILE_PATH,
+            f.FILE_SIZE,
+            f.FILE_EXTENSION,
+            f.FILE_TYPE,
+            f.CREATED_AT AS FILE_CREATED_AT,
+            f.DELETED_AT AS FILE_DELETED_AT
         FROM POSTS p
         LEFT JOIN FILE_META f ON p.POST_ID = f.POST_ID
         WHERE p.POST_ID = #{postId}
-        AND p.DELETED_AT IS NULL
+            AND p.DELETED_AT IS NULL
     </select>
+
+    <!-- 5. 게시글 수정 -->
+    <update id="update" parameterType="com.kh.back.post.dto.PostDto">
+        UPDATE POSTS
+        SET
+            TITLE = #{title},
+            CONTENT = #{content},
+            JOB_CATEGORY = #{jobCategory},
+            IS_PUBLIC = #{isPublic},
+            UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE POST_ID = #{postId}
+            AND DELETED_AT IS NULL
+    </update>
+
+    <!-- 6. 게시글 삭제 (소프트 딜리트) -->
+    <update id="delete" parameterType="map">
+        UPDATE POSTS
+        SET
+            DELETED_AT = CURRENT_TIMESTAMP,
+            DELETED_BY_TYPE = #{deletedByType}
+        WHERE POST_ID = #{postId}
+            AND DELETED_AT IS NULL
+    </update>
 
 </mapper>

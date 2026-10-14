@@ -1,154 +1,97 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 
+export default function PostDetail() {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const postId = searchParams.get('postId');
 
-const PostDetailView = ({ post, onEdit, onDelete }) => {
-    const [currentIndex, setCurrentIndex] = useState(0);
+    const [post, setPost] = useState(null);
 
-    if (!post) {
-        return <div className="text-center p-5">Matalek a data wenno post ket saan a masarakan.</div>;
-    }
+    useEffect(() => {
+        if (!postId) return;
+        axios.get(`/api/posts/${postId}`) // 혹은 상세 단건 조회 API 경로
+            .then((res) => {
+                setPost(res.data.data || res.data);
+            })
+            .catch((err) => console.error('상세 조회 실패:', err));
+    }, [postId]);
 
-    // Carousel Slider navigation
-    const moveSlide = (direction) => {
-        if (!post.images || post.images.length === 0) return;
-        let newIndex = currentIndex + direction;
-        if (newIndex < 0) {
-            newIndex = post.images.length - 1;
-        } else if (newIndex >= post.images.length) {
-            newIndex = 0;
+    const handleDelete = async () => {
+        if (window.confirm('정말 삭제하시겠습니까?')) {
+            try {
+                await axios.delete(`/api/posts/${postId}`);
+                alert('삭제되었습니다.');
+                navigate('/main-post');
+            } catch (err) {
+                console.error('삭제 실패:', err);
+                alert('삭제 중 오류가 발생했습니다.');
+            }
         }
-        setCurrentIndex(newIndex);
     };
 
+    if (!post) return <div className="text-center mt-10">로딩 중...</div>;
+
     return (
-        <div className="app">
-            <header className="mobile-header">
-                <a className="brand" href="/home">
-                    <span>post</span>
-                </a>
-            </header>
-            
-            <nav className="mobile-nav" aria-label="모바일 메뉴">
-                <a href="/home" aria-label="home"><i className="bi bi-house"></i></a>
-                <a href="/main-post" className="active" aria-label="이야기"><i className="bi bi-grid-3x3-gap"></i></a>
-                <a href="/new-post" aria-label="new"><i className="bi bi-plus-square"></i></a>
-            </nav>
+        <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg mt-10">
+            <div className="border-b pb-4 mb-4">
+                <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-0.5 rounded">
+                    {post.boardType}
+                </span>
+                {post.jobCategory && (
+                    <span className="ml-2 text-xs bg-gray-100 text-gray-800 px-2.5 py-0.5 rounded">
+                        {post.jobCategory}
+                    </span>
+                )}
+                <h1 className="text-2xl font-bold mt-2 text-gray-900">{post.title}</h1>
+                <p className="text-sm text-gray-500 mt-1">작성일: {post.createdAt || post.createAt}</p>
+            </div>
 
-            <div className="layout">
-                <main className="content">
-                    <article className="panel overflow-hidden p-4">
+            <div className="mb-6 text-gray-700 whitespace-pre-wrap min-h-[150px]">
+                {post.content}
+            </div>
 
-                        <div className="detail-title-area mb-3">
-                            <span className="detail-category badge bg-primary mb-2">이야기</span>
-                            <h1 className="detail-title">{post.title}</h1>
-                        </div>
+            {/* 통합 파일 메타데이터(post.files) 목록 렌더링 */}
+            {post.files && post.files.length > 0 && (
+                <div className="mb-6 border-t pt-4">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">첨부 파일</h3>
+                    <ul className="space-y-1">
+                        {post.files.map((file) => (
+                            <li key={file.fileId} className="text-sm">
+                                <a
+                                    href={`/uploads/files/${file.storedFileName}`}
+                                    download={file.originalFileName}
+                                    className="text-blue-600 hover:underline flex items-center"
+                                >
+                                    📎 {file.originalFileName} ({Math.round(file.fileSize / 1024)} KB)
+                                </a>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
+            )}
 
-                        <div className="user-meta d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
-                            <div className="detail-author-main">
-                                <strong>{post.writer || '익명'}</strong>
-                            </div>
-                            <div className="detail-author-sub text-muted small">
-                                <span className="me-3">{post.formattedCreateAt}</span>
-                                <span>조회수 {post.viewCount || 0}</span>
-                            </div>
-                        </div>
-
-                        <div className="detail-owner-actions mb-4">
-                            <button className="btn btn-outline-secondary btn-sm me-2" onClick={() => onEdit(post.postId)}>수정</button>
-                            <button className="btn btn-outline-danger btn-sm" onClick={() => {
-                                if (window.confirm('정말 삭제하시겠습니까?')) {
-                                    onDelete(post.postId);
-                                }
-                            }}>삭제</button>
-                        </div>
-
-                        {post.images && post.images.length > 0 ? (
-                            <div className="zt-detail-carousel" style={{ position: 'relative', width: '100%', height: '400px', background: '#000', borderRadius: '8px', overflow: 'hidden', marginBottom: '1.5rem' }}>
-                                <div id="image-slider-container" style={{ position: 'relative', width: '100%', height: '100%' }}>
-                                    {post.images.map((image, index) => {
-                                        const lowerPath = image.uploadPath.toLowerCase();
-                                        const isImage = ['.jpg', '.jpeg', '.png', '.gif', '.webp'].some(ext => lowerPath.includes(ext));
-                                        const isVideo = ['.mp4', '.webm', '.mov', '.avi'].some(ext => lowerPath.includes(ext));
-
-                                        return (
-                                            <div 
-                                                key={index}
-                                                className="slide-item"
-                                                style={{
-                                                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
-                                                    display: index === currentIndex ? 'flex' : 'none',
-                                                    alignItems: 'center', justifyContent: 'center', background: '#000'
-                                                }}
-                                            >
-                                                {isImage && (
-                                                    <img src={`/uploads/${image.uploadPath}`} alt={image.originName} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                                                )}
-                                                {isVideo && (
-                                                    <video 
-                                                        src={`/uploads/${image.uploadPath}`} 
-                                                        controls 
-                                                        preload="metadata" 
-                                                        controlsList="nodownload" 
-                                                        onContextMenu={(e) => e.preventDefault()} 
-                                                        disablePictureInPicture={true} 
-                                                        style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
-                                                    />
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-
-                                {post.images.length > 1 && (
-                                    <>
-                                        <button type="button" onClick={() => moveSlide(-1)} style={{ position: 'absolute', left: '15px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                            <i className="bi bi-chevron-left" style={{ fontSize: '1.2rem' }}></i>
-                                        </button>
-                                        <button type="button" onClick={() => moveSlide(1)} style={{ position: 'absolute', right: '15px', top: '50%', transform: 'translateY(-50%)', zIndex: 100, width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(0, 0, 0, 0.6)', color: 'white', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                                            <i className="bi bi-chevron-right" style={{ fontSize: '1.2rem' }}></i>
-                                        </button>
-                                        <div style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'rgba(0, 0, 0, 0.6)', color: 'white', padding: '4px 12px', borderRadius: '12px', fontSize: '0.85rem', zIndex: 100 }}>
-                                            <span>{currentIndex + 1}</span> / <span>{post.images.length}</span>
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="text-center text-muted p-4 bg-light rounded mb-4">
-                                <p className="mb-0">등록된 파일이 없습니다.</p>
-                            </div>
-                        )}
-
-                        {post.place && (
-                            <div className="mb-3 text-muted">
-                                <i className="bi bi-geo-alt-fill text-danger"></i> <strong>장소:</strong> {post.place}
-                            </div>
-                        )}
-
-                        <div className="detail-content mb-4" style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
-                            {post.content}
-                        </div>
-
-                        <div className="card bg-light border-0 p-3 mb-3">
-                            <h6 className="fw-bold mb-2"><i className="bi bi-receipt"></i> 지출 비용 정보</h6>
-                            <div className="row text-secondary small">
-                                <div className="col-4">교통비: <span className="fw-bold text-dark">{(post.transportCost || 0).toLocaleString()}원</span></div>
-                                <div className="col-4">식비: <span className="fw-bold text-dark">{(post.foodCost || 0).toLocaleString()}원</span></div>
-                                <div className="col-4">기타 비용: <span className="fw-bold text-dark">{(post.otherCost || 0).toLocaleString()}원</span></div>
-                            </div>
-                        </div>
-
-                    </article>
-                </main>
+            <div className="flex justify-end space-x-2 border-t pt-4">
+                <button
+                    onClick={() => navigate(`/edit-post?postId=${postId}`)}
+                    className="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600 text-sm font-medium"
+                >
+                    수정
+                </button>
+                <button
+                    onClick={handleDelete}
+                    className="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700 text-sm font-medium"
+                >
+                    삭제
+                </button>
+                <button
+                    onClick={() => navigate('/main-post')}
+                    className="bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600 text-sm font-medium"
+                >
+                    목록으로
+                </button>
             </div>
         </div>
     );
-};
-
-PostDetailView.defaultProps = {
-    post: {
-        images: []
-    }
-};
-
-export default PostDetailView;
+}

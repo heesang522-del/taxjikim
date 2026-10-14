@@ -11,6 +11,12 @@ import SupportPage from './pages/SupportPage';
 import AdminPage from './pages/AdminPage';
 import NotFound from './pages/NotFound';
 
+// 🌟 게시물 관련 컴포넌트 임포트 (프로젝트 경로에 맞게 확인해주세요)
+import PostMain from './components/post/PostMain';
+import PostCreate from './components/post/PostCreate';
+import PostEdit from './components/post/PostEdit';
+import PostDetail from './components/post/PostDetail';
+
 // 주소에 맞는 기존 화면을 연결한다. BrowserRouter는 main.jsx에서 한 번만 적용한다.
 function App() {
   return (
@@ -25,6 +31,12 @@ function App() {
         <Route path="/community" element={<CommunityPage />} />
         <Route path="/support" element={<SupportPage />} />
         <Route path="/admin" element={<AdminPage />} />
+
+        {/* 🌟 게시판/포스트 관련 라우트 추가 */}
+        <Route path="/main-post" element={<PostMain />} />
+        <Route path="/new-post" element={<PostCreate />} />
+        <Route path="/edit-post" element={<PostEdit />} />
+        <Route path="/detail" element={<PostDetail />} />
       </Route>
       <Route path="*" element={<NotFound />} />
     </Routes>

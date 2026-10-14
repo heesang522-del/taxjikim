@@ -1,247 +1,168 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 
+export default function PostEdit() {
+    const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
+    const postId = searchParams.get('postId');
 
-const PostEditView = ({ post = {}, onUpdatePost, errorMessage }) => {
-    // 폼 입력 필드 상태 초기화 (기존 post 데이터 반영)
-    const [formData, setFormData] = useState({
-        postId: post.postId || '',
-        title: post.title || '',
-        place: post.place || '',
-        content: post.content || '',
-        transportCost: post.transportCost || 0,
-        foodCost: post.foodCost || 0,
-        otherCost: post.otherCost || 0,
-    });
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [boardType, setBoardType] = useState('INFO');
+    const [jobCategory, setJobCategory] = useState('');
+    const [isPublic, setIsPublic] = useState(true);
 
-    // 삭제할 기존 이미지 ID 목록 상태
-    const [deleteImageIds, setDeleteImageIds] = useState([]);
+    const [existingFiles, setExistingFiles] = useState([]); // 기존 서버에 등록된 파일 메타 리스트 (FILE_META)
+    const [deleteFileIds, setDeleteFileIds] = useState([]); // 삭제할 파일 ID 목록
+    const [newFiles, setNewFiles] = useState([]); // 새로 추가할 파일 리스트
 
-    // 새로 추가할 파일 상태 및 미리보기
-    const [newFiles, setNewFiles] = useState([]);
-    const [previewUrls, setPreviewUrls] = useState([]);
-    const [currentIndex, setCurrentIndex] = useState(0);
+    useEffect(() => {
+        if (!postId) return;
+        axios.get(`/api/posts/${postId}`)
+            .then((res) => {
+                const data = res.data.data || res.data; // ApiResponse 구조에 맞게 조절
+                setTitle(data.title || '');
+                setContent(data.content || '');
+                setBoardType(data.boardType || 'INFO');
+                setJobCategory(data.jobCategory || '');
+                setIsPublic(data.isPublic ?? true);
+                setExistingFiles(data.files || []); // 🌟 통합 FILE_META 목록 바인딩
+            })
+            .catch((err) => console.error('게시글 불러오기 실패:', err));
+    }, [postId]);
 
-    // 입력값 변경 핸들러
-    const handleChange = (e) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value
-        }));
+    // 기존 파일 삭제 대기열 추가
+    const handleRemoveExistingFile = (fileId) => {
+        setDeleteFileIds((prev) => [...prev, fileId]);
+        setExistingFiles((prev) => prev.filter((file) => file.fileId !== fileId));
     };
 
-    // 기존 이미지 삭제 체크박스 핸들러
-    const handleCheckboxChange = (uploadId) => {
-        setDeleteImageIds(prev => 
-            prev.includes(uploadId) 
-                ? prev.filter(id => id !== uploadId) 
-                : [...prev, uploadId]
-        );
-    };
-
-    // 새 파일 추가 핸들러 (최대 5개 제한)
-    const handleFileChange = (e) => {
-        const files = Array.from(e.target.files);
-        if (newFiles.length + files.length > 5) {
-            alert('이미지 및 동영상은 최대 5개까지 업로드 가능합니다.');
+    // 새 파일 추가 (최대 개수 5개 제한: 기존 잔여 파일 + 신규 파일)
+    const handleNewFileChange = (e) => {
+        const selectedFiles = Array.from(e.target.files);
+        const totalCount = existingFiles.length + newFiles.length + selectedFiles.length;
+        if (totalCount > 5) {
+            alert('파일은 최대 5개까지 등록할 수 있습니다.');
             return;
         }
-
-        const updatedFiles = [...newFiles, ...files];
-        setNewFiles(updatedFiles);
-
-        // 미리보기 URL 생성
-        const newPreviews = files.map(file => URL.createObjectURL(file));
-        setPreviewUrls(prev => [...prev, ...newPreviews]);
+        setNewFiles((prev) => [...prev, ...selectedFiles]);
     };
 
-    // 슬라이드 이동 함수
-    const moveSlide = (direction) => {
-        if (previewUrls.length === 0) return;
-        let newIndex = currentIndex + direction;
-        if (newIndex < 0) {
-            newIndex = previewUrls.length - 1;
-        } else if (newIndex >= previewUrls.length) {
-            newIndex = 0;
-        }
-        setCurrentIndex(newIndex);
+    const handleRemoveNewFile = (index) => {
+        setNewFiles((prev) => prev.filter((_, i) => i !== index));
     };
 
-    // 폼 제출 핸들러
-    const handleSubmit = (e) => {
+    // 수정 제출
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        const submissionData = new FormData();
-        
-        // 기본 텍스트 필드 추가
-        Object.keys(formData).forEach(key => {
-            submissionData.append(key, formData[key]);
+
+        const formData = new FormData();
+        formData.append('title', title);
+        formData.append('content', content);
+        formData.append('boardType', boardType);
+        formData.append('jobCategory', jobCategory);
+        formData.append('isPublic', isPublic);
+
+        // 삭제할 파일 ID 배열 전송 (백엔드의 deleteFileIds와 일치)
+        deleteFileIds.forEach((id) => {
+            formData.append('deleteFileIds', id);
         });
 
-        // 삭제할 기존 이미지 ID 추가
-        deleteImageIds.forEach(id => {
-            submissionData.append('deleteImageIds', id);
+        // 새로 추가된 파일 전송
+        newFiles.forEach((file) => {
+            formData.append('savedFileNames', file.name);
         });
 
-        // 새로 첨부한 파일들 추가
-        newFiles.forEach(file => {
-            submissionData.append('files', file);
-        });
-
-        if (onUpdatePost) {
-            onUpdatePost(submissionData);
+        try {
+            await axios.post(`/api/posts/${postId}/update`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+            alert('수정 완료되었습니다.');
+            navigate(`/detail?postId=${postId}`);
+        } catch (error) {
+            console.error('수정 실패:', error);
+            alert('수정 중 오류가 발생했습니다.');
         }
     };
 
     return (
-        <div className="zt-app">
-            <header className="zt-mobile-header">
-                <a className="zt-brand" href="/home">
-                    <span>post</span>
-                </a>
-            </header>
-            
-            <nav className="zt-mobile-nav" aria-label="모바일 메뉴">
-                <a href="/home" aria-label="home"><i className="bi bi-house"></i></a>
-                <a href="/main-post" aria-label="post"><i className="bi bi-grid-3x3-gap"></i></a>
-                <a href="/new-post" aria-label="new"><i className="bi bi-plus-square"></i></a>
-            </nav>
+        <div className="max-w-2xl mx-auto p-6 bg-white shadow-md rounded-lg mt-10">
+            <h2 className="text-2xl font-bold mb-6 text-gray-800">게시글 수정</h2>
+            <form onSubmit={handleSubmit} className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">제목</label>
+                    <input
+                        type="text"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                        required
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
+                    />
+                </div>
 
-            <div className="zt-layout">
-                <main className="zt-content">
-                    <header className="zt-page-header">
-                        <h1>게시물 수정하기</h1>
-                        <p>사진 및 동영상, 게시물 정보를 수정합니다.</p>
-                    </header>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">내용</label>
+                    <textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        rows="5"
+                        required
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border"
+                    />
+                </div>
 
-                    <section className="zt-panel zt-profile-card">
-                        {errorMessage && (
-                            <div className="alert alert-danger" role="alert">
-                                {errorMessage}
-                            </div>
-                        )}
+                {/* 기존 첨부파일 목록 */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">기존 첨부파일</label>
+                    <ul className="mt-2 space-y-1">
+                        {existingFiles.map((file) => (
+                            <li key={file.fileId} className="flex justify-between items-center text-sm bg-gray-100 p-2 rounded">
+                                <span>{file.originalFileName}</span>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveExistingFile(file.fileId)}
+                                    className="text-red-500 hover:text-red-700 font-semibold"
+                                >
+                                    X 삭제
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
 
-                        <form className="row g-4" id="post-form" onSubmit={handleSubmit}>
-                            <input type="hidden" name="postId" value={formData.postId} />
+                {/* 새 파일 추가 */}
+                <div>
+                    <label className="block text-sm font-medium text-gray-700">새 파일 첨부 (최대 5개 제한)</label>
+                    <input
+                        type="file"
+                        multiple
+                        onChange={handleNewFileChange}
+                        className="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100"
+                    />
+                    <ul className="mt-2 space-y-1">
+                        {newFiles.map((file, idx) => (
+                            <li key={idx} className="flex justify-between items-center text-sm bg-gray-50 p-2 rounded">
+                                <span>{file.name} (신규)</span>
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemoveNewFile(idx)}
+                                    className="text-red-500 hover:text-red-700"
+                                >
+                                    취소
+                                </button>
+                            </li>
+                        ))}
+                    </ul>
+                </div>
 
-                            <div className="col-lg-6">
-                                <div className="zt-post-image-uploader">
-                                    
-                                    {/* 새로 선택한 파일 프리뷰 및 슬라이드 UI */}
-                                    <div className="mb-4">
-                                        <label className="form-label fw-bold">새로 첨부할 파일 미리보기</label>
-                                        <div className="position-relative d-flex align-items-center justify-content-center border rounded bg-dark overflow-hidden" style={{ height: '250px' }}>
-                                            
-                                            {previewUrls.length > 0 && (
-                                                <button type="button" onClick={() => moveSlide(-1)} className="btn btn-light btn-sm position-absolute start-0 ms-2" style={{ zIndex: 10, opacity: 0.8 }}>
-                                                    <i className="bi bi-chevron-left"></i>
-                                                </button>
-                                            )}
-
-                                            <div id="post-main-preview" className="text-white text-center w-100 h-100 d-flex align-items-center justify-content-center">
-                                                {previewUrls.length === 0 ? (
-                                                    <div className="text-muted d-flex flex-column align-items-center justify-content-center">
-                                                        <i className="bi bi-image fs-1 mb-1"></i>
-                                                        <small>선택된 파일이 없습니다.</small>
-                                                    </div>
-                                                ) : (
-                                                    previewUrls[currentIndex].includes('video') ? (
-                                                        <video src={previewUrls[currentIndex]} controls style={{ maxWidth: '100%', maxHeight: '100%' }} />
-                                                    ) : (
-                                                        <img src={previewUrls[currentIndex]} alt="preview" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
-                                                    )
-                                                )}
-                                            </div>
-
-                                            {previewUrls.length > 0 && (
-                                                <button type="button" onClick={() => moveSlide(1)} className="btn btn-light btn-sm position-absolute end-0 me-2" style={{ zIndex: 10, opacity: 0.8 }}>
-                                                    <i className="bi bi-chevron-right"></i>
-                                                </button>
-                                            )}
-
-                                            <span id="post-image-count" className="position-absolute bottom-0 end-0 badge bg-secondary m-2" style={{ fontSize: '11px' }}>
-                                                {previewUrls.length > 0 ? `${currentIndex + 1} / ${previewUrls.length}` : '0'}
-                                            </span>
-                                        </div>
-                                    </div>
-
-                                    {/* 기존 업로드된 파일 및 삭제 체크박스 영역 */}
-                                    <div className="mb-3">
-                                        <label className="form-label fw-bold">기존 첨부파일 (삭제할 항목을 체크하세요)</label>
-                                        <div className="d-flex flex-wrap gap-2">
-                                            {post.images && post.images.length > 0 ? (
-                                                post.images.map((image) => (
-                                                    <div key={image.uploadId} className="border p-2 rounded text-center bg-light" style={{ width: '110px' }}>
-                                                        <span className="d-block text-truncate small mb-1" style={{ maxWidth: '100px' }}>{image.originName}</span>
-                                                        <div className="form-check d-flex justify-content-center align-items-center gap-1">
-                                                            <input 
-                                                                className="form-check-input" 
-                                                                type="checkbox" 
-                                                                value={image.uploadId} 
-                                                                id={`del-${image.uploadId}`}
-                                                                checked={deleteImageIds.includes(image.uploadId)}
-                                                                onChange={() => handleCheckboxChange(image.uploadId)}
-                                                            />
-                                                            <label className="form-check-label small text-danger fw-bold" htmlFor={`del-${image.uploadId}`}>삭제</label>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            ) : (
-                                                <p className="text-muted small">등록된 기존 파일이 없습니다.</p>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    {/* 새 파일 추가 인풋 */}
-                                    <div className="mb-3 mt-4">
-                                        <label className="form-label fw-bold" htmlFor="new-post-image">새 파일 추가</label>
-                                        <input 
-                                            id="new-post-image"
-                                            name="files"
-                                            type="file"
-                                            accept="image/*,video/*"
-                                            multiple
-                                            className="form-control"
-                                            onChange={handleFileChange}
-                                        />
-                                        <small className="text-muted">이미지 및 동영상은 최대 5개까지 업로드 가능합니다.</small>
-                                    </div>
-
-                                </div>
-                            </div>
-
-                            <div className="col-lg-6">
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="post-title">제목</label>
-                                    <input id="post-title" name="title" className="form-control" type="text" maxLength="60" placeholder="제목을 입력하세요" value={formData.title} onChange={handleChange} required />
-                                </div>
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="post-place">장소</label>
-                                    <input id="post-place" name="place" className="form-control" type="text" placeholder="예: 서울 성수" value={formData.place} onChange={handleChange} />
-                                </div>
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="post-content">내용</label>
-                                    <textarea id="post-content" name="content" className="form-control" rows="6" placeholder="내용을 적어 주세요." value={formData.content} onChange={handleChange} required />
-                                </div>
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="transport-cost">교통비</label>
-                                    <input id="transport-cost" name="transportCost" className="form-control" type="number" min="0" value={formData.transportCost} onChange={handleChange} required />
-                                </div>
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="food-cost">식비</label>
-                                    <input id="food-cost" name="foodCost" className="form-control" type="number" min="0" value={formData.foodCost} onChange={handleChange} required />
-                                </div>
-                                <div className="mb-3">
-                                    <label className="form-label" htmlFor="other-cost">입장료 및 기타 비용</label>
-                                    <input id="other-cost" name="otherCost" className="form-control" type="number" min="0" value={formData.otherCost} onChange={handleChange} required />
-                                </div>
-                                <button className="btn btn-primary w-100 py-2 mt-3" type="submit">수정 완료</button>
-                            </div>
-                        </form>
-                    </section>
-                </main>
-            </div>
+                <button
+                    type="submit"
+                    className="w-full bg-green-600 text-white py-2 px-4 rounded-md hover:bg-green-700 font-medium"
+                >
+                    수정 완료
+                </button>
+            </form>
         </div>
     );
-};
-
-export default PostEditView;
+}

@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 
-
 const PostMain = ({ posts = [], onSearch, onSortChange }) => {
     const [keyword, setKeyword] = useState('');
 
@@ -70,11 +69,19 @@ const PostMain = ({ posts = [], onSearch, onSortChange }) => {
                             {posts.map((post) => (
                                 <div className="col" key={post.postId}>
                                     <div className="card h-100 shadow-sm">
+                                        {/* 썸네일 표시: post.thumbnailPath 또는 통합 파일 리스트(files)의 첫 번째 이미지 활용 */}
                                         {post.thumbnailPath ? (
                                             <img 
                                                 src={`/uploads/${post.thumbnailPath}`} 
                                                 className="card-img-top" 
                                                 alt="썸네일" 
+                                                style={{ height: '200px', objectFit: 'cover' }} 
+                                            />
+                                        ) : post.files && post.files.length > 0 && post.files[0].fileExtension?.match(/(jpg|jpeg|png|gif)/i) ? (
+                                            <img 
+                                                src={`/uploads/files/${post.files[0].storedFileName}`} 
+                                                className="card-img-top" 
+                                                alt="첨부이미지" 
                                                 style={{ height: '200px', objectFit: 'cover' }} 
                                             />
                                         ) : (
@@ -84,6 +91,11 @@ const PostMain = ({ posts = [], onSearch, onSortChange }) => {
                                         )}
 
                                         <div className="card-body">
+                                            {/* 보드 타입 및 직군 태그 뱃지 표시 추가 */}
+                                            <div className="mb-2">
+                                                <span className="badge bg-secondary me-1">{post.boardType || 'INFO'}</span>
+                                                {post.jobCategory && <span className="badge bg-light text-dark border">{post.jobCategory}</span>}
+                                            </div>
                                             <h5 className="card-title fw-bold">
                                                 <a href={`/detail?postId=${post.postId}`} className="text-decoration-none text-dark">
                                                     {post.title}
@@ -93,8 +105,8 @@ const PostMain = ({ posts = [], onSearch, onSortChange }) => {
                                         </div>
 
                                         <div className="card-footer bg-white d-flex justify-content-between align-items-center text-muted small">
-                                            <span>{post.writer}</span>
-                                            <span>{post.formattedCreateAt}</span>
+                                            <span>{post.writer || '작성자'}</span>
+                                            <span>{post.formattedCreateAt || post.createdAt}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -115,4 +127,4 @@ const PostMain = ({ posts = [], onSearch, onSortChange }) => {
     );
 };
 
-export default PostMainView;
+export default PostMain;
