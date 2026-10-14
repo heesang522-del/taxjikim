@@ -1,33 +1,31 @@
-import { Card, Grid } from '../ui'
+// taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
+'use no memo';
 
-const won = (n) => `${Math.round(n).toLocaleString('ko-KR')}원`
+import { Card } from '../common/index';
+import { YEAR } from '../../data/taxConstants';
+import { man } from '../../utils/format';
 
-// 입력한 거래 내역으로 계산한 값만 보여준다 (result는 CalculatorPage의 계산 결과)
-export default function SummaryCards({ result, count }) {
-  const { totalIncome, totalExpense, netProfit, incomeTax, localTax, totalTax, withholding, balance } = result
-
+/** 결과 상단 3카드: 환급/추가납부(남색), 총 수입, 총 지출 */
+export default function SummaryCards({ result }) {
+  const refund = result.total < 0;
   return (
-    <Grid $cols={3} $gap={24}>
-      <Card style={{ background: 'var(--primary-dark)', borderColor: 'var(--primary-dark)', color: '#fff' }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary-light)' }}>예상 세액 (종합소득세 + 지방소득세)</span>
-        <h2 style={{ fontSize: 30, fontWeight: 800, color: '#fff', margin: '8px 0' }}>{won(totalTax)}</h2>
-        <p style={{ fontSize: 12, color: 'var(--primary-light)' }}>
-          종합소득세 {won(incomeTax)} + 지방소득세 {won(localTax)}
-        </p>
-        <p style={{ fontSize: 12, color: 'var(--primary-light)' }}>
-          기납부(원천징수 3.3%) {won(withholding)} → {balance >= 0 ? '예상 추가 납부' : '예상 환급'} {won(Math.abs(balance))}
-        </p>
+    <div className="grid g3">
+      <Card className="stat dark">
+        <p className="lbl">{refund ? '예상 환급액' : '예상 추가납부액'} ({YEAR}년 귀속, 지방소득세 포함)</p>
+        <p className="big">{man(Math.abs(result.total))}</p>
+        <p className="sub">적용 세율 {Math.round(result.rate * 100)}% · 과세표준 {man(result.taxable)}</p>
+        <p className="sub">소득세 {man(result.net)} + 지방소득세 {man(result.local - result.localWithheld)}</p>
       </Card>
-      <Card>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>총 수입</span>
-        <h2 style={{ fontSize: 30, fontWeight: 800, margin: '8px 0' }}>{won(totalIncome)}</h2>
-        <p style={{ fontSize: 12, color: 'var(--success)', fontWeight: 500 }}>입력한 거래 {count}건 기준</p>
+      <Card className="stat">
+        <p className="lbl">총 수입</p>
+        <p className="big">{man(result.income)}</p>
+        <p className="sub ok">10~12월 예측 포함</p>
       </Card>
-      <Card>
-        <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>총 지출 (필요경비)</span>
-        <h2 style={{ fontSize: 30, fontWeight: 800, margin: '8px 0' }}>{won(totalExpense)}</h2>
-        <p style={{ fontSize: 12, color: 'var(--text-faint)' }}>순이익 {won(netProfit)}</p>
+      <Card className="stat">
+        <p className="lbl">총 지출 (필요경비)</p>
+        <p className="big">{man(result.expense)}</p>
+        <p className="sub">순 사업소득 {man(result.biz)}</p>
       </Card>
-    </Grid>
-  )
+    </div>
+  );
 }

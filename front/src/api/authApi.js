@@ -1,34 +1,37 @@
-// 인증 요청은 Vite의 /api 프록시를 통해 백엔드에 전달한다.
-async function requestAuth(path, options) {
-  const response = await fetch(`/api/v1/auth${path}`, {
-    credentials: 'same-origin',
-    ...options,
-  });
-  let result;
+import { client } from './client.js';
+
+// 실제 인증 요청은 기존 공통 client와 Vite /api 프록시를 거친다.
+async function requestAuth(config) {
   try {
-    result = await response.json();
-  } catch {
-    throw new Error('서버 응답을 받지 못했습니다. 잠시 후 다시 시도해주세요.');
-  }
-  if (!response.ok || !result.success) {
-    const error = new Error(result.error?.message ?? '요청을 처리하지 못했습니다.');
-    error.code = result.error?.code;
-    error.fields = result.error?.fields;
+    const response = await client.request(config);
+    if (!response.data?.success) {
+      const error = new Error(response.data?.error?.message ?? '요청을 처리하지 못했습니다.');
+      error.code = response.data?.error?.code;
+      throw error;
+    }
+    return response.data;
+  } catch (cause) {
+    const detail = cause.response?.data?.error;
+    const error = new Error(
+      detail?.message ??
+        (cause.response
+          ? '서버 오류가 발생했습니다.'
+        : cause.isAxiosError
+            ? '서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'
+            : cause.message)
+    );
+    error.code = detail?.code ?? cause.code;
     throw error;
   }
-  return result;
 }
 
 export function loginSession(loginId, password) {
-  return requestAuth('/sessions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ loginId, password, rememberMe: false }),
-  });
+  return requestAuth({ url: '/auth/sessions', method: 'POST', data: { loginId, password, rememberMe: false } });
 }
 
 export function logoutSession(accessToken) {
-  return requestAuth('/sessions/current', {
+  return requestAuth({
+    url: '/auth/sessions/current',
     method: 'DELETE',
     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
