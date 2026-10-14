@@ -5,6 +5,11 @@ import { ThemeProvider } from 'styled-components';
 import App from './App.jsx';
 import GlobalStyle from './styles/GlobalStyle';
 import theme from './styles/theme';
+import './styles/tokens.css';
+import './styles/global.css';
+import './styles/layout.css';
+import './styles/components.css';
+import './styles/features.css';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

@@ -221,22 +221,26 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public void logout(HttpServletRequest request, HttpServletResponse response) {
-        // 기존 Security 설정의 쿠키 기반 로그아웃 처리를 업무 서비스로 옮긴다.
-        if (request.getCookies() != null) {
+        String authorization = request.getHeader("Authorization");
+        // 명시적으로 전달된 Bearer 세션을 우선 종료하여 다른 쿠키 세션을 종료하지 않는다.
+        if (StringUtils.hasText(authorization) && authorization.startsWith("Bearer ")) {
+            endSessionForToken(authorization.substring(7), "access");
+        } else if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
                 if ("refreshToken".equals(cookie.getName()) || "accessToken".equals(cookie.getName())) {
                     String token = cookie.getValue();
-                    if (jwtTokenProvider.validateToken(token)) {
-                        loginSessionRepository.endSessionIfCurrent(jwtTokenProvider.getUserId(token), jwtTokenProvider.getSessionId(token));
-                    }
-                    authCookieService.clearRefreshToken(response);
-                }
-                if ("accessToken".equals(cookie.getName())) {
-                    authCookieService.clearAccessToken(response);
+                    endSessionForToken(token, "accessToken".equals(cookie.getName()) ? "access" : "refresh");
                 }
             }
         }
+        authCookieService.clearAuthenticationCookies(response);
         SecurityContextHolder.clearContext();
+    }
+
+    private void endSessionForToken(String token, String type) {
+        if (jwtTokenProvider.validateToken(token) && jwtTokenProvider.isTokenType(token, type)) {
+            loginSessionRepository.endSessionIfCurrent(jwtTokenProvider.getUserId(token), jwtTokenProvider.getSessionId(token));
+        }
     }
 
     @Transactional

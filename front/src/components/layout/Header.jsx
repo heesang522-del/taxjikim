@@ -1,168 +1,145 @@
-import { Link, NavLink } from 'react-router-dom'
-import styled from 'styled-components'
-import Icon from '../Icon'
-import { Badge, Button, Row } from '../ui'
-import { useAuthStore } from '../../store/useAuthStore'
+// taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
+'use no memo';
 
-const Bar = styled.header`
-  position: sticky;
-  top: 0;
-  z-index: 50;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 24px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-`
+import { useEffect, useRef, useState } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { NAV_ITEMS, ROUTES } from '../../utils/routes';
+import { useAuth } from '../../store/useAuthStore';
+import { useToast } from '../../store/useToastStore';
+import { useNotifications } from '../../utils/useNotifications';
+import { useChat } from '../../store/useChatStore';
+import { Button, Icon, Modal, Pill } from '../common/index';
 
-const Brand = styled(Link)`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  text-decoration: none;
-  font-weight: 700;
-  font-size: 18px;
-  color: var(--text-h);
+export function Header() {
+  const { loggedIn, isAdmin, logout } = useAuth();
+  const toast = useToast();
+  const { items, unreadCount, markAllRead } = useNotifications();
+  const { setOpen: openChat } = useChat();
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+  const navigate = useNavigate();
 
-  .logo {
-    width: 36px;
-    height: 36px;
-    border-radius: 12px;
-    background: var(--primary);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
-  }
-`
-
-const Nav = styled.nav`
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-left: 24px;
-
-  @media (max-width: 900px) {
-    display: none;
-  }
-
-  a {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-muted);
-
-    &:hover {
-      background: var(--fill);
-    }
-    &.active {
-      color: var(--primary);
-      font-weight: 600;
+  async function handleLogout() {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      // 서버 세션 종료 성공 후에만 로그아웃 안내와 화면 이동을 수행한다.
+      await logout();
+      toast('로그아웃했습니다');
+      navigate(ROUTES.home);
+    } catch (error) {
+      toast(error.message || '로그아웃하지 못했습니다. 다시 시도해주세요.');
+    } finally {
+      setLoggingOut(false);
     }
   }
 
-  a.admin {
-    color: var(--danger);
-    font-weight: 600;
-    border: 1px solid var(--danger-border);
-
-    &:hover,
-    &.active {
-      background: var(--danger-bg);
+  // 접속 중에 새 알림이 생기면 팝업으로 알린다. 처음 불러올 때 이미 쌓여 있던 알림은 알리지 않는다.
+  const prevUnread = useRef(null);
+  useEffect(() => {
+    if (!loggedIn) {
+      prevUnread.current = null;
+      return;
     }
-  }
-`
-
-const BellButton = styled.button`
-  position: relative;
-  padding: 8px;
-  border: none;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-muted);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--fill);
-  }
-
-  .dot {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--expense);
-  }
-`
-
-const NAV_ITEMS = [
-  { to: '/calculator', label: '세금 계산·시뮬레이션' },
-  { to: '/community', label: '커뮤니티' },
-  { to: '/support', label: '고객센터' },
-]
-
-export default function Header({ onOpenNotifications }) {
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
-  const logout = useAuthStore((state) => state.logout)
+    if (prevUnread.current !== null && unreadCount > prevUnread.current) toast('새 알림이 도착했습니다');
+    prevUnread.current = unreadCount;
+  }, [loggedIn, unreadCount, toast]);
 
   return (
-    <Bar>
-      <Row $gap={16}>
-        <Brand to="/">
+    <header className="bar">
+      <div className="bar-left">
+        <Link to={ROUTES.home} className="brand">
           <span className="logo">
             <Icon name="calculator" />
           </span>
           <span>
-            TaxJikim <Badge>프로토타입</Badge>
+            TaxJiKim <Pill tone="primary">프로토타입</Pill>
           </span>
-        </Brand>
-        <Nav>
-          {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end}>
-              {item.label}
+        </Link>
+        <nav className="nav" aria-label="주 메뉴">
+          {NAV_ITEMS.map((n) => (
+            <NavLink key={n.to} to={n.to} end={n.end}>
+              {n.label}
             </NavLink>
           ))}
-          <NavLink to="/admin" className="admin">
-            <Icon name="shieldAlert" size={16} /> 관리자 페이지
-          </NavLink>
-        </Nav>
-      </Row>
-
-      <Row $gap={12}>
-        <BellButton onClick={onOpenNotifications} aria-label="알림">
-          <Icon name="bell" />
-          <span className="dot" />
-        </BellButton>
-        {isLoggedIn ? (
-          <Row $gap={8}>
-            <Button as={Link} to="/mypage" $variant="soft" $size="sm">
-              <Icon name="user" size={16} /> 김프리님
+          {isAdmin && (
+            <NavLink to={ROUTES.admin} className="admin">
+              <Icon name="shieldAlert" size={16} /> 관리자 페이지
+            </NavLink>
+          )}
+        </nav>
+      </div>
+      <div className="bar-right">
+        {loggedIn ? (
+          <>
+            <Button
+              variant="soft"
+              size="sm"
+              className="icon"
+              aria-label="알림"
+              style={{ position: 'relative' }}
+              onClick={() => {
+                setNotifOpen(true);
+                markAllRead();
+              }}
+            >
+              <Icon name="bell" size={16} />
+              {unreadCount > 0 && <span className="badge">{unreadCount}</span>}
             </Button>
-            <Button $variant="link" $size="sm" onClick={logout}>
-              로그아웃
+            <Button to={ROUTES.mypage} variant="soft" size="sm">
+              <Icon name="user" size={16} /> 마이페이지
             </Button>
-          </Row>
+            <Button variant="link" size="sm" onClick={handleLogout} disabled={loggingOut}>
+              {loggingOut ? '로그아웃 중...' : '로그아웃'}
+            </Button>
+          </>
         ) : (
-          <Row $gap={8}>
-            <Button as={Link} to="/login" $variant="ghost">
+          <>
+            <Button to={ROUTES.auth} variant="ghost">
               로그인
             </Button>
-            <Button as={Link} to="/signup" $variant="primary">
+            <Button to={ROUTES.signup} variant="primary">
               회원가입
             </Button>
-          </Row>
+          </>
         )}
-      </Row>
-    </Bar>
-  )
+      </div>
+      {notifOpen && (
+        <Modal title="알림" onClose={() => setNotifOpen(false)}>
+          <div className="grid" style={{ gap: 8, minWidth: 280, maxWidth: 360 }}>
+            {items.length ? (
+              items.map((n) =>
+                n.action === 'chat' ? (
+                  <button
+                    key={n.id}
+                    type="button"
+                    className="notif-item"
+                    style={{ textAlign: 'left', width: '100%', background: 'none', border: 0, cursor: 'pointer' }}
+                    onClick={() => {
+                      setNotifOpen(false);
+                      openChat(true);
+                    }}
+                  >
+                    <p style={{ fontWeight: 600 }}>{n.title}</p>
+                    <p className="small muted">
+                      {n.desc} · {n.createdAt}
+                    </p>
+                  </button>
+                ) : (
+                  <Link key={n.id} to={n.to} className="notif-item" onClick={() => setNotifOpen(false)}>
+                    <p style={{ fontWeight: 600 }}>{n.title}</p>
+                    <p className="small muted">
+                      {n.desc} · {n.createdAt}
+                    </p>
+                  </Link>
+                )
+              )
+            ) : (
+              <p className="state-msg">새 알림이 없습니다</p>
+            )}
+          </div>
+        </Modal>
+      )}
+    </header>
+  );
 }

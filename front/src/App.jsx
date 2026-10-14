@@ -1,44 +1,60 @@
-import { Route, Routes } from 'react-router-dom';
+// taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
+'use no memo';
+
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Layout from './components/layout/Layout';
+import RequireAdmin from './components/layout/RequireAdmin';
+import CalcLayout from './components/calculator/CalcLayout';
 import HomePage from './pages/HomePage';
-import SignupPage from './pages/SignupPage';
-import LoginPage from './pages/LoginPage';
-import FindAccountPage from './pages/FindAccountPage';
+import AuthPage from './pages/AuthPage';
 import MyPage from './pages/MyPage';
-import CalculatorPage from './pages/CalculatorPage';
 import CommunityPage from './pages/CommunityPage';
+import CommunityPostPage from './pages/CommunityPostPage';
+import CommunityWritePage from './pages/CommunityWritePage';
+import CommunityEditPage from './pages/CommunityEditPage';
 import SupportPage from './pages/SupportPage';
+import SupportQnaPostPage from './pages/SupportQnaPostPage';
+import BlockedPage from './pages/BlockedPage';
 import AdminPage from './pages/AdminPage';
-import NotFound from './pages/NotFound';
+import AdminReportsPage from './pages/AdminReportsPage';
+import AdminInquiriesPage from './pages/AdminInquiriesPage';
+import AdminChatsPage from './pages/AdminChatsPage';
+import CalculatorInputPage from './pages/CalculatorInputPage';
+import CalculatorLoadingPage from './pages/CalculatorLoadingPage';
+import CalculatorResultPage from './pages/CalculatorResultPage';
+import CalculatorSimPage from './pages/CalculatorSimPage';
 
-// 🌟 게시물 관련 컴포넌트 임포트 
-import PostMain from './components/post/PostMain';
-import PostCreate from './components/post/PostCreate';
-import PostEdit from './components/post/PostEdit';
-import PostDetail from './components/post/PostDetail';
-
-// 주소에 맞는 기존 화면을 연결한다. BrowserRouter는 main.jsx에서 한 번만 적용한다.
+// 주소에 맞는 화면을 연결한다. BrowserRouter는 main.jsx에서 한 번만 적용한다.
+// 로그인·회원가입·계정 찾기는 같은 AuthPage를 쓰고, key로 주소가 바뀔 때 탭을 새로 시작한다.
 function App() {
   return (
     <Routes>
       <Route element={<Layout />}>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/signup" element={<SignupPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/find-account" element={<FindAccountPage />} />
-        <Route path="/mypage" element={<MyPage />} />
-        <Route path="/calculator" element={<CalculatorPage />} />
-        <Route path="/community" element={<CommunityPage />} />
-        <Route path="/support" element={<SupportPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-
-        {/* 🌟 게시판/포스트 관련 라우트 추가 */}
-        <Route path="/main-post" element={<PostMain />} />
-        <Route path="/new-post" element={<PostCreate />} />
-        <Route path="/edit-post" element={<PostEdit />} />
-        <Route path="/detail" element={<PostDetail />} />
+        <Route index element={<HomePage />} />
+        <Route path="calculator" element={<CalcLayout />}>
+          <Route index element={<Navigate to="input" replace />} />
+          <Route path="input" element={<CalculatorInputPage />} />
+          <Route path="loading" element={<CalculatorLoadingPage />} />
+          <Route path="result" element={<CalculatorResultPage />} />
+          <Route path="sim" element={<CalculatorSimPage />} />
+        </Route>
+        <Route path="login" element={<AuthPage key="login" />} />
+        <Route path="signup" element={<AuthPage key="signup" />} />
+        <Route path="find-account" element={<AuthPage key="find-account" />} />
+        <Route path="blocked" element={<BlockedPage />} />
+        <Route path="mypage" element={<MyPage />} />
+        <Route path="community" element={<CommunityPage />} />
+        <Route path="community/new" element={<CommunityWritePage />} />
+        <Route path="community/:id" element={<CommunityPostPage />} />
+        <Route path="community/:id/edit" element={<CommunityEditPage />} />
+        <Route path="support" element={<SupportPage />} />
+        <Route path="support/qna/:id" element={<SupportQnaPostPage />} />
+        <Route path="admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+        <Route path="admin/reports" element={<RequireAdmin><AdminReportsPage /></RequireAdmin>} />
+        <Route path="admin/inquiries" element={<RequireAdmin><AdminInquiriesPage /></RequireAdmin>} />
+        <Route path="admin/chats" element={<RequireAdmin><AdminChatsPage /></RequireAdmin>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
-      <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
