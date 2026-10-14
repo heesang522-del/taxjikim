@@ -12,6 +12,7 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -41,8 +42,8 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
         CustomUserDetails userDetails = null;
         try {
             userDetails = (CustomUserDetails) userDetailsService.loadUserByUsername(loginId);
-        } catch (Exception e) {
-            // 회원 정보가 없는 경우 실패 처리 메서드 실행 (내부에서 예외 던짐)
+        } catch (UsernameNotFoundException e) {
+            // 없는 아이디만 실패로 계산하고, DB 조회 장애는 그대로 전달한다.
             processFailedAttempt(loginId, null);
         }
 
