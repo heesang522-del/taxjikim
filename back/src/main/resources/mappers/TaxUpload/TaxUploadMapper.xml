@@ -4,33 +4,32 @@
 
 <mapper namespace="com.kh.back.TaxUpload.mapper.TaxMapper">
 
+    <select id="findTaxInputIdByUserAndYear" resultType="java.lang.Long">
+        SELECT TAX_INPUT_ID
+        FROM TAX_INPUTS
+        WHERE USER_ID = #{userId} AND TAX_YEAR = #{taxYear}
+        LIMIT 1
+    </select>
+
+    <insert id="insertTaxInput" parameterType="java.util.Map" useGeneratedKeys="true" keyProperty="taxInputId">
+        INSERT INTO TAX_INPUTS (
+        USER_ID, TAX_YEAR, REGION, JOB, INCOME_TYPE, AUTO_WITHHOLDING, TOTAL_INCOME, TOTAL_EXPENSE, EXPECTED_TAX
+        )
+        VALUES (
+        #{userId}, #{taxYear}, #{region}, #{job}, #{incomeType}, #{autoWithholding}, #{totalIncome}, #{totalExpense}, #{expectedTax}
+        )
+    </insert>
+
     <insert id="insertTaxTransactions" parameterType="java.util.List">
         INSERT INTO TAX_TRANSACTIONS (
-        TAX_INPUT_ID,
-        USER_ID,
-        TRANSACTION_TYPE,
-        TRANSACTION_DATE,
-        DESCRIPTION,
-        CATEGORY,
-        AMOUNT,
-        TAX_YEAR,
-        IS_EDITED
+        TAX_INPUT_ID, USER_ID, TRANSACTION_TYPE, TRANSACTION_DATE, DESCRIPTION, CATEGORY, AMOUNT, TAX_YEAR, IS_EDITED
         )
         VALUES
         <foreach collection="list" item="item" separator=",">
             (
-            #{item.taxInputId},
-            #{item.userId},
-            #{item.transactionType},
-            #{item.transactionDate},
-            #{item.description},
-            #{item.category},
-            #{item.amount},
-            #{item.taxYear},
-            #{item.isEdited}
+            #{item.taxInputId}, #{item.userId}, #{item.transactionType}, #{item.transactionDate}, #{item.description}, #{item.category}, #{item.amount}, #{item.taxYear}, #{item.isEdited}
             )
         </foreach>
     </insert>
-
 
 </mapper>

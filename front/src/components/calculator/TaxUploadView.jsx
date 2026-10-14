@@ -104,7 +104,7 @@ const TaxCalculatorView = () => {
             >
                 <h3>📁 장부 내역 파일 업로드 (PDF)</h3>
                 <p style={{ color: '#666', fontSize: '14px', marginBottom: '15px' }}>
-                    국세청 홈택스 다운로드 PDF 파일을 선택하여 백엔드 데이터베이스에 적재하세요.
+                    국세청 홈택스 다운로드 PDF 파일을 선택해주세요.
                 </p>
 
                 <input 

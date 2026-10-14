@@ -21,8 +21,8 @@ import java.util.UUID;
 public class PostService {
 
     // 청크 및 최종 파일 저장 경로 상수 선언
-    private final String TEMP_DIR = "C:/uploads/temp/";
-    private final String UPLOAD_DIR = "C:/uploads/files/";
+    private final String TEMP_DIR = System.getProperty("user.dir") + "/uploads/temp/";
+    private final String UPLOAD_DIR = System.getProperty("user.dir") + "/uploads/files/";
 
     private final PostMapper postMapper;
     private final PostValidator postValidator;
@@ -42,6 +42,19 @@ public class PostService {
      */
     @Transactional
     public String processChunkUpload(ChunkDto dto) throws IOException {
+        // 업로드 경로와 청크 번호를 검증한 뒤 파일 시스템에 기록한다.
+        if (dto.getUploadId() == null || !dto.getUploadId().matches("[A-Za-z0-9_-]+")
+                || dto.getTotalChunks() < 1 || dto.getChunkIndex() < 0
+                || dto.getChunkIndex() >= dto.getTotalChunks()
+                || dto.getFile() == null || dto.getFile().isEmpty()
+                || dto.getOriginalName() == null) {
+            throw new IllegalArgumentException("청크 업로드 입력값을 확인해주세요.");
+        }
+        // 클라이언트 검사를 우회해도 사진·동영상 외 파일은 서버에서 거부한다.
+        if (!dto.getOriginalName().toLowerCase(java.util.Locale.ROOT)
+                .matches(".*\\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$")) {
+            throw new IllegalArgumentException("사진·동영상만 업로드할 수 있습니다. PDF·압축·실행파일은 차단됩니다.");
+        }
         File tempDirFile = new File(TEMP_DIR + dto.getUploadId());
         if (!tempDirFile.exists()) {
             tempDirFile.mkdirs();
@@ -53,7 +66,11 @@ public class PostService {
         File[] chunks = tempDirFile.listFiles((dir, name) -> name.startsWith("chunk_"));
         if (chunks != null && chunks.length == dto.getTotalChunks()) {
 
-            String ext = dto.getOriginalName().substring(dto.getOriginalName().lastIndexOf("."));
+            int extensionIndex = dto.getOriginalName().lastIndexOf('.');
+            String ext = extensionIndex < 0 ? "" : dto.getOriginalName().substring(extensionIndex);
+            if (!ext.matches("(\\.[A-Za-z0-9]+)?")) {
+                throw new IllegalArgumentException("지원하지 않는 파일 확장자입니다.");
+            }
             String savedFileName = UUID.randomUUID().toString() + ext;
             File targetFile = new File(UPLOAD_DIR + savedFileName);
 
@@ -61,11 +78,36 @@ public class PostService {
                 targetFile.getParentFile().mkdirs();
             }
 
-            try (BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(targetFile, true))) {
+            try (BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(targetFile))) {
                 for (int i = 0; i < dto.getTotalChunks(); i++) {
                     File cFile = new File(tempDirFile, "chunk_" + i);
                     Files.copy(cFile.toPath(), bout);
                 }
+            }
+
+            // 확장자만 바꾼 실행파일을 막기 위해 병합 파일의 형식 식별 바이트도 검사한다.
+            byte[] header;
+            try (java.io.InputStream input = Files.newInputStream(targetFile.toPath())) {
+                header = input.readNBytes(16);
+            }
+            String lowerExt = ext.toLowerCase(java.util.Locale.ROOT);
+            String signature = new String(header, java.nio.charset.StandardCharsets.ISO_8859_1);
+            boolean validMedia = switch (lowerExt) {
+                case ".jpg", ".jpeg" -> header.length >= 3 && (header[0] & 255) == 255
+                        && (header[1] & 255) == 216 && (header[2] & 255) == 255;
+                case ".png" -> header.length >= 8 && java.util.Arrays.equals(
+                        java.util.Arrays.copyOf(header, 8), new byte[]{(byte) 137, 80, 78, 71, 13, 10, 26, 10});
+                case ".gif" -> signature.startsWith("GIF87a") || signature.startsWith("GIF89a");
+                case ".webp" -> signature.startsWith("RIFF") && signature.length() >= 12
+                        && signature.substring(8, 12).equals("WEBP");
+                case ".mp4", ".mov" -> signature.length() >= 12 && signature.substring(4, 8).equals("ftyp");
+                case ".webm" -> header.length >= 4 && java.util.Arrays.equals(
+                        java.util.Arrays.copyOf(header, 4), new byte[]{26, 69, (byte) 223, (byte) 163});
+                default -> false;
+            };
+            if (!validMedia) {
+                Files.deleteIfExists(targetFile.toPath());
+                throw new IllegalArgumentException("파일 내용이 허용된 사진·동영상 형식과 일치하지 않습니다.");
             }
 
             for (int i = 0; i < dto.getTotalChunks(); i++) {
@@ -86,7 +128,10 @@ public class PostService {
             fileMetaDataDto.setFileExtension(ext.replace(".", ""));
             fileMetaDataDto.setFileType("POST");
 
-            postMapper.saveFileMeta(fileMetaDataDto);
+            // 익명 테스트는 병합 파일만 저장하고 회원·게시글이 필요한 DB 저장은 생략한다.
+            if (!dto.isAnonymous()) {
+                postMapper.saveFileMeta(fileMetaDataDto);
+            }
             return savedFileName;
         }
 

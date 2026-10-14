@@ -1,5 +1,6 @@
-import styled from 'styled-components'
-import { Badge } from '../ui'
+import styled from 'styled-components';
+import { Badge } from '../ui';
+import { Link } from 'react-router-dom';
 
 const Item = styled.div`
   display: flex;
@@ -31,19 +32,19 @@ const Item = styled.div`
     color: var(--text-faint);
     white-space: nowrap;
   }
-`
+`;
 
 export default function PostItem({ post }) {
   return (
     <Item>
       <div className="body">
         <Badge $tone={post.tone}>{post.tag}</Badge>
-        <h4>{post.title}</h4>
+        <h4>{post.postId ? <Link to={`/detail?postId=${post.postId}`}>{post.title}</Link> : post.title}</h4>
         <p className="meta">
           작성자: {post.author} | 조회수: {post.views.toLocaleString('ko-KR')} | 댓글: {post.comments}
         </p>
       </div>
       <span className="time">{post.time}</span>
     </Item>
-  )
+  );
 }

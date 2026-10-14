@@ -11,7 +11,7 @@ import SupportPage from './pages/SupportPage';
 import AdminPage from './pages/AdminPage';
 import NotFound from './pages/NotFound';
 
-// 🌟 게시물 관련 컴포넌트 임포트 (프로젝트 경로에 맞게 확인해주세요)
+// 🌟 게시물 관련 컴포넌트 임포트 
 import PostMain from './components/post/PostMain';
 import PostCreate from './components/post/PostCreate';
 import PostEdit from './components/post/PostEdit';
