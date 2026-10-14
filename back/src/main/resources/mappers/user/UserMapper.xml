@@ -6,21 +6,21 @@
 
     <!-- 회원 가입 -->
     <insert id="insertUser" parameterType="com.kh.back.user.dto.UserDto" useGeneratedKeys="true" keyProperty="userId" keyColumn="USER_ID">
-        INSERT INTO `user` (LOGIN_ID, PASSWORD, NAME, NICKNAME, EMAIL, BIRTH_DATE, PROFILE_IMAGE_URL)
+        INSERT INTO `users` (LOGIN_ID, PASSWORD, NAME, NICKNAME, EMAIL, BIRTH_DATE, PROFILE_IMAGE_URL)
         VALUES (#{loginId}, #{password}, #{name}, #{nickname}, #{email}, #{birthDate}, #{profileImageUrl})
     </insert>
 
     <!-- 중복 확인 쿼리 -->
     <select id="countByLoginId" parameterType="string" resultType="int">
-        SELECT COUNT(*) FROM `user` WHERE LOGIN_ID = #{loginId}
+        SELECT COUNT(*) FROM `users` WHERE LOGIN_ID = #{loginId}
     </select>
 
     <select id="countByNickname" parameterType="string" resultType="int">
-        SELECT COUNT(*) FROM `user` WHERE NICKNAME = #{nickname}
+        SELECT COUNT(*) FROM `users` WHERE NICKNAME = #{nickname}
     </select>
 
     <select id="countByEmail" parameterType="string" resultType="int">
-        SELECT COUNT(*) FROM `user` WHERE EMAIL = #{email}
+        SELECT COUNT(*) FROM `users` WHERE EMAIL = #{email}
     </select>
 
     <!-- 회원 단건 조회 -->
@@ -37,10 +37,9 @@
             USER_STATUS   AS userStatus,
             CREATED_AT      AS createdAt,
             UPDATED_AT      AS updatedAt,
-            DELETED_AT      AS deletedAt,
             BIRTH_DATE AS birthDate,
             LAST_LOGIN_AT AS lastLoginAt
-        FROM `user`
+        FROM `users`
         WHERE LOGIN_ID = #{loginId}
     </select>
 
@@ -57,23 +56,22 @@
             USER_STATUS   AS userStatus,
             CREATED_AT      AS createdAt,
             UPDATED_AT      AS updatedAt,
-            DELETED_AT      AS deletedAt,
             BIRTH_DATE AS birthDate,
             LAST_LOGIN_AT AS lastLoginAt
-        FROM `user`
+        FROM `users`
         WHERE USER_ID = #{userId}
     </select>
 
     <!-- 로그인 아이디로 실제 회원 PK 조회 -->
     <select id="findUserIdByLoginId" parameterType="string" resultType="long">
         SELECT USER_ID
-        FROM `user`
+        FROM `users`
         WHERE LOGIN_ID = #{loginId}
     </select>
 
     <select id="findLoginIdByNameAndEmail" resultType="string">
         SELECT LOGIN_ID
-        FROM `user`
+        FROM `users`
         WHERE NAME = #{name}
           AND EMAIL = #{email}
             LIMIT 1
@@ -81,7 +79,7 @@
 
     <!-- 비밀번호 변경 -->
     <update id="updatePassword">
-        UPDATE `user`
+        UPDATE `users`
         SET PASSWORD = #{password},
             UPDATED_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
@@ -89,7 +87,7 @@
 
     <!-- 계정 이메일과 일치하는 경우에만 비밀번호를 재설정한다. -->
     <update id="updatePasswordByEmail">
-        UPDATE `user`
+        UPDATE `users`
         SET PASSWORD = #{password},
             UPDATED_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
@@ -97,7 +95,7 @@
     </update>
 
     <update id="updateUserFields" parameterType="com.kh.back.user.dto.UserDto">
-        UPDATE `user`
+        UPDATE `users`
         <set>
             <if test="birthDate != null">BIRTH_DATE = #{birthDate},</if>
             <if test="nickname != null">NICKNAME = #{nickname},</if>
@@ -109,7 +107,7 @@
     </update>
 
     <update id="updateProfileImageUrl">
-        UPDATE `user`
+        UPDATE `users`
         SET PROFILE_IMAGE_URL = #{profileImageUrl},
             UPDATED_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
@@ -117,31 +115,31 @@
 
     <!-- 계정 상태 관리 (탈퇴 / 휴면 / 복구) -->
     <update id="deleteUser">
-        UPDATE `user`
+        UPDATE `users`
         SET USER_STATUS = 'DELETED',
             DELETED_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
     </update>
 
     <delete id="deleteExpiredUsers">
-        DELETE FROM `user`
+        DELETE FROM `users`
         WHERE USER_STATUS = 'DELETED'
           AND DELETED_AT &lt;= #{cutoffDate}
     </delete>
 
     <update id="updateLastLoginAt">
-        UPDATE `user`
+        UPDATE `users`
         SET LAST_LOGIN_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
     </update>
 
     <update id="convertToDormantAccounts">
-        UPDATE `user`
+        UPDATE `users`
         SET USER_STATUS = 'DORMANT'
         WHERE LOGIN_ID IN (
             SELECT temp.LOGIN_ID FROM (
                SELECT LOGIN_ID
-               FROM `user`
+               FROM `users`
                WHERE USER_STATUS = 'ACTIVE'
                  AND (
                    LAST_LOGIN_AT &lt; #{cutoffDate}
@@ -152,7 +150,7 @@
     </update>
 
     <update id="activateDormantAccount">
-        UPDATE `user`
+        UPDATE `users`
         SET USER_STATUS = 'ACTIVE',
             LAST_LOGIN_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
@@ -161,7 +159,7 @@
     </update>
 
     <update id="cancelDeleteUser">
-        UPDATE `user`
+        UPDATE `users`
         SET USER_STATUS = 'ACTIVE',
             DELETED_AT = NULL,
             LAST_LOGIN_AT = NOW()

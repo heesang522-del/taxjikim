@@ -2,7 +2,7 @@ import { Route, Routes } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import HomePage from './pages/HomePage';
 import SignupPage from './pages/SignupPage';
-import LoginPage from './pages/LoginPage';
+import { LoginPage } from './pages/LoginPage';
 import FindAccountPage from './pages/FindAccountPage';
 import MyPage from './pages/MyPage';
 import CalculatorPage from './pages/CalculatorPage';

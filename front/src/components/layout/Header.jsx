@@ -1,8 +1,9 @@
-import { Link, NavLink } from 'react-router-dom'
-import styled from 'styled-components'
-import Icon from '../Icon'
-import { Badge, Button, Row } from '../ui'
-import { useAuthStore } from '../../store/useAuthStore'
+import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import styled from 'styled-components';
+import Icon from '../Icon';
+import { Badge, Button, Row } from '../ui';
+import { useAuthStore } from '../../store/useAuthStore';
 
 const Bar = styled.header`
   position: sticky;
@@ -15,7 +16,7 @@ const Bar = styled.header`
   padding: 12px 24px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
-`
+`;
 
 const Brand = styled(Link)`
   display: flex;
@@ -37,7 +38,7 @@ const Brand = styled(Link)`
     justify-content: center;
     box-shadow: 0 4px 10px rgba(79, 70, 229, 0.25);
   }
-`
+`;
 
 const Nav = styled.nav`
   display: flex;
@@ -79,7 +80,7 @@ const Nav = styled.nav`
       background: var(--danger-bg);
     }
   }
-`
+`;
 
 const BellButton = styled.button`
   position: relative;
@@ -103,17 +104,36 @@ const BellButton = styled.button`
     border-radius: 50%;
     background: var(--expense);
   }
-`
+`;
 
 const NAV_ITEMS = [
   { to: '/calculator', label: '세금 계산·시뮬레이션' },
   { to: '/community', label: '커뮤니티' },
   { to: '/support', label: '고객센터' },
-]
+];
 
-export default function Header({ onOpenNotifications }) {
-  const isLoggedIn = useAuthStore((state) => state.isLoggedIn)
-  const logout = useAuthStore((state) => state.logout)
+export function Header({ onOpenNotifications }) {
+  const isLoggedIn = useAuthStore((state) => state.isLoggedIn);
+  const logout = useAuthStore((state) => state.logout);
+  const user = useAuthStore((state) => state.user);
+  const navigate = useNavigate();
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState('');
+
+  async function handleLogout() {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setLogoutError('');
+    try {
+      // Redis 세션 종료가 확인된 뒤 브라우저 인증 상태를 비우고 홈으로 이동한다.
+      await logout();
+      navigate('/');
+    } catch (error) {
+      setLogoutError(error.message || '로그아웃하지 못했습니다. 다시 시도해주세요.');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
 
   return (
     <Bar>
@@ -146,11 +166,12 @@ export default function Header({ onOpenNotifications }) {
         {isLoggedIn ? (
           <Row $gap={8}>
             <Button as={Link} to="/mypage" $variant="soft" $size="sm">
-              <Icon name="user" size={16} /> 김프리님
+              <Icon name="user" size={16} /> {user?.loginId}님
             </Button>
-            <Button $variant="link" $size="sm" onClick={logout}>
-              로그아웃
+            <Button $variant="link" $size="sm" onClick={handleLogout} disabled={isLoggingOut}>
+              {isLoggingOut ? '로그아웃 중...' : '로그아웃'}
             </Button>
+            {logoutError && <span role="alert">{logoutError}</span>}
           </Row>
         ) : (
           <Row $gap={8}>
@@ -164,5 +185,5 @@ export default function Header({ onOpenNotifications }) {
         )}
       </Row>
     </Bar>
-  )
+  );
 }
