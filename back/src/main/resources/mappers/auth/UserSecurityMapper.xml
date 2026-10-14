@@ -6,14 +6,14 @@
 
     <!-- 1. 계정 잠금 처리 (USER_STATUS -> 'LOCKED') -->
     <update id="lockAccount">
-        UPDATE `user`
+        UPDATE `users`
         SET USER_STATUS = 'LOCKED'
         WHERE LOGIN_ID = #{loginId}
     </update>
 
     <!-- 2. 계정 잠금 해제 (USER_STATUS -> 'ACTIVE') -->
     <update id="unlockAccount">
-        UPDATE `user`
+        UPDATE `users`
         SET USER_STATUS = 'ACTIVE'
         WHERE LOGIN_ID = #{loginId}
     </update>
