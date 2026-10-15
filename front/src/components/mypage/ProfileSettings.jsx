@@ -2,7 +2,7 @@
 
 import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Modal, TextField } from '../common/index';
 import { useAuth } from '../../store/useAuthStore';
@@ -33,26 +33,10 @@ export function ProfileSettings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [pending, setPending] = useState('load');
+  // 진입 시 회원 정보 확인은 공통 Layout에서 처리하고, 여기서는 수정 요청 상태만 관리한다.
+  const [pending, setPending] = useState('');
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
-
-  useEffect(() => {
-    let active = true;
-    refreshProfile()
-      .catch((cause) => {
-        if (active) {
-          setError(cause.message);
-          setFieldErrors(cause.fields ?? {});
-        }
-      })
-      .finally(() => {
-        if (active) setPending('');
-      });
-    return () => {
-      active = false;
-    };
-  }, [refreshProfile]);
 
   async function handleAction(key, operation, refresh = false) {
     if (pending) return;
