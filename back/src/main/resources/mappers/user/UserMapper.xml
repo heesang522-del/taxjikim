@@ -114,12 +114,10 @@
     </update>
 
     <!-- 계정 상태 관리 (탈퇴 / 휴면 / 복구) -->
-    <update id="deleteUser">
-        UPDATE `users`
-        SET USER_STATUS = 'DELETED',
-            DELETED_AT = NOW()
+    <delete id="deleteUser">
+        DELETE FROM `users`
         WHERE LOGIN_ID = #{loginId}
-    </update>
+    </delete>
 
     <delete id="deleteExpiredUsers">
         DELETE FROM `users`

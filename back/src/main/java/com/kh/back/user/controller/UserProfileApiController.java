@@ -71,7 +71,7 @@ public class UserProfileApiController {
         }
         userService.deleteUser(principal.getUsername());
         loginSessionRepository.revokeCurrentSession(principal.getUserId());
-        authCookieService.clearRefreshToken(response);
+        authCookieService.clearAuthenticationCookies(response);
         SecurityContextHolder.clearContext();
         return ApiResponse.ok(null);
     }
