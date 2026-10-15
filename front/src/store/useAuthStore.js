@@ -4,6 +4,7 @@
 import { create } from 'zustand';
 import { ACCOUNT_SEED } from '../data/content.js';
 import { loginSession, logoutSession } from '../api/authApi.js';
+import { getMyProfile } from '../api/userApi.js';
 
 const ACCOUNTS_KEY = 'taxlab.accounts.v1';
 const LOCK_KEY = 'taxlab.login-lock.v1';
@@ -160,6 +161,28 @@ export const useAuthStore = create((set, get) => {
       await logoutSession(get().accessToken);
       saveApiSession(null);
       set({ userId: null, apiUser: null, accessToken: null });
+    },
+
+    clearAuth: () => {
+      saveApiSession(null);
+      set({ userId: null, apiUser: null, accessToken: null });
+    },
+
+    refreshProfile: async () => {
+      const accessToken = get().accessToken;
+      if (!accessToken) return;
+      const result = await getMyProfile(accessToken);
+      // 조회 중 로그아웃하거나 다른 계정으로 로그인했으면 이전 응답을 반영하지 않는다.
+      if (get().accessToken !== accessToken) return;
+      const profile = result.data;
+      const user = {
+        ...get().apiUser,
+        ...profile,
+        id: profile.loginId,
+        role: profile.userRole === 'ADMIN' ? 'admin' : 'member',
+      };
+      saveApiSession({ accessToken, user });
+      set({ userId: profile.loginId, apiUser: user });
     },
 
     /** 관리자가 계정을 정지·해제한다. 정상으로 되돌리면 로그인 실패 횟수와 잠금 단계도 초기화한다. */
