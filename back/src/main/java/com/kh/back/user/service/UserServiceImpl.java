@@ -5,6 +5,7 @@ import com.kh.back.auth.service.EmailVerificationService;
 import com.kh.back.common.util.FileUtil;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.common.validation.InputValidator;
+import com.kh.back.common.validation.PasswordValidator;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -74,18 +75,7 @@ public class UserServiceImpl implements UserService {
         InputValidator.requireMaxLength("name", userDto.getName(), 50);
         InputValidator.requireMaxLength("nickname", userDto.getNickname(), 50);
         InputValidator.requireMaxLength("email", userDto.getEmail(), 255);
-        String password = userDto.getPassword();
-        // 프론트를 거치지 않은 가입 요청에도 세미 프로젝트의 비밀번호 조건을 동일하게 적용한다.
-        if (password.matches("(?sU).*\\s.*")) {
-            InputValidator.reject("password", "비밀번호에는 공백을 포함할 수 없습니다.");
-        }
-        if (password.length() < 8 || password.length() > 20) {
-            InputValidator.reject("password", "비밀번호는 8~20자로 입력해주세요.");
-        }
-        if (!password.matches("(?s).*[a-zA-Z].*") || !password.matches("(?s).*[0-9].*")
-                || !password.matches("(?s).*[!@#$%^&*].*")) {
-            InputValidator.reject("password", "영문, 숫자, 특수문자(!@#$%^&*)를 모두 포함해주세요.");
-        }
+        PasswordValidator.validate("password", userDto.getPassword());
         // 이메일 인증 완료 여부 확인
         validateEmailVerification(userDto.getEmail());
         userDto.setPassword(
@@ -150,10 +140,7 @@ public class UserServiceImpl implements UserService {
     @Override
     public void updatePasswordInSettings(String loginId, String currentPassword, String newPassword) {
         InputValidator.requireText("currentPassword", currentPassword);
-        InputValidator.requireText("newPassword", newPassword);
-        if (newPassword.length() < 8) {
-            InputValidator.reject("newPassword", "비밀번호는 8자 이상으로 입력해주세요.");
-        }
+        PasswordValidator.validate("newPassword", newPassword);
         UserDto user = userMapper.findByLoginId(loginId);
         if (user == null || !passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CURRENT_PASSWORD_INVALID", "현재 비밀번호가 올바르지 않습니다.");

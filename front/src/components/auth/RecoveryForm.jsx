@@ -1,6 +1,8 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
+import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
+
 import { useEffect, useState } from 'react';
 import { Button, Icon, KeyValue, Modal, TextField } from '../common/index';
 import { maskEmail, maskId } from '../../utils/format';
@@ -122,8 +124,9 @@ export function RecoveryForm({ mode, onTab }) {
 
   const handleChangePassword = async () => {
     if (pending) return;
-    if (pw.length < 8 || pw !== pw2) {
-      setError('새 비밀번호는 8자 이상이며 확인 값과 같아야 합니다.');
+    const passwordError = getPasswordError(pw);
+    if (passwordError || pw !== pw2) {
+      setError(passwordError || '새 비밀번호와 확인 값이 일치하지 않습니다.');
       return;
     }
     setPending(true);
@@ -173,11 +176,16 @@ export function RecoveryForm({ mode, onTab }) {
         <TextField
           id="pw4"
           error={fieldErrors.newPassword}
-          label="새 비밀번호"
+          label="새 비밀번호 (8~20자)"
           type="password"
+          placeholder="영문·숫자·특수문자 조합, 공백 없이"
+          aria-describedby="reset-password-guide"
           value={pw}
           onChange={(e) => setPw(e.target.value)}
         />
+        <p id="reset-password-guide" className="small muted">
+          {PASSWORD_GUIDE}
+        </p>
         <TextField
           id="pw5"
           label="새 비밀번호 확인"

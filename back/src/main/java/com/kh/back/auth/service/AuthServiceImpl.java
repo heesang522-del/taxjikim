@@ -18,6 +18,7 @@ import com.kh.back.auth.security.LoginAttemptService;
 import com.kh.back.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import com.kh.back.common.validation.InputValidator;
+import com.kh.back.common.validation.PasswordValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -194,10 +195,7 @@ public class AuthServiceImpl implements AuthService {
     public void resetPassword(String loginId, String email, String newPassword) {
         InputValidator.requireText("loginId", loginId);
         InputValidator.requireText("email", email);
-        InputValidator.requireText("newPassword", newPassword);
-        if (newPassword.length() < 8) {
-            InputValidator.reject("newPassword", "비밀번호는 8자 이상으로 입력해주세요.");
-        }
+        PasswordValidator.validate("newPassword", newPassword);
         // 인증한 이메일이 비밀번호를 바꾸려는 계정에 등록된 이메일인지 확인한다.
         UserDto user = userMapper.findByLoginId(loginId);
         if (user == null || !email.equals(user.getEmail())) {

@@ -1,5 +1,7 @@
 'use no memo';
 
+import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
+
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Modal, TextField } from '../common/index';
@@ -121,8 +123,13 @@ export function ProfileSettings() {
   }
 
   function handlePassword() {
-    if (!currentPassword || newPassword.length < 8 || newPassword !== confirmPassword) {
-      setError('현재 비밀번호와 새 비밀번호(8자 이상), 확인 값을 확인하세요.');
+    const passwordError = getPasswordError(newPassword);
+    if (!currentPassword || passwordError || newPassword !== confirmPassword) {
+      setError(
+        !currentPassword
+          ? '현재 비밀번호를 입력해주세요.'
+          : passwordError || '새 비밀번호와 확인 값이 일치하지 않습니다.'
+      );
       return;
     }
     handleAction('password', async () => {
@@ -244,12 +251,17 @@ export function ProfileSettings() {
         <TextField
           id="me-new"
           error={fieldErrors.newPassword}
-          label="새 비밀번호 (8자 이상)"
+          label="새 비밀번호 (8~20자)"
           type="password"
+          placeholder="영문·숫자·특수문자 조합, 공백 없이"
+          aria-describedby="profile-password-guide"
           autoComplete="new-password"
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
         />
+        <p id="profile-password-guide" className="small muted">
+          {PASSWORD_GUIDE}
+        </p>
         <TextField
           id="me-confirm"
           label="새 비밀번호 확인"
