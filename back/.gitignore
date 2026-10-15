@@ -41,3 +41,6 @@ out/
 
 # 테스트 소스는 로컬에서만 관리한다.
 /src/test/
+
+# schema 추가
+/sql/schema.sql
