@@ -4,14 +4,14 @@
 import { create } from 'zustand';
 import { BOARD_SEED, COMMENT_SEED } from '../data/content';
 import { getCurrentUser } from './useAuthStore';
+import { getBoardPosts } from '../api/post.js';
 
 const KEY = 'taxlab.board.v2';
 const OLD_KEY = 'taxlab.board.v1';
 const COMMENT_KEY = 'taxlab.comments.v1';
 
-// 글 하나가 올바른 모양인지 확인한다. (taxlab 원본은 job까지 검사했지만 예시 글에 job이 없어 새로고침하면 글이 모두 사라졌다)
-const isPost = (p) => p && [p.id, p.tab, p.title, p.body, p.author, p.createdAt].every((v) => typeof v === 'string') && Number.isFinite(p.views);
 const isComment = (c) => c && [c.id, c.postId, c.author, c.body, c.createdAt].every((v) => typeof v === 'string');
+const isPost = (p) => p && [p.id, p.tab, p.title, p.body, p.author, p.createdAt].every((v) => typeof v === 'string') && Number.isFinite(p.views);
 const today = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
 
 const load = (key, valid) => {
@@ -25,32 +25,41 @@ const save = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 저장 공간이 없거나 막힌 경우 무시 */ }
 };
 
-// v2 저장값이 없으면 v1 글을 이어받고, 새로 추가된 예시 글(신고 확인용)만 덧붙인다. 삭제해서 빈 목록이 된 것도 그대로 둔다.
-const readPosts = () => {
-  const v2 = load(KEY, isPost);
-  if (v2) return v2;
-  const v1 = load(OLD_KEY, isPost);
-  if (!v1) return BOARD_SEED;
-  return [...v1, ...BOARD_SEED.filter((p) => p.id === 'p9' && !v1.some((o) => o.id === p.id))];
-};
 const readComments = () => load(COMMENT_KEY, isComment) ?? COMMENT_SEED;
+
+// 기존 브라우저 글을 복원하고, 저장 이력이 없을 때만 기본 예시 글로 시작한다.
+const readPosts = () => load(KEY, isPost) ?? load(OLD_KEY, isPost) ?? BOARD_SEED;
+const mergePosts = (serverPosts, browserPosts) => {
+  const serverIds = new Set(serverPosts.map((post) => post.id));
+  return [...serverPosts, ...browserPosts.filter((post) => post.source !== 'server' && !serverIds.has(post.id))];
+};
 
 /** 다른 탭(예: 관리자 탭)에서 바뀐 글·댓글을 바로 반영한다. */
 export const syncBoardFromStorage = (key) => {
-  if (key === KEY) useBoardStore.setState({ posts: readPosts() });
+  // 다른 탭의 브라우저 글 변경도 서버 글을 유지하면서 반영한다.
+  if (key === KEY) {
+    const serverPosts = useBoardStore.getState().posts.filter((post) => post.source === 'server');
+    useBoardStore.setState({ posts: mergePosts(serverPosts, readPosts()) });
+  }
   if (key === COMMENT_KEY) useBoardStore.setState({ comments: readComments() });
 };
 
 /**
- * 게시판 글·댓글 목록(최신순). MOCK: 서버 연동 전까지 이 브라우저의 localStorage에 저장한다.
+ * 서버 게시글과 브라우저 예시 글을 함께 표시한다. 댓글은 기존 브라우저 저장 방식을 유지한다.
  * deletedByAdmin이 true인 글·댓글은 관리자 삭제로 내용을 가리고 "관리자에 의해 삭제됨" 흔적만 남긴다.
  */
 export const useBoardStore = create((set, get) => {
-  const setPosts = (fn) => { const next = fn(get().posts); save(KEY, next); set({ posts: next }); };
+  // 서버 글을 브라우저에 복제 저장하면 삭제 후 다시 나타날 수 있어 예시 글만 저장한다.
+  const setPosts = (fn) => { const next = fn(get().posts); save(KEY, next.filter((post) => post.source !== 'server')); set({ posts: next }); };
   const setComments = (fn) => { const next = fn(get().comments); save(COMMENT_KEY, next); set({ comments: next }); };
 
   return {
     posts: readPosts(),
+    // DB 최신 목록에 기존 브라우저 글을 더하고 같은 ID는 서버 데이터를 우선한다.
+    loadPosts: async () => {
+      const posts = await getBoardPosts();
+      set({ posts: mergePosts(posts.map((post) => ({ ...post, source: 'server' })), readPosts()) });
+    },
     comments: readComments(),
 
     addPost: ({ tab, title, body, files = [] }) => {

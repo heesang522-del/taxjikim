@@ -1,38 +1,55 @@
 package com.kh.back.TaxUpload.controller;
+
+import com.kh.back.TaxUpload.dto.TaxPdfUploadResult;
 import com.kh.back.TaxUpload.service.YearEndTaxService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import com.kh.back.auth.security.CustomUserDetails;
+import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.common.exception.ApiException;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/api/v1/tax")
 public class YearEndTaxController {
-
     private final YearEndTaxService yearEndTaxService;
-
-    public YearEndTaxController(YearEndTaxService yearEndTaxService) {
-        this.yearEndTaxService = yearEndTaxService;
-    }
+    public YearEndTaxController(YearEndTaxService yearEndTaxService) { this.yearEndTaxService = yearEndTaxService; }
 
     @PostMapping("/upload-pdf")
-    public ResponseEntity<String> uploadTaxPdf(
-            @RequestParam("file") MultipartFile file, // 단일 파일로 수신
-            @RequestParam("userId") Long userId,
-            @RequestParam("taxInputId") Long taxInputId,
-            @RequestParam("taxYear") int taxYear) {
-
-        if (file.isEmpty() || !file.getOriginalFilename().toLowerCase().endsWith(".pdf")) {
-            return ResponseEntity.badRequest().body("유효한 PDF 파일을 첨부해주세요.");
+    public ApiResponse<TaxPdfUploadResult> uploadTaxPdf(@RequestParam("file") MultipartFile file,
+            @RequestParam("taxYear") int taxYear, @AuthenticationPrincipal CustomUserDetails principal) throws IOException {
+        if (taxYear < 1900 || taxYear > 9999) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "귀속연도를 확인해 주세요.");
         }
+        // 클라이언트가 지정한 회원 번호나 세무 입력 ID는 사용하지 않는다.
+        Long userId = principal == null ? null : principal.getUserId();
+        return ApiResponse.ok(yearEndTaxService.uploadPdf(file, userId, taxYear));
+    }
 
-        try {
-            yearEndTaxService.processTaxPdf(file.getInputStream(), userId, taxInputId, taxYear);
-            return ResponseEntity.ok("PDF 데이터 적재가 완료되었습니다.");
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("처리 실패: " + e.getMessage());
-        }
+    @PostMapping("/upload-ledger-pdf")
+    public ApiResponse<TaxPdfUploadResult> uploadLedgerPdf(@RequestParam("file") MultipartFile file,
+            @RequestParam("taxYear") int taxYear, @AuthenticationPrincipal CustomUserDetails principal) throws IOException {
+        validateYear(taxYear);
+        return ApiResponse.ok(yearEndTaxService.uploadLedgerPdf(file, principal == null ? null : principal.getUserId(), taxYear));
+    }
+
+    @PostMapping("/upload-evidence-pdf")
+    public ApiResponse<TaxPdfUploadResult> uploadEvidencePdf(@RequestParam("file") MultipartFile file,
+            @RequestParam("taxYear") int taxYear, @AuthenticationPrincipal CustomUserDetails principal) throws IOException {
+        validateYear(taxYear);
+        return ApiResponse.ok(yearEndTaxService.uploadEvidencePdf(file, principal == null ? null : principal.getUserId(), taxYear));
+    }
+
+    @PostMapping("/reviewed-transactions")
+    public ApiResponse<com.kh.back.TaxUpload.dto.TaxTransactionDto> saveReviewedTransaction(
+            @RequestBody com.kh.back.TaxUpload.dto.TaxTransactionDto.ReviewedTransactionRequest request,
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        return ApiResponse.ok(yearEndTaxService.saveReviewedTransaction(request, principal == null ? null : principal.getUserId()));
+    }
+
+    private void validateYear(int year) {
+        if (year < 1900 || year > 9999) throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "귀속연도를 확인해 주세요.");
     }
 }

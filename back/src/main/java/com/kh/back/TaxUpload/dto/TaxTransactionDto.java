@@ -24,6 +24,11 @@ public class TaxTransactionDto {
     private BigDecimal amount;
     private Integer taxYear;
     private boolean isEdited;
+    private Long sourceFileId;
+    private Integer sourceItemIndex;
+
+    public record ReviewedTransactionRequest(Long fileId, Integer itemIndex, Integer taxYear,
+            String transactionType, LocalDate transactionDate, String category, String description, BigDecimal amount) {}
 
 
     // PDF 파싱 데이터를 매핑하기 위한 생성자 편의 메서드

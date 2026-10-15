@@ -1,5 +1,20 @@
-// src/components/post/post-preview.js
-// DOM 조작을 제거하고 순수 로직만 함수로 분리합니다.
+// 게시글 미디어 미리보기와 청크 업로드에서 공유하는 로직이다.
+
+// 기본 우클릭·드래그 저장 동작을 제한한다. 서버 접근 권한 검사나 완전한 복제 방지는 아니다.
+export function preventMediaSave(event) {
+  event.preventDefault();
+}
+
+export const imagePreviewProps = {
+  onContextMenu: preventMediaSave,
+  onDragStart: preventMediaSave,
+  draggable: false,
+};
+
+export const videoPreviewProps = {
+  ...imagePreviewProps,
+  controlsList: 'nodownload',
+};
 
 export function filterBlockedFiles(files) {
   // 사진·동영상만 허용해 PDF, 압축파일, 스크립트, 실행파일을 모두 제외한다.
@@ -7,7 +22,8 @@ export function filterBlockedFiles(files) {
   return validFiles;
 }
 
-export async function uploadFileChunks(file, { anonymous = false } = {}) {
+export async function uploadFileChunks(file, { accessToken } = {}) {
+  if (!accessToken) throw new Error('로그인이 필요합니다. 다시 로그인해 주세요.');
   if (!file.size) throw new Error('빈 파일은 업로드할 수 없습니다.');
   if (!filterBlockedFiles([file]).length)
     throw new Error('사진·동영상만 업로드할 수 있습니다. PDF·ZIP·실행파일은 차단됩니다.');
@@ -27,10 +43,10 @@ export async function uploadFileChunks(file, { anonymous = false } = {}) {
     formData.append('chunkIndex', i);
     formData.append('totalChunks', totalChunks);
     formData.append('originalName', file.name);
-    formData.append('anonymous', anonymous);
 
     const response = await fetch('/api/posts/upload-chunk', {
       method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
       body: formData,
     });
 
