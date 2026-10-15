@@ -121,7 +121,7 @@
         SET
             TITLE = #{title},
             CONTENT = #{content},
-            JOB_CATEGORY = #{jobCategory},
+           JOB_CATEGORY = #{jobCategory},      <!-- // TODO : 삭제 -->
             IS_PUBLIC = #{isPublic},
             UPDATED_AT = CURRENT_TIMESTAMP
         WHERE POST_ID = #{postId}

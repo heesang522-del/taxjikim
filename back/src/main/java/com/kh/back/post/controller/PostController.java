@@ -131,3 +131,4 @@ public class PostController {
         return "redirect:/main-post";
     }
 }
+// TODO : CONTROLEER 삭제 FRONT 단에서 처리
