@@ -9,6 +9,10 @@ public class ChunkDto {
     private int chunkIndex;
     private int totalChunks;
     private String originalName;
+    private boolean anonymous;
+
+    public boolean isAnonymous() { return anonymous; }
+    public void setAnonymous(boolean anonymous) { this.anonymous = anonymous; }
 
     // Getter & Setter 추가
     public String getUploadId() {

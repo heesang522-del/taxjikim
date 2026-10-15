@@ -1,7 +1,10 @@
 import PostItem from './PostItem'
 import { Button, DividedList, Input, Row, StateMessage } from '../ui'
+import { useNavigate } from 'react-router-dom' // 1. useNavigate 임포트 추가
 
 export default function PostList({ posts, keyword, onKeywordChange }) {
+  const navigate = useNavigate(); // 2. 네비게이트 훅 선언
+
   return (
     <>
       <Row $justify="space-between">
@@ -13,7 +16,12 @@ export default function PostList({ posts, keyword, onKeywordChange }) {
           placeholder="검색어를 입력하세요..."
           style={{ maxWidth: 288 }}
         />
-        <Button $variant="primary" $size="sm" onClick={() => alert('글쓰기 모달 창이 열립니다.')}>
+        {/* 3. alert 대신 /new-post 페이지로 이동하도록 수정 */}
+        <Button 
+          $variant="primary" 
+          $size="sm" 
+          onClick={() => navigate('/new-post')}
+        >
           글쓰기
         </Button>
       </Row>

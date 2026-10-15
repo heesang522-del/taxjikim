@@ -2,7 +2,6 @@ package com.kh.back.post.mapper;
 
 import com.kh.back.post.dto.FileMetadataDto;
 import com.kh.back.post.dto.PostDto;
-import com.kh.back.post.dto.PostImageDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -23,38 +22,17 @@ public interface PostMapper {
 
     PostDto findById(@Param("postId") Long postId);
 
-    List<PostImageDto> findImagesByPostId(
-            @Param("postId") Long postId
-    );
+    // 🌟 FILE_META 기반 통합 파일 목록 조회
+    List<FileMetadataDto> findFilesByPostId(@Param("postId") Long postId);
 
     void save(PostDto post);
-
-    void delete(Long postId);
 
     void update(PostDto post);
 
     void deleteById(@Param("postId") Long postId);
 
-    void saveImage(PostImageDto postImage);
-
-    void savePostImage(
-            @Param("postId") Long postId,
-            @Param("uploadId") Long uploadId
-    );
-
-    void deleteByPostIdAndUploadId(
-            @Param("postId") Long postId,
-            @Param("uploadId") Long uploadId
-    );
-
-    void deleteImage(
-            @Param("uploadId") Long uploadId
-    );
-
-    void updateImageOrder(
-            @Param("uploadId") Long uploadId,
-            @Param("imageOrder") int imageOrder
-    );
-
+    // 🌟 FILE_META 관련 저장 및 삭제 메서드 통일
     void saveFileMeta(FileMetadataDto metadataDto);
+
+    void deleteFileMeta(@Param("fileId") Long fileId);
 }

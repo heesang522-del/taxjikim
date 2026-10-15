@@ -1,6 +1,6 @@
 package com.kh.back.common.validation;
 
-import com.kh.back.post.dto.PostImageDto;
+import com.kh.back.post.dto.FileMetadataDto;
 import org.springframework.stereotype.Component;
 import com.kh.back.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
@@ -11,7 +11,7 @@ import java.util.List;
 @Component
 public class PostValidator {
 
-    private static final int MAX_FILE_COUNT = 10;
+    private static final int MAX_FILE_COUNT = 5;
 
     /**
      * 게시글 등록 시 파일 검증
@@ -24,7 +24,7 @@ public class PostValidator {
     /**
      * 게시글 수정 시 파일 검증
      */
-    public void validateUpdate(List<PostImageDto> existingImages, List<Long> deleteImageIds, List<MultipartFile> files) {
+    public void validateUpdate(List<FileMetadataDto> existingImages, List<Long> deleteImageIds, List<MultipartFile> files) {
         int deleteCount = (deleteImageIds == null) ? 0 : deleteImageIds.size();
         int remainingCount = existingImages.size() - deleteCount;
 
