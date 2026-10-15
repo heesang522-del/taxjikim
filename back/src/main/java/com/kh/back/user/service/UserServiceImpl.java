@@ -18,7 +18,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import java.time.LocalDateTime;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import com.kh.back.common.util.SavedFile;
@@ -195,8 +194,8 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     @Override
-    public void restoreAccountStatus(String loginId, String email, AccountRestoreType type) {
-        if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email) || type == null) {
+    public void restoreDormantAccount(String loginId, String email) {
+        if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "복구 요청 정보를 확인해주세요.");
         }
 
@@ -209,24 +208,10 @@ public class UserServiceImpl implements UserService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "EMAIL_NOT_VERIFIED", "이메일 인증이 필요합니다.");
         }
 
-        int updatedCount;
-
-        if (type == AccountRestoreType.DORMANT) {
-            if (!"DORMANT".equals(user.getUserStatus())) {
-                throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_DORMANT", "휴면 계정만 재활성화할 수 있습니다.");
-            }
-            updatedCount = userMapper.activateDormantAccount(loginId, email);
-        } else {
-            if (!"DELETED".equals(user.getUserStatus())) {
-                throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_DELETED", "탈퇴 대기 계정만 복구할 수 있습니다.");
-            }
-            // 기존 영구 삭제 스케줄러의 30일 기준과 동일하게 복구 가능 기간을 제한한다.
-            LocalDateTime cutoffDate = LocalDateTime.now().minusDays(30);
-            if (user.getDeletedAt() == null || !user.getDeletedAt().isAfter(cutoffDate)) {
-                throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_RECOVERY_EXPIRED", "계정 복구 기간이 지났습니다.");
-            }
-            updatedCount = userMapper.cancelDeleteUser(loginId, email, cutoffDate);
+        if (!"DORMANT".equals(user.getUserStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_DORMANT", "휴면 계정만 재활성화할 수 있습니다.");
         }
+        int updatedCount = userMapper.activateDormantAccount(loginId, email);
 
         // 조회 후 이메일이나 상태가 바뀌면 SQL이 갱신하지 않으므로 성공으로 처리하지 않는다.
         if (updatedCount != 1) {

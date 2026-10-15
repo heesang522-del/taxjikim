@@ -60,9 +60,6 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
         if ("DORMANT".equals(status)) {
             throw new LockedException("DORMANT");
         }
-        if ("DELETED".equals(status)) {
-            throw new DisabledException("DELETED");
-        }
         if ("BANNED".equals(status)) {
             throw new DisabledException("BANNED");
         }

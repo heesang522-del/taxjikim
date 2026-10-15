@@ -79,13 +79,12 @@ public class GlobalExceptionHandler {
         String code = e.getMessage() == null ? "AUTHENTICATION_FAILED" : e.getMessage();
         String message = switch (code) {
             case "DORMANT" -> "휴면 계정입니다. 재활성화가 필요합니다.";
-            case "DELETED" -> "탈퇴 대기 계정입니다. 계정 복구가 필요합니다.";
             case "LOCKED" -> "계정이 잠겼습니다.";
             case "BANNED" -> "이용이 정지된 계정입니다.";
             case "SESSION_REPLACED" -> "현재 로그인이 종료되었습니다. 다시 로그인해주세요.";
             default -> "인증 정보가 올바르지 않거나 만료되었습니다.";
         };
-        if (!java.util.Set.of("DORMANT", "DELETED", "LOCKED", "BANNED", "SESSION_REPLACED").contains(code)) {
+        if (!java.util.Set.of("DORMANT", "LOCKED", "BANNED", "SESSION_REPLACED").contains(code)) {
             code = "AUTHENTICATION_FAILED";
         }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.fail(code, message));

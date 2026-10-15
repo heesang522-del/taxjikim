@@ -25,7 +25,7 @@ public interface UserService {
 
     void updateLastLoginAt(String loginId);
 
-    void restoreAccountStatus(String loginId, String email, AccountRestoreType type);
+    void restoreDormantAccount(String loginId, String email);
 
     UserDto getUserByLoginId(String loginId);
 
@@ -33,5 +33,4 @@ public interface UserService {
 
     boolean checkPassword(String loginId, String rawPassword);
 
-    enum AccountRestoreType { DORMANT, DELETE }
 }

@@ -10,7 +10,6 @@ import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.common.validation.InputValidator;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.user.service.UserService;
-import com.kh.back.user.service.UserService.AccountRestoreType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -51,15 +50,6 @@ public class AuthApiController {
 
     @PostMapping("/dormancy-recoveries")
     public ApiResponse<Void> unlockDormant(@RequestBody AccountRecoveryRequestDto request) {
-        return restoreAccount(request, AccountRestoreType.DORMANT);
-    }
-
-    @PostMapping("/deletion-recoveries")
-    public ApiResponse<Void> restoreAccount(@RequestBody AccountRecoveryRequestDto request) {
-        return restoreAccount(request, AccountRestoreType.DELETE);
-    }
-
-    private ApiResponse<Void> restoreAccount(AccountRecoveryRequestDto request, AccountRestoreType type) {
         InputValidator.requireText("loginId", request.loginId());
         InputValidator.requireText("email", request.email());
         InputValidator.requireText("code", request.code());
@@ -67,7 +57,7 @@ public class AuthApiController {
         if (!emailVerificationService.verifyCode(request.email(), request.code())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_INVALID", "인증번호가 올바르지 않습니다.");
         }
-        userService.restoreAccountStatus(request.loginId(), request.email(), type);
+        userService.restoreDormantAccount(request.loginId(), request.email());
         return ApiResponse.ok(null);
     }
 }
