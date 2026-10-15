@@ -9,8 +9,6 @@ import { getMyProfile } from '../api/userApi.js';
 const ACCOUNTS_KEY = 'taxlab.accounts.v1';
 const LOCK_KEY = 'taxlab.login-lock.v1';
 const PRESENCE_KEY = 'taxlab.presence.v1';
-const SESSION_KEY = 'taxlab.session.v1';
-const API_SESSION_KEY = 'taxjikim.auth-session.v1';
 
 /** 로그인 실패를 허용하는 횟수. 이 횟수를 넘겨 실패하면(6번째 실패) 잠긴다. */
 export const MAX_LOGIN_FAILS = 5;
@@ -50,22 +48,7 @@ export const isOnline = (nickname) => {
   return Number.isFinite(at) && Date.now() - at < PRESENCE_TTL;
 };
 
-// 새로고침 시 실제 API 로그인 정보를 복원하며, 이전 mock 로그인 아이디는 인증에 사용하지 않는다.
-const readInitialSession = () => {
-  try {
-    const saved = JSON.parse(sessionStorage.getItem(API_SESSION_KEY));
-    if (saved?.accessToken && saved?.user) return saved;
-  } catch {
-    /* 저장된 인증 정보가 없거나 잘못됐으면 비로그인으로 시작한다. */
-  }
-  return { accessToken: null, user: null };
-};
-
-const saveApiSession = (session) => {
-  if (session) sessionStorage.setItem(API_SESSION_KEY, JSON.stringify(session));
-  else sessionStorage.removeItem(API_SESSION_KEY);
-};
-
+// 인증 정보는 현재 페이지의 메모리에만 두고, 브라우저 저장소에서 복원하지 않는다.
 /** 다른 mock 기능에서도 서버가 인증한 사용자 정보만 참조한다. */
 export const getCurrentUser = () => useAuthStore.getState().apiUser;
 
@@ -77,22 +60,18 @@ export const clearPresence = (nickname) => {
   delete map[nickname];
   writeJson(PRESENCE_KEY, map);
 };
-export const saveSession = (userId) => {
-  try {
-    if (userId) sessionStorage.setItem(SESSION_KEY, userId);
-    else sessionStorage.removeItem(SESSION_KEY);
-  } catch {
-    /* 세션 저장이 막힌 경우 무시 */
-  }
-};
 /** 다른 탭에서 계정이 바뀌면(가입, 정지 등) 목록만 갱신한다. 이미 로그인한 세션은 다음 접속부터 정지가 적용된다. */
 export const syncAccountsFromStorage = (key) => {
   if (key === ACCOUNTS_KEY) useAuthStore.setState({ accounts: readAccounts() });
 };
 
-export const useAuthStore = create((set, get) => {
-  const init = readInitialSession();
+function toScreenUser(profile) {
+  return { ...profile, id: profile.loginId, role: profile.userRole === 'ADMIN' ? 'admin' : 'member' };
+}
 
+export const useAuthStore = create((set, get) => {
+  let authRevision = 0;
+  let initialRequest = null;
   // 계정 목록은 항상 저장된 최신 값에 변경을 적용해서 쓴다 (다른 탭의 변경을 덮어쓰지 않기 위해).
   const mutateAccounts = (fn) => {
     const next = fn(readAccounts());
@@ -109,9 +88,10 @@ export const useAuthStore = create((set, get) => {
 
   return {
     accounts: readAccounts(),
-    userId: init.user?.id ?? null,
-    accessToken: init.accessToken,
-    apiUser: init.user,
+    userId: null,
+    authStatus: 'checking',
+    authError: '',
+    apiUser: null,
     sessionBlocked: false,
     clearSessionBlocked: () => set({ sessionBlocked: false }),
 
@@ -126,25 +106,39 @@ export const useAuthStore = create((set, get) => {
       return Boolean(rec) && rec.level >= LOCK_STEPS.length;
     },
 
-    // 로그인 검증과 실패 횟수는 백엔드에서 처리하고, 브라우저는 응답만 반영한다.
+    // 새로고침 시 브라우저가 보내는 HttpOnly 쿠키로 서버에 인증 여부를 확인한다.
+    checkAuth: () => {
+      if (initialRequest) return initialRequest;
+      if (get().authStatus === 'ready') return Promise.resolve();
+      const revision = authRevision;
+      set({ authStatus: 'checking', authError: '' });
+      initialRequest = getMyProfile()
+        .then((result) => {
+          if (revision !== authRevision) return;
+          const user = toScreenUser(result.data);
+          set({ userId: user.loginId, apiUser: user, authStatus: 'ready' });
+        })
+        .catch((error) => {
+          if (revision !== authRevision) return;
+          if (error.status === 401) set({ userId: null, apiUser: null, authStatus: 'ready' });
+          else set({ authStatus: 'error', authError: error.message });
+        })
+        .finally(() => {
+          initialRequest = null;
+        });
+      return initialRequest;
+    },
+
     login: async (id, pw) => {
+      const revision = ++authRevision;
       try {
-        const result = await loginSession(id.trim(), pw);
-        const { accessToken, userId, loginId, userRole } = result.data;
-        // 기존 화면의 id는 로그인 아이디이며, 회원 고유 번호는 userId로 별도 보관한다.
-        const user = {
-          id: loginId,
-          userId,
-          loginId,
-          name: loginId,
-          nickname: loginId,
-          email: '',
-          job: '',
-          role: userRole === 'ADMIN' ? 'admin' : 'member',
-          userRole,
-        };
-        saveApiSession({ accessToken, user });
-        set({ userId: loginId, apiUser: user, accessToken, sessionBlocked: false });
+        // 응답 JWT는 저장하지 않고 쿠키로 인증된 회원 정보만 조회한다.
+        await loginSession(id.trim(), pw);
+        const result = await getMyProfile();
+        if (revision !== authRevision)
+          return { ok: false, message: '로그인 상태가 변경되었습니다. 다시 시도해주세요.' };
+        const user = toScreenUser(result.data);
+        set({ userId: user.loginId, apiUser: user, authStatus: 'ready', authError: '', sessionBlocked: false });
         return { ok: true };
       } catch (error) {
         return {
@@ -157,32 +151,29 @@ export const useAuthStore = create((set, get) => {
     },
 
     logout: async () => {
-      // 서버의 현재 세션 종료가 성공한 뒤에만 화면 인증 상태를 비운다.
-      await logoutSession(get().accessToken);
-      saveApiSession(null);
-      set({ userId: null, apiUser: null, accessToken: null });
+      ++authRevision;
+      // 쿠키 삭제와 Redis 로그인 종료가 성공한 뒤 화면 상태를 비운다.
+      await logoutSession();
+      set({ userId: null, apiUser: null, authStatus: 'ready', authError: '' });
     },
 
     clearAuth: () => {
-      saveApiSession(null);
-      set({ userId: null, apiUser: null, accessToken: null });
+      ++authRevision;
+      set({ userId: null, apiUser: null, authStatus: 'ready', authError: '' });
     },
 
     refreshProfile: async () => {
-      const accessToken = get().accessToken;
-      if (!accessToken) return;
-      const result = await getMyProfile(accessToken);
-      // 조회 중 로그아웃하거나 다른 계정으로 로그인했으면 이전 응답을 반영하지 않는다.
-      if (get().accessToken !== accessToken) return;
-      const profile = result.data;
-      const user = {
-        ...get().apiUser,
-        ...profile,
-        id: profile.loginId,
-        role: profile.userRole === 'ADMIN' ? 'admin' : 'member',
-      };
-      saveApiSession({ accessToken, user });
-      set({ userId: profile.loginId, apiUser: user });
+      const revision = authRevision;
+      try {
+        const result = await getMyProfile();
+        // 조회 중 로그아웃·계정 변경이 발생하면 이전 응답은 화면에 반영하지 않는다.
+        if (revision !== authRevision) return;
+        const user = toScreenUser(result.data);
+        set({ userId: user.loginId, apiUser: user });
+      } catch (error) {
+        if (revision === authRevision && error.status === 401) get().clearAuth();
+        throw error;
+      }
     },
 
     /** 관리자가 계정을 정지·해제한다. 정상으로 되돌리면 로그인 실패 횟수와 잠금 단계도 초기화한다. */
@@ -232,5 +223,5 @@ export const useAuthStore = create((set, get) => {
 export function useAuth() {
   const state = useAuthStore();
   const user = state.apiUser;
-  return { ...state, user, loggedIn: Boolean(user && state.accessToken), isAdmin: user?.role === 'admin' };
+  return { ...state, user, loggedIn: Boolean(user), isAdmin: user?.role === 'admin' };
 }

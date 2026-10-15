@@ -18,7 +18,7 @@ import {
 } from '../../api/userApi.js';
 
 export function ProfileSettings() {
-  const { user, accessToken, refreshProfile, clearAuth } = useAuth();
+  const { user, refreshProfile, clearAuth } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const [nicknameDraft, setNickname] = useState(null);
@@ -52,7 +52,7 @@ export function ProfileSettings() {
     return () => {
       active = false;
     };
-  }, [accessToken, refreshProfile]);
+  }, [refreshProfile]);
 
   async function handleAction(key, operation, refresh = false) {
     if (pending) return;
@@ -78,7 +78,7 @@ export function ProfileSettings() {
     handleAction(
       'nickname',
       async () => {
-        await updateMyNickname(accessToken, nickname.trim());
+        await updateMyNickname(nickname.trim());
         toast('닉네임을 변경했습니다.');
       },
       true
@@ -114,7 +114,7 @@ export function ProfileSettings() {
     handleAction(
       'email',
       async () => {
-        await updateMyEmail(accessToken, email.trim());
+        await updateMyEmail(email.trim());
         setVerifiedEmail(null);
         toast('이메일을 변경했습니다.');
       },
@@ -133,7 +133,7 @@ export function ProfileSettings() {
       return;
     }
     handleAction('password', async () => {
-      await updateMyPassword(accessToken, currentPassword, newPassword);
+      await updateMyPassword(currentPassword, newPassword);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -149,7 +149,7 @@ export function ProfileSettings() {
     handleAction(
       'image',
       async () => {
-        await updateMyProfileImage(accessToken, remove ? null : profile, remove);
+        await updateMyProfileImage(remove ? null : profile, remove);
         setProfile(null);
         toast(remove ? '프로필 이미지를 삭제했습니다.' : '프로필 이미지를 변경했습니다.');
       },
@@ -164,7 +164,7 @@ export function ProfileSettings() {
     }
     handleAction('delete', async () => {
       // 서버에서 탈퇴가 성공한 경우에만 브라우저의 로그인 정보를 제거한다.
-      await deleteMyAccount(accessToken, deletePassword);
+      await deleteMyAccount(deletePassword);
       clearAuth();
       navigate('/');
       toast('탈퇴가 완료되었습니다.');

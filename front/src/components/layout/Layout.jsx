@@ -11,13 +11,18 @@ import Toast from '../common/Toast';
 import { Header } from './Header';
 import ChatWidget from './ChatWidget';
 import StoreSync from './StoreSync';
+import { Button } from '../common/index';
 
 // 모든 페이지 공통: 헤더 + 본문(Outlet) + 채팅 + 안내 문구(Toast)
 export default function Layout() {
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
-  const { sessionBlocked, clearSessionBlocked } = useAuth();
+  const { sessionBlocked, clearSessionBlocked, authStatus, authError, checkAuth } = useAuth();
   const toastMessage = useToastStore((state) => state.message);
+
+  useEffect(() => {
+    void checkAuth();
+  }, [checkAuth]);
 
   // 다음 접속 때 이미 정지된 계정이면 차단 안내 페이지로 보낸다
   useEffect(() => {
@@ -33,6 +38,22 @@ export default function Layout() {
   useEffect(() => {
     rememberPath(pathname + search);
   }, [pathname, search]);
+
+  // 서버 확인 전에는 비로그인으로 단정하지 않고, 장애는 인증 실패와 구분해 재시도를 제공한다.
+  if (authStatus !== 'ready') {
+    return (
+      <main className="shell" aria-busy={authStatus === 'checking'}>
+        {authStatus === 'checking' ? (
+          <p role="status">로그인 상태를 확인하고 있습니다.</p>
+        ) : (
+          <div className="grid">
+            <p role="alert">{authError}</p>
+            <Button onClick={() => checkAuth()}>다시 확인</Button>
+          </div>
+        )}
+      </main>
+    );
+  }
 
   return (
     <>

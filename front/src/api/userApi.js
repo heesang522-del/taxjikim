@@ -20,6 +20,7 @@ async function requestUser(config) {
             ? '서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'
             : cause.message)
     );
+    error.status = cause.response?.status ?? cause.status;
     error.code = detail?.code ?? cause.code;
     error.fields = detail?.fields ?? cause.fields;
     throw error;
@@ -75,53 +76,45 @@ export function resetPassword(loginId, email, newPassword) {
   return requestUser({ url: '/auth/password-resets', method: 'POST', data: { loginId, email, newPassword } });
 }
 
-function authorization(accessToken) {
-  return { Authorization: `Bearer ${accessToken}` };
+export function getMyProfile() {
+  return requestUser({ url: '/users/me' });
 }
 
-export function getMyProfile(accessToken) {
-  return requestUser({ url: '/users/me', headers: authorization(accessToken) });
-}
-
-export function updateMyNickname(accessToken, nickname) {
+export function updateMyNickname(nickname) {
   return requestUser({
     url: '/users/me/nickname',
     method: 'PATCH',
-    headers: authorization(accessToken),
     data: { nickname },
   });
 }
 
-export function updateMyEmail(accessToken, email) {
-  return requestUser({ url: '/users/me/email', method: 'PATCH', headers: authorization(accessToken), data: { email } });
+export function updateMyEmail(email) {
+  return requestUser({ url: '/users/me/email', method: 'PATCH', data: { email } });
 }
 
-export function updateMyPassword(accessToken, currentPassword, newPassword) {
+export function updateMyPassword(currentPassword, newPassword) {
   return requestUser({
     url: '/users/me/password',
     method: 'PUT',
-    headers: authorization(accessToken),
     data: { currentPassword, newPassword },
   });
 }
 
-export function updateMyProfileImage(accessToken, profile, deleteProfile = false) {
+export function updateMyProfileImage(profile, deleteProfile = false) {
   const form = new FormData();
   form.append('deleteProfile', String(deleteProfile));
   if (profile) form.append('profile', profile);
   return requestUser({
     url: '/users/me/profile-image',
     method: 'PUT',
-    headers: authorization(accessToken),
     data: form,
   });
 }
 
-export function deleteMyAccount(accessToken, currentPassword) {
+export function deleteMyAccount(currentPassword) {
   return requestUser({
     url: '/users/me',
     method: 'DELETE',
-    headers: authorization(accessToken),
     data: { currentPassword },
   });
 }
