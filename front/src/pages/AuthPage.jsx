@@ -5,8 +5,8 @@ import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Icon, Modal } from '../components/common/index';
 import { LoginForm } from '../components/auth/LoginForm';
-import SignupForm from '../components/auth/SignupForm';
-import RecoveryForm from '../components/auth/RecoveryForm';
+import { SignupForm } from '../components/auth/SignupForm';
+import { RecoveryForm } from '../components/auth/RecoveryForm';
 import { takeReturnTo } from '../utils/returnTo';
 import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
@@ -37,18 +37,36 @@ export default function AuthPage() {
   };
 
   return (
-    <div style={{ maxWidth: 480, margin: '24px auto' }}>
-      <div className="icon-box" style={{ margin: '0 auto 16px' }}>
-        <Icon name={tab === 'signup' ? 'userPlus' : 'logIn'} size={24} />
-      </div>
-      <h2 style={{ fontSize: 22, textAlign: 'center', marginBottom: 24 }}>{TITLES[tab]}</h2>
+    <div style={{ maxWidth: 480, margin: tab === 'signup' ? '4px auto 16px' : '24px auto' }}>
+      {tab === 'signup' ? (
+        <h2
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            fontSize: 22,
+            marginBottom: 16,
+          }}
+        >
+          <Icon name="userPlus" size={22} />
+          회원가입
+        </h2>
+      ) : (
+        <>
+          <div className="icon-box" style={{ margin: '0 auto 16px' }}>
+            <Icon name={tab === 'signup' ? 'userPlus' : 'logIn'} size={24} />
+          </div>
+          <h2 style={{ fontSize: 22, textAlign: 'center', marginBottom: 24 }}>{TITLES[tab]}</h2>
+        </>
+      )}
       <Card>
         {tab === 'login' && (
           <LoginForm onSuccess={enter} onBlocked={() => navigate(ROUTES.blocked, { replace: true })} onTab={setTab} />
         )}
         {tab === 'signup' && <SignupForm onDone={() => setSignedUp(true)} />}
-        {tab === 'findid' && <RecoveryForm mode="id" onTab={setTab} />}
-        {tab === 'findpw' && <RecoveryForm mode="pw" onTab={setTab} />}
+        {tab === 'findid' && <RecoveryForm key="findid" mode="id" onTab={setTab} />}
+        {tab === 'findpw' && <RecoveryForm key="findpw" mode="pw" onTab={setTab} />}
       </Card>
       {tab !== 'login' && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>

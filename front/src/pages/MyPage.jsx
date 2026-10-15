@@ -7,14 +7,16 @@ import { ROUTES } from '../utils/routes';
 import { YEAR } from '../data/taxConstants';
 import { man, signedMan } from '../utils/format';
 import { useAuth } from '../store/useAuthStore';
-import { useToast } from '../store/useToastStore';
+import { ProfileSettings } from '../components/mypage/ProfileSettings';
 import { useTaxResult } from '../utils/useTaxResult';
 import { useHistory } from '../utils/useHistory';
 import ScenarioTable from '../components/calculator/ScenarioTable';
 import { useChat } from '../store/useChatStore';
 import { formatClockTime, formatDateTime } from '../utils/chat';
 
-const CHART_W = 640, CHART_H = 220, CHART_PAD = { l: 44, r: 8, t: 10, b: 26 };
+const CHART_W = 640,
+  CHART_H = 220,
+  CHART_PAD = { l: 44, r: 8, t: 10, b: 26 };
 
 /** 증감 KPI 카드. tone: good-up(오를수록 좋음) | good-down(내릴수록 좋음) | neutral */
 function DeltaTile({ label, delta, tone = 'neutral' }) {
@@ -27,7 +29,9 @@ function DeltaTile({ label, delta, tone = 'neutral' }) {
   return (
     <Card className="stat">
       <p className="lbl">{label}</p>
-      <p className="big" style={{ color }}>{signedMan(delta)}</p>
+      <p className="big" style={{ color }}>
+        {signedMan(delta)}
+      </p>
       <p className="sub">전년 대비</p>
     </Card>
   );
@@ -35,49 +39,84 @@ function DeltaTile({ label, delta, tone = 'neutral' }) {
 
 /** 연도별 수입·지출 막대그래프. years: [{ year, income, expense, forecast? }] (원 단위, 연도 오름차순) */
 function YearlyBarChart({ years }) {
-  const iw = CHART_W - CHART_PAD.l - CHART_PAD.r, ih = CHART_H - CHART_PAD.t - CHART_PAD.b;
+  const iw = CHART_W - CHART_PAD.l - CHART_PAD.r,
+    ih = CHART_H - CHART_PAD.t - CHART_PAD.b;
   const max = Math.ceil(Math.max(...years.map((y) => Math.max(y.income, y.expense)), 1) / 1e6) * 1e6 || 1e6;
   const bw = iw / years.length;
-  const barStyle = (forecast, color) => (forecast ? { fill: 'none', stroke: color, strokeWidth: 1.5, strokeDasharray: '3 2' } : { fill: color });
+  const barStyle = (forecast, color) =>
+    forecast ? { fill: 'none', stroke: color, strokeWidth: 1.5, strokeDasharray: '3 2' } : { fill: color };
 
   return (
     <>
       <div className="legend">
-        <span><i style={{ background: 'var(--income)' }} />수입</span>
-        <span><i style={{ background: 'var(--expense)' }} />지출</span>
+        <span>
+          <i style={{ background: 'var(--income)' }} />
+          수입
+        </span>
+        <span>
+          <i style={{ background: 'var(--expense)' }} />
+          지출
+        </span>
         <span>점선 = 올해 예측</span>
       </div>
-      <svg viewBox={`0 0 ${CHART_W} ${CHART_H}`} width="100%" role="img" aria-label="연도별 수입과 지출 막대그래프. 올해는 예측치">
+      <svg
+        viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+        width="100%"
+        role="img"
+        aria-label="연도별 수입과 지출 막대그래프. 올해는 예측치"
+      >
         {[0, 1, 2, 3, 4].map((i) => {
           const y = CHART_PAD.t + ih - (ih * i) / 4;
           return (
             <g key={i}>
               <line x1={CHART_PAD.l} x2={CHART_W - CHART_PAD.r} y1={y} y2={y} stroke="var(--border)" />
-              <text x={CHART_PAD.l - 6} y={y + 4} textAnchor="end">{Math.round((max / 4) * i / 1e4)}</text>
+              <text x={CHART_PAD.l - 6} y={y + 4} textAnchor="end">
+                {Math.round(((max / 4) * i) / 1e4)}
+              </text>
             </g>
           );
         })}
         {years.map((y, i) => {
-          const x = CHART_PAD.l + i * bw, b = bw * 0.3;
-          const hi = (y.income / max) * ih, he = (y.expense / max) * ih;
+          const x = CHART_PAD.l + i * bw,
+            b = bw * 0.3;
+          const hi = (y.income / max) * ih,
+            he = (y.expense / max) * ih;
           return (
             <g key={y.year}>
-              <rect x={x + bw * 0.14} y={CHART_PAD.t + ih - hi} width={b} height={hi} rx="3" {...barStyle(y.forecast, 'var(--income)')} />
-              <rect x={x + bw * 0.14 + b + 3} y={CHART_PAD.t + ih - he} width={b} height={he} rx="3" {...barStyle(y.forecast, 'var(--expense)')} />
-              <text x={x + bw / 2} y={CHART_H - 8} textAnchor="middle">{y.year}{y.forecast ? ' (예측)' : ''}</text>
+              <rect
+                x={x + bw * 0.14}
+                y={CHART_PAD.t + ih - hi}
+                width={b}
+                height={hi}
+                rx="3"
+                {...barStyle(y.forecast, 'var(--income)')}
+              />
+              <rect
+                x={x + bw * 0.14 + b + 3}
+                y={CHART_PAD.t + ih - he}
+                width={b}
+                height={he}
+                rx="3"
+                {...barStyle(y.forecast, 'var(--expense)')}
+              />
+              <text x={x + bw / 2} y={CHART_H - 8} textAnchor="middle">
+                {y.year}
+                {y.forecast ? ' (예측)' : ''}
+              </text>
             </g>
           );
         })}
-        <text x={CHART_PAD.l} y={CHART_PAD.t - 1} style={{ fontSize: 10 }}>(만원)</text>
+        <text x={CHART_PAD.l} y={CHART_PAD.t - 1} style={{ fontSize: 10 }}>
+          (만원)
+        </text>
       </svg>
     </>
   );
 }
 
 export default function MyPage() {
-  const { loggedIn, user } = useAuth();
+  const { loggedIn } = useAuth();
   const navigate = useNavigate();
-  const toast = useToast();
   const c = useTaxResult();
   const { records } = useHistory();
   const { myRooms, setOpen: openChat } = useChat();
@@ -86,8 +125,12 @@ export default function MyPage() {
     return (
       <Card className="" style={{ maxWidth: 480, margin: '40px auto', textAlign: 'center' }}>
         <h3>로그인이 필요합니다</h3>
-        <p className="muted" style={{ marginBottom: 14 }}>입력한 수입·지출과 시나리오는 로그인하면 연도별로 저장됩니다.</p>
-        <Button variant="primary" to={ROUTES.auth}>로그인</Button>
+        <p className="muted" style={{ marginBottom: 14 }}>
+          입력한 수입·지출과 시나리오는 로그인하면 연도별로 저장됩니다.
+        </p>
+        <Button variant="primary" to={ROUTES.auth}>
+          로그인
+        </Button>
       </Card>
     );
   }
@@ -102,12 +145,31 @@ export default function MyPage() {
   // 표용: [연도, 수입, 지출, 결과(만원), 예측 여부]
   const hist = years.map((r) => [r.year, r.income / 1e4, r.expense / 1e4, r.total / 1e4, r.forecast]);
   const columns = [
-    { key: 'y', header: '연도', render: (h) => <>{h[0]}{h[4] && <> <Pill tone="warn">예측</Pill></>}</> },
+    {
+      key: 'y',
+      header: '연도',
+      render: (h) => (
+        <>
+          {h[0]}
+          {h[4] && (
+            <>
+              {' '}
+              <Pill tone="warn">예측</Pill>
+            </>
+          )}
+        </>
+      ),
+    },
     { key: 'i', header: '수입', align: 'right', num: true, render: (h) => Math.round(h[1]).toLocaleString() },
     { key: 'e', header: '지출', align: 'right', num: true, render: (h) => Math.round(h[2]).toLocaleString() },
-    { key: 'r', header: '결과', align: 'right', num: true, render: (h) => `${h[3] < 0 ? '환급 ' : '납부 '}${Math.abs(Math.round(h[3]))}` },
+    {
+      key: 'r',
+      header: '결과',
+      align: 'right',
+      num: true,
+      render: (h) => `${h[3] < 0 ? '환급 ' : '납부 '}${Math.abs(Math.round(h[3]))}`,
+    },
   ];
-  const todo = (m) => () => toast(`프로토타입: ${m}`);
 
   return (
     <div className="grid g-side">
@@ -124,39 +186,58 @@ export default function MyPage() {
         <Card title="연도별 비교 대시보드" icon="trendingUp" aside={<span className="muted small">(만원)</span>}>
           <YearlyBarChart years={years} />
           <div style={{ marginTop: 14 }}>
-            <DataTable columns={columns} rows={hist} rowKey={(h) => h[0]} onRowClick={() => navigate(ROUTES.calcResult)} />
+            <DataTable
+              columns={columns}
+              rows={hist}
+              rowKey={(h) => h[0]}
+              onRowClick={() => navigate(ROUTES.calcResult)}
+            />
           </div>
         </Card>
         <Card title="내 계산 결과" icon="calculator">
-          <p className="num" style={{ fontSize: 24, fontWeight: 600 }}>{c.total < 0 ? '환급 ' : '추가납부 '}{man(Math.abs(c.total))}</p>
+          <p className="num" style={{ fontSize: 24, fontWeight: 600 }}>
+            {c.total < 0 ? '환급 ' : '추가납부 '}
+            {man(Math.abs(c.total))}
+          </p>
           <p className="small muted">{YEAR}년 귀속 · 연말 예측 포함</p>
-          <div className="row" style={{ marginTop: 12 }}><Button to={ROUTES.calcResult}>결과 보기</Button><Button to={ROUTES.calcSim}>시뮬레이션</Button></div>
+          <div className="row" style={{ marginTop: 12 }}>
+            <Button to={ROUTES.calcResult}>결과 보기</Button>
+            <Button to={ROUTES.calcSim}>시뮬레이션</Button>
+          </div>
         </Card>
         <ScenarioTable />
         <Card title="상담 내역" icon="messageSquare">
-          {myRooms.length
-            ? myRooms.map((r) => (
+          {myRooms.length ? (
+            myRooms.map((r) => (
               <details key={r.id}>
-                <summary>{formatDateTime(r.createdAt)} 시작 <Pill tone={r.status === '종료' ? 'neutral' : r.status === '진행 중' ? 'primary' : 'warn'}>{r.status}</Pill></summary>
+                <summary>
+                  {formatDateTime(r.createdAt)} 시작{' '}
+                  <Pill tone={r.status === '종료' ? 'neutral' : r.status === '진행 중' ? 'primary' : 'warn'}>
+                    {r.status}
+                  </Pill>
+                </summary>
                 {r.messages.map((m) => (
-                  <p key={m.id} className="small" style={{ marginTop: 4 }}><b>{m.from === 'admin' ? '상담사' : '나'}</b> {m.text} <span className="muted">{formatClockTime(m.at)}</span></p>
+                  <p key={m.id} className="small" style={{ marginTop: 4 }}>
+                    <b>{m.from === 'admin' ? '상담사' : '나'}</b> {m.text}{' '}
+                    <span className="muted">{formatClockTime(m.at)}</span>
+                  </p>
                 ))}
-                {r.status === '종료' && <p className="small muted" style={{ marginTop: 6 }}>종료 후 30일이 지나면 삭제됩니다.</p>}
+                {r.status === '종료' && (
+                  <p className="small muted" style={{ marginTop: 6 }}>
+                    종료 후 30일이 지나면 삭제됩니다.
+                  </p>
+                )}
               </details>
             ))
-            : <p className="state-msg">진행한 상담이 없습니다</p>}
-          <div style={{ marginTop: 12 }}><Button onClick={() => openChat(true)}>상담하기</Button></div>
+          ) : (
+            <p className="state-msg">진행한 상담이 없습니다</p>
+          )}
+          <div style={{ marginTop: 12 }}>
+            <Button onClick={() => openChat(true)}>상담하기</Button>
+          </div>
         </Card>
       </div>
-      <Card as="aside">
-        <div className="row" style={{ alignItems: 'center' }}><div className="avatar">{user.nickname.slice(0, 1)}</div><div><b>{user.nickname}</b><p className="small muted">{user.email}</p></div></div>
-        <div className="grid" style={{ gap: 8, marginTop: 16 }}>
-          <Button onClick={todo('프로필 이미지 수정')}>프로필 이미지 수정</Button>
-          <Button onClick={todo('닉네임 수정')}>닉네임 수정</Button>
-          <Button onClick={todo('이메일 수정')}>이메일 수정</Button>
-        </div>
-        <div className="kv" style={{ marginTop: 14 }}><span className="muted">신고 일정 알림</span><label className="toggle"><input type="checkbox" defaultChecked onChange={todo('알림 설정 변경')} /> <span className="small">5월·11월</span></label></div>
-      </Card>
+      <ProfileSettings />
     </div>
   );
 }
