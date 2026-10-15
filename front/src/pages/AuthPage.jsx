@@ -6,7 +6,7 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Icon, Modal } from '../components/common/index';
 import { LoginForm } from '../components/auth/LoginForm';
 import { SignupForm } from '../components/auth/SignupForm';
-import RecoveryForm from '../components/auth/RecoveryForm';
+import { RecoveryForm } from '../components/auth/RecoveryForm';
 import { takeReturnTo } from '../utils/returnTo';
 import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
@@ -47,8 +47,8 @@ export default function AuthPage() {
           <LoginForm onSuccess={enter} onBlocked={() => navigate(ROUTES.blocked, { replace: true })} onTab={setTab} />
         )}
         {tab === 'signup' && <SignupForm onDone={() => setSignedUp(true)} />}
-        {tab === 'findid' && <RecoveryForm mode="id" onTab={setTab} />}
-        {tab === 'findpw' && <RecoveryForm mode="pw" onTab={setTab} />}
+        {tab === 'findid' && <RecoveryForm key="findid" mode="id" onTab={setTab} />}
+        {tab === 'findpw' && <RecoveryForm key="findpw" mode="pw" onTab={setTab} />}
       </Card>
       {tab !== 'login' && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
