@@ -8,7 +8,7 @@ import { rememberPath } from '../../utils/returnTo';
 import { useAuth } from '../../store/useAuthStore';
 import { useToastStore } from '../../store/useToastStore';
 import Toast from '../common/Toast';
-import Header from './Header';
+import { Header } from './Header';
 import ChatWidget from './ChatWidget';
 import StoreSync from './StoreSync';
 

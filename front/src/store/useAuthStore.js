@@ -1,14 +1,15 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useMemo } from 'react';
 import { create } from 'zustand';
-import { ACCOUNT_SEED } from '../data/content';
+import { ACCOUNT_SEED } from '../data/content.js';
+import { loginSession, logoutSession } from '../api/authApi.js';
 
 const ACCOUNTS_KEY = 'taxlab.accounts.v1';
 const LOCK_KEY = 'taxlab.login-lock.v1';
 const PRESENCE_KEY = 'taxlab.presence.v1';
 const SESSION_KEY = 'taxlab.session.v1';
+const API_SESSION_KEY = 'taxjikim.auth-session.v1';
 
 /** 로그인 실패를 허용하는 횟수. 이 횟수를 넘겨 실패하면(6번째 실패) 잠긴다. */
 export const MAX_LOGIN_FAILS = 5;
@@ -27,7 +28,11 @@ export const readJson = (key, fallback) => {
   }
 };
 export const writeJson = (key, value) => {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 저장 공간이 없거나 막힌 경우 무시 */ }
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* 저장 공간이 없거나 막힌 경우 무시 */
+  }
 };
 
 // MOCK: 서버가 생기기 전까지 계정을 localStorage에 보관한다. 저장된 계정에 status가 없으면 정상으로 보고, 새로 추가된 예시 계정은 덧붙인다.
@@ -37,7 +42,6 @@ const readAccounts = () => {
   const list = saved.map((a) => ({ status: '정상', ...a }));
   return [...list, ...ACCOUNT_SEED.filter((seed) => !list.some((a) => a.id === seed.id))];
 };
-const toUser = (a) => ({ id: a.id, name: a.name, nickname: a.nickname, email: a.email, job: a.job, role: a.role });
 
 /** 접속 중인 닉네임인지 확인한다. 다른 탭에서 로그인한 계정도 localStorage 표시로 알 수 있다. */
 export const isOnline = (nickname) => {
@@ -45,23 +49,28 @@ export const isOnline = (nickname) => {
   return Number.isFinite(at) && Date.now() - at < PRESENCE_TTL;
 };
 
-// 새로고침·재접속 때 저장된 로그인이 이미 정지된 계정이면 로그인하지 않고 차단 안내로 보낸다 (sessionBlocked).
+// 새로고침 시 실제 API 로그인 정보를 복원하며, 이전 mock 로그인 아이디는 인증에 사용하지 않는다.
 const readInitialSession = () => {
-  let id = null;
-  try { id = sessionStorage.getItem(SESSION_KEY); } catch { /* 세션 저장이 막힌 경우 무시 */ }
-  const account = readAccounts().find((a) => a.id === id);
-  return account && account.status === '정지' ? { userId: null, blocked: true } : { userId: account ? id : null, blocked: false };
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(API_SESSION_KEY));
+    if (saved?.accessToken && saved?.user) return saved;
+  } catch {
+    /* 저장된 인증 정보가 없거나 잘못됐으면 비로그인으로 시작한다. */
+  }
+  return { accessToken: null, user: null };
 };
 
-/** 현재 로그인한 사용자(없으면 null). 다른 store의 동작에서 쓴다. */
-export const getCurrentUser = () => {
-  const { accounts, userId } = useAuthStore.getState();
-  const a = accounts.find((x) => x.id === userId);
-  return a ? toUser(a) : null;
+const saveApiSession = (session) => {
+  if (session) sessionStorage.setItem(API_SESSION_KEY, JSON.stringify(session));
+  else sessionStorage.removeItem(API_SESSION_KEY);
 };
+
+/** 다른 mock 기능에서도 서버가 인증한 사용자 정보만 참조한다. */
+export const getCurrentUser = () => useAuthStore.getState().apiUser;
 
 /** 접속 표시 기록과 삭제 (StoreSync에서 사용) */
-export const beatPresence = (nickname) => writeJson(PRESENCE_KEY, { ...readJson(PRESENCE_KEY, {}), [nickname]: Date.now() });
+export const beatPresence = (nickname) =>
+  writeJson(PRESENCE_KEY, { ...readJson(PRESENCE_KEY, {}), [nickname]: Date.now() });
 export const clearPresence = (nickname) => {
   const map = readJson(PRESENCE_KEY, {});
   delete map[nickname];
@@ -69,11 +78,16 @@ export const clearPresence = (nickname) => {
 };
 export const saveSession = (userId) => {
   try {
-    if (userId) sessionStorage.setItem(SESSION_KEY, userId); else sessionStorage.removeItem(SESSION_KEY);
-  } catch { /* 세션 저장이 막힌 경우 무시 */ }
+    if (userId) sessionStorage.setItem(SESSION_KEY, userId);
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* 세션 저장이 막힌 경우 무시 */
+  }
 };
 /** 다른 탭에서 계정이 바뀌면(가입, 정지 등) 목록만 갱신한다. 이미 로그인한 세션은 다음 접속부터 정지가 적용된다. */
-export const syncAccountsFromStorage = (key) => { if (key === ACCOUNTS_KEY) useAuthStore.setState({ accounts: readAccounts() }); };
+export const syncAccountsFromStorage = (key) => {
+  if (key === ACCOUNTS_KEY) useAuthStore.setState({ accounts: readAccounts() });
+};
 
 export const useAuthStore = create((set, get) => {
   const init = readInitialSession();
@@ -94,8 +108,10 @@ export const useAuthStore = create((set, get) => {
 
   return {
     accounts: readAccounts(),
-    userId: init.userId,
-    sessionBlocked: init.blocked,
+    userId: init.user?.id ?? null,
+    accessToken: init.accessToken,
+    apiUser: init.user,
+    sessionBlocked: false,
     clearSessionBlocked: () => set({ sessionBlocked: false }),
 
     /** 잠금 상태 확인. 잠겨 있으면 남은 초를 돌려준다. */
@@ -109,57 +125,52 @@ export const useAuthStore = create((set, get) => {
       return Boolean(rec) && rec.level >= LOCK_STEPS.length;
     },
 
-    /**
-     * MOCK: 서버가 하게 될 로그인 검증. 결과: { ok: true } 또는
-     * { ok: false, reason: 'suspended' | 'locked' | 'no-id' | 'bad-pw', secondsLeft?, remaining?, finalLock? }
-     * 정지된 계정은 비밀번호와 상관없이 'suspended'로 막는다. 반복 실패로 자동 정지될 때도 'suspended'다.
-     */
-    login: (id, pw) => {
-      const { lockLeft, lockIsFinal } = get();
-      const key = id.trim();
-      const account = readAccounts().find((a) => a.id === key);
-      if (account && account.status === '정지') return { ok: false, reason: 'suspended' };
-
-      const left = lockLeft(key);
-      if (left) return { ok: false, reason: 'locked', secondsLeft: left, finalLock: lockIsFinal(key) };
-
-      if (account && account.pw === pw) {
-        const locks = readJson(LOCK_KEY, {});
-        delete locks[key];
-        writeJson(LOCK_KEY, locks);
-        set({ userId: account.id });
+    // 로그인 검증과 실패 횟수는 백엔드에서 처리하고, 브라우저는 응답만 반영한다.
+    login: async (id, pw) => {
+      try {
+        const result = await loginSession(id.trim(), pw);
+        const { accessToken, userId, loginId, userRole } = result.data;
+        // 기존 화면의 id는 로그인 아이디이며, 회원 고유 번호는 userId로 별도 보관한다.
+        const user = {
+          id: loginId,
+          userId,
+          loginId,
+          name: loginId,
+          nickname: loginId,
+          email: '',
+          job: '',
+          role: userRole === 'ADMIN' ? 'admin' : 'member',
+          userRole,
+        };
+        saveApiSession({ accessToken, user });
+        set({ userId: loginId, apiUser: user, accessToken, sessionBlocked: false });
         return { ok: true };
+      } catch (error) {
+        return {
+          ok: false,
+          reason: error.code === 'BANNED' ? 'suspended' : 'error',
+          message: error.message,
+          code: error.code,
+        };
       }
-
-      const locks = readJson(LOCK_KEY, {});
-      const prev = locks[key] || { fails: 0, level: 0, until: 0 };
-      const fails = prev.fails + 1;
-      let next = { ...prev, fails };
-      let secondsLeft = 0;
-      if (fails > MAX_LOGIN_FAILS) {
-        // 마지막(5분) 잠금이 풀린 뒤에도 실패하면 잠그지 않고 계정을 이용 정지한다
-        if (prev.level >= LOCK_STEPS.length) {
-          writeJson(LOCK_KEY, { ...locks, [key]: { ...prev, fails } });
-          if (account) mutateAccounts((list) => list.map((a) => (a.id === key ? { ...a, status: '정지', suspendedBy: 'auto' } : a)));
-          return { ok: false, reason: 'suspended' };
-        }
-        secondsLeft = LOCK_STEPS[prev.level];
-        next = { fails, level: prev.level + 1, until: Date.now() + secondsLeft * 1000 };
-      }
-      writeJson(LOCK_KEY, { ...locks, [key]: next });
-      if (secondsLeft) return { ok: false, reason: 'locked', secondsLeft, finalLock: next.level >= LOCK_STEPS.length };
-      return { ok: false, reason: account ? 'bad-pw' : 'no-id', remaining: MAX_LOGIN_FAILS - fails };
     },
 
-    logout: () => set({ userId: null }),
+    logout: async () => {
+      // 서버의 현재 세션 종료가 성공한 뒤에만 화면 인증 상태를 비운다.
+      await logoutSession(get().accessToken);
+      saveApiSession(null);
+      set({ userId: null, apiUser: null, accessToken: null });
+    },
 
     /** 관리자가 계정을 정지·해제한다. 정상으로 되돌리면 로그인 실패 횟수와 잠금 단계도 초기화한다. */
     setAccountStatus: (id, status) => {
-      mutateAccounts((list) => list.map((a) => {
-        if (a.id !== id) return a;
-        const { suspendedBy, ...rest } = a;
-        return status === '정지' ? { ...rest, status, suspendedBy: 'admin' } : { ...rest, status };
-      }));
+      mutateAccounts((list) =>
+        list.map((a) => {
+          if (a.id !== id) return a;
+          const { suspendedBy, ...rest } = a;
+          return status === '정지' ? { ...rest, status, suspendedBy: 'admin' } : { ...rest, status };
+        })
+      );
       if (status === '정상') {
         const locks = readJson(LOCK_KEY, {});
         delete locks[id];
@@ -178,13 +189,12 @@ export const useAuthStore = create((set, get) => {
       return { ok: true };
     },
 
-    findIdByNameEmail: (name, email) => (
-      get().accounts.find((a) => a.name === name.trim() && a.email.toLowerCase() === email.trim().toLowerCase()) ?? null
-    ),
+    findIdByNameEmail: (name, email) =>
+      get().accounts.find((a) => a.name === name.trim() && a.email.toLowerCase() === email.trim().toLowerCase()) ??
+      null,
 
-    hasIdEmail: (id, email) => (
-      get().accounts.some((a) => a.id === id.trim() && a.email.toLowerCase() === email.trim().toLowerCase())
-    ),
+    hasIdEmail: (id, email) =>
+      get().accounts.some((a) => a.id === id.trim() && a.email.toLowerCase() === email.trim().toLowerCase()),
 
     resetPassword: (id, pw) => {
       mutateAccounts((list) => list.map((a) => (a.id === id.trim() ? { ...a, pw } : a)));
@@ -198,9 +208,6 @@ export const useAuthStore = create((set, get) => {
 /** 화면에서 쓰는 로그인 정보. 저장된 값(store)에서 user, loggedIn, isAdmin을 계산해 함께 돌려준다. */
 export function useAuth() {
   const state = useAuthStore();
-  const user = useMemo(() => {
-    const a = state.accounts.find((x) => x.id === state.userId);
-    return a ? toUser(a) : null;
-  }, [state.accounts, state.userId]);
-  return { ...state, user, loggedIn: Boolean(user), isAdmin: user?.role === 'admin' };
+  const user = state.apiUser;
+  return { ...state, user, loggedIn: Boolean(user && state.accessToken), isAdmin: user?.role === 'admin' };
 }
