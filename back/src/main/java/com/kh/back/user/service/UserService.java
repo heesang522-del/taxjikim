@@ -23,11 +23,7 @@ public interface UserService {
 
     void deleteUser(String loginId);
 
-    void updateLastLoginAt(String loginId);
-
     void restoreDormantAccount(String loginId, String email);
-
-    UserDto getUserByLoginId(String loginId);
 
     UserDto getUserById(Long userId);
 

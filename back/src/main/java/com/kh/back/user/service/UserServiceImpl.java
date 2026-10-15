@@ -188,12 +188,6 @@ public class UserServiceImpl implements UserService {
 
     @Transactional
     @Override
-    public void updateLastLoginAt(String loginId) {
-        userMapper.updateLastLoginAt(loginId);
-    }
-
-    @Transactional
-    @Override
     public void restoreDormantAccount(String loginId, String email) {
         if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "복구 요청 정보를 확인해주세요.");
@@ -223,16 +217,6 @@ public class UserServiceImpl implements UserService {
     }
 
     /* ================= 5. 보조 메서드 ================= */
-
-    @Transactional
-    @Override
-    public UserDto getUserByLoginId(String loginId) {
-        UserDto userDto = userMapper.findByLoginId(loginId);
-        if (userDto != null) {
-            userDto.setPassword(null);
-        }
-        return userDto;
-    }
 
     @Override
     public UserDto getUserById(Long userId) {

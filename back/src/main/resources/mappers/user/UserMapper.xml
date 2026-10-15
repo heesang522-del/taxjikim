@@ -62,13 +62,6 @@
         WHERE USER_ID = #{userId}
     </select>
 
-    <!-- 로그인 아이디로 실제 회원 PK 조회 -->
-    <select id="findUserIdByLoginId" parameterType="string" resultType="long">
-        SELECT USER_ID
-        FROM `users`
-        WHERE LOGIN_ID = #{loginId}
-    </select>
-
     <select id="findLoginIdByNameAndEmail" resultType="string">
         SELECT LOGIN_ID
         FROM `users`

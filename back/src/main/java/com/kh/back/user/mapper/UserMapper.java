@@ -20,9 +20,6 @@ public interface UserMapper {
     String findLoginIdByNameAndEmail(@Param("name") String name,
                                       @Param("email") String email);
 
-    // 로그인 아이디(LOGIN_ID)로 회원 고유 번호(USER_ID) 조회
-    Long findUserIdByLoginId(@Param("loginId") String loginId);
-
     // 회원 정보 단건 조회 (PK가 필요한 경우에도 이 메서드로 조회 후 getLoginId() 사용)
     UserDto findByLoginId(@Param("loginId") String loginId);
 
