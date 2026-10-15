@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Icon, Modal } from '../components/common/index';
 import { LoginForm } from '../components/auth/LoginForm';
-import SignupForm from '../components/auth/SignupForm';
+import { SignupForm } from '../components/auth/SignupForm';
 import RecoveryForm from '../components/auth/RecoveryForm';
 import { takeReturnTo } from '../utils/returnTo';
 import { ROUTES } from '../utils/routes';

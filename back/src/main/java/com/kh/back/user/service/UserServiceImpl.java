@@ -4,6 +4,7 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.service.EmailVerificationService;
 import com.kh.back.common.util.FileUtil;
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.validation.InputValidator;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +65,18 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void joinUser(UserDto userDto, MultipartFile profileFile) {
+        InputValidator.requireText("loginId", userDto.getLoginId());
+        InputValidator.requireText("password", userDto.getPassword());
+        InputValidator.requireText("name", userDto.getName());
+        InputValidator.requireText("nickname", userDto.getNickname());
+        InputValidator.requireText("email", userDto.getEmail());
+        InputValidator.requireMaxLength("loginId", userDto.getLoginId(), 50);
+        InputValidator.requireMaxLength("name", userDto.getName(), 50);
+        InputValidator.requireMaxLength("nickname", userDto.getNickname(), 50);
+        InputValidator.requireMaxLength("email", userDto.getEmail(), 255);
+        if (userDto.getPassword().length() < 8) {
+            InputValidator.reject("password", "비밀번호는 8자 이상으로 입력해주세요.");
+        }
         // 이메일 인증 완료 여부 확인
         validateEmailVerification(userDto.getEmail());
         userDto.setPassword(
