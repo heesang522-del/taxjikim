@@ -129,11 +129,11 @@ export const useAuthStore = create((set, get) => {
       return initialRequest;
     },
 
-    login: async (id, pw) => {
+    login: async (id, pw, rememberMe = false) => {
       const revision = ++authRevision;
       try {
         // 응답 JWT는 저장하지 않고 쿠키로 인증된 회원 정보만 조회한다.
-        await loginSession(id.trim(), pw);
+        await loginSession(id.trim(), pw, rememberMe);
         const result = await getMyProfile();
         if (revision !== authRevision)
           return { ok: false, message: '로그인 상태가 변경되었습니다. 다시 시도해주세요.' };

@@ -2,6 +2,7 @@
 'use no memo';
 
 import { useState } from 'react';
+import styled from 'styled-components';
 import { Button, TextField } from '../common/index';
 import { useAuth } from '../../store/useAuthStore';
 
@@ -10,6 +11,8 @@ export function LoginForm({ onSuccess, onBlocked, onTab }) {
   const { login } = useAuth();
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
+  // 자동 로그인 선택값을 로그인 요청에 전달한다. 기본값은 미선택이다.
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -24,7 +27,7 @@ export function LoginForm({ onSuccess, onBlocked, onTab }) {
     setError('');
     try {
       // 서버 인증 결과로만 성공 여부를 판단하며 localStorage 계정은 검사하지 않는다.
-      const result = await login(id, pw);
+      const result = await login(id, pw, rememberMe);
       if (result.ok) {
         onSuccess();
         return;
@@ -60,6 +63,15 @@ export function LoginForm({ onSuccess, onBlocked, onTab }) {
         autoComplete="current-password"
         disabled={submitting}
       />
+      <RememberMeOption>
+        <input
+          type="checkbox"
+          checked={rememberMe}
+          onChange={(event) => setRememberMe(event.target.checked)}
+          disabled={submitting}
+        />
+        <span>자동 로그인</span>
+      </RememberMeOption>
       <div className="row" style={{ justifyContent: 'center', gap: 4 }}>
         <Button variant="link" size="sm" onClick={() => onTab('signup')}>
           회원가입
@@ -88,3 +100,47 @@ export function LoginForm({ onSuccess, onBlocked, onTab }) {
     </form>
   );
 }
+
+const RememberMeOption = styled.label`
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+
+  &:hover {
+    background: var(--primary-bg);
+  }
+
+  &:has(input:checked) {
+    background: var(--primary-bg);
+    border-color: var(--primary-border);
+    color: var(--primary);
+  }
+
+  &:has(input:focus-visible) {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  &:has(input:disabled) {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+    accent-color: var(--primary);
+    cursor: inherit;
+  }
+`;

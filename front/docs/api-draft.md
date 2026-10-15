@@ -42,7 +42,7 @@
 ## 로그인·로그아웃 실제 API 연결 (2026-10-14)
 
 - 새 LoginForm과 Header 화면을 유지하며 실제 인증 API에 연결한다.
-- 로그인: POST /api/v1/auth/sessions, loginId·password·rememberMe(false)를 전송한다.
+- 로그인: POST /api/v1/auth/sessions, loginId·password·rememberMe를 전송한다. rememberMe는 자동 로그인 체크 여부이며 기본값은 false다. true이면 기존 백엔드 정책에 따라 리프레시 토큰을 HttpOnly 쿠키로 발급하고, false이면 기존 리프레시 쿠키를 삭제한다.
 - 성공 응답의 accessToken과 서버 회원 정보는 현재 페이지 메모리에만 보관한다. 세션 스토리지 저장·복원을 제거했으며 새로고침 시 GET /users/me로 기존 JWT 쿠키 인증 상태를 확인해 화면을 복원한다.
 - 로그인 화면의 실패 횟수·잠금 판단은 서버 응답을 사용한다. 브라우저 mock 잠금 시간 안내는 적용하지 않는다.
 - 로그아웃: DELETE /api/v1/auth/sessions/current를 기존 JWT 쿠키로 호출하고, 성공 후 화면의 인증 상태를 비운다.
