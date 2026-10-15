@@ -113,6 +113,8 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void updateNickname(String loginId, String nickname) {
+        InputValidator.requireText("nickname", nickname);
+        InputValidator.requireMaxLength("nickname", nickname, 50);
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
         updateDto.setNickname(nickname);
@@ -123,16 +125,26 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void updateEmail(String loginId, String email) {
+        InputValidator.requireText("email", email);
+        InputValidator.requireMaxLength("email", email, 255);
+        // 계정 찾기에 사용하는 이메일은 새 주소 인증이 완료된 경우에만 변경한다.
+        validateEmailVerification(email);
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
         updateDto.setEmail(email);
         userMapper.updateUserFields(updateDto);
         refreshSecurityContext(loginId);
+        emailVerificationService.removeVerification(email);
     }
 
     @Transactional
     @Override
     public void updatePasswordInSettings(String loginId, String currentPassword, String newPassword) {
+        InputValidator.requireText("currentPassword", currentPassword);
+        InputValidator.requireText("newPassword", newPassword);
+        if (newPassword.length() < 8) {
+            InputValidator.reject("newPassword", "비밀번호는 8자 이상으로 입력해주세요.");
+        }
         UserDto user = userMapper.findByLoginId(loginId);
         if (user == null || !passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CURRENT_PASSWORD_INVALID", "현재 비밀번호가 올바르지 않습니다.");
