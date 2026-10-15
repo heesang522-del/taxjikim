@@ -45,6 +45,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 || "/api/v1/auth/sessions/current".equals(path)) {
             return true;
         }
+        // 공개 인증 절차는 이전 세션 쿠키가 남아 있어도 진행할 수 있어야 한다.
+        if ("/api/v1/users".equals(path) || "/api/v1/users/check-id".equals(path)
+                || "/api/v1/users/check-nickname".equals(path) || "/api/v1/users/check-email".equals(path)
+                || "/api/v1/email-verifications".equals(path)
+                || "/api/v1/auth/account-lookups".equals(path)
+                || "/api/v1/auth/account-lookups/email-verifications".equals(path)
+                || "/api/v1/auth/password-resets".equals(path)
+                || "/api/v1/auth/password-resets/email-verifications".equals(path)) {
+            return true;
+        }
         return path.endsWith(".css") ||
                 path.endsWith(".js") ||
                 path.endsWith(".png") ||
