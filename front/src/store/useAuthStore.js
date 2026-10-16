@@ -13,23 +13,12 @@ const PRESENCE_KEY = 'taxlab.presence.v1';
 const PRESENCE_TTL = 45_000;
 export const PRESENCE_BEAT = 15_000;
 
-export const readJson = (key, fallback) => {
-  try {
-    const v = JSON.parse(localStorage.getItem(key));
-    return v ?? fallback;
-  } catch {
-    return fallback;
-  }
-};
-export const writeJson = (key, value) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    /* 저장 공간이 없거나 막힌 경우 무시 */
-  }
-};
+// MOCK: 계정·잠금·접속 기록도 웹 스토리지에 남기지 않고 새로고침 시 초기화한다.
+const mockMemory = new Map();
+const readJson = (key, fallback) => mockMemory.get(key) ?? fallback;
+const writeJson = (key, value) => mockMemory.set(key, value);
 
-// MOCK: 서버가 생기기 전까지 계정을 localStorage에 보관한다. 저장된 계정에 status가 없으면 정상으로 보고, 새로 추가된 예시 계정은 덧붙인다.
+// MOCK: 실제 로그인과 분리된 예시 계정은 현재 페이지의 메모리에서만 관리한다.
 const readAccounts = () => {
   const saved = readJson(ACCOUNTS_KEY, null);
   if (!Array.isArray(saved)) return ACCOUNT_SEED;
@@ -37,7 +26,7 @@ const readAccounts = () => {
   return [...list, ...ACCOUNT_SEED.filter((seed) => !list.some((a) => a.id === seed.id))];
 };
 
-/** 접속 중인 닉네임인지 확인한다. 다른 탭에서 로그인한 계정도 localStorage 표시로 알 수 있다. */
+/** 현재 탭의 메모리에 기록된 예시 접속 상태만 확인한다. */
 export const isOnline = (nickname) => {
   const at = readJson(PRESENCE_KEY, {})[nickname];
   return Number.isFinite(at) && Date.now() - at < PRESENCE_TTL;
@@ -55,10 +44,6 @@ export const clearPresence = (nickname) => {
   delete map[nickname];
   writeJson(PRESENCE_KEY, map);
 };
-/** 다른 탭에서 계정이 바뀌면(가입, 정지 등) 목록만 갱신한다. 이미 로그인한 세션은 다음 접속부터 정지가 적용된다. */
-export const syncAccountsFromStorage = (key) => {
-  if (key === ACCOUNTS_KEY) useAuthStore.setState({ accounts: readAccounts() });
-};
 
 function toScreenUser(profile) {
   return { ...profile, id: profile.loginId, role: profile.userRole === 'ADMIN' ? 'admin' : 'member' };
@@ -67,7 +52,7 @@ function toScreenUser(profile) {
 export const useAuthStore = create((set, get) => {
   let authRevision = 0;
   let initialRequest = null;
-  // 계정 목록은 항상 저장된 최신 값에 변경을 적용해서 쓴다 (다른 탭의 변경을 덮어쓰지 않기 위해).
+  // 예시 계정 변경은 메모리에만 반영하며 실제 서버 인증 상태와 구분한다.
   const mutateAccounts = (fn) => {
     const next = fn(readAccounts());
     writeJson(ACCOUNTS_KEY, next);

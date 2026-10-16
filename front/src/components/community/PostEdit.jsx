@@ -1,4 +1,4 @@
-import { uploadFileChunks, filterBlockedFiles } from '../../api/post-preview';
+import { uploadFileChunks, filterBlockedFiles } from '../../store/post-preview.js';
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getAnonymousPost, saveAnonymousPost } from '../../api/anonymousPosts';
@@ -12,7 +12,6 @@ export default function PostEdit() {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [boardType, setBoardType] = useState('INFO');
-  const [jobCategory, setJobCategory] = useState('');
   const [isPublic, setIsPublic] = useState(true);
 
   const [existingFiles, setExistingFiles] = useState([]); // 기존 서버에 등록된 파일 메타 리스트 (FILE_META)
@@ -32,7 +31,6 @@ export default function PostEdit() {
         setTitle(data.title || '');
         setContent(data.content || '');
         setBoardType(data.boardType || 'INFO');
-        setJobCategory(data.jobCategory || '');
         setIsPublic(data.isPublic ?? true);
         setExistingFiles(data.files || []); // 🌟 통합 FILE_META 목록 바인딩
       })
@@ -80,7 +78,6 @@ export default function PostEdit() {
     formData.append('title', title);
     formData.append('content', content);
     formData.append('boardType', boardType);
-    formData.append('jobCategory', jobCategory);
     formData.append('isPublic', isPublic);
 
     // 삭제할 파일 ID 배열 전송 (백엔드의 deleteFileIds와 일치)
@@ -98,7 +95,7 @@ export default function PostEdit() {
       const uploadedFiles = [];
       // 기존 청크 함수를 순서대로 호출하고, 서버 병합 성공 후에만 게시글에 연결한다.
       for (const file of newFiles) {
-        const storedFileName = await uploadFileChunks(file, { anonymous: true });
+        const storedFileName = await uploadFileChunks(file);
         uploadedFiles.push({
           fileId: crypto.randomUUID(),
           originalFileName: file.name,

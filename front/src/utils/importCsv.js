@@ -52,6 +52,7 @@ export function classifyRows(rawRows) {
   const ambiguous = [];
 
   rawRows.forEach((raw, i) => {
+    const source = raw.source ? { source: raw.source } : {};
     const reasons = [];
     const date = raw.date ? parseDate(raw.date) : '';
     if (!date) reasons.push('날짜 확인 필요');
@@ -72,9 +73,9 @@ export function classifyRows(rawRows) {
     }
 
     if (!reasons.length) {
-      confident.push({ kind, m: Math.min(12, Number(date.slice(5, 7))), date, cat, memo, amt });
+      confident.push({ ...source, kind, m: Math.min(12, Number(date.slice(5, 7))), date, cat, memo, amt });
     } else {
-      ambiguous.push({ id: `imp${Date.now()}_${i}`, date, kind, amt, memo, cat: cat || (kind ? guessCategory(kind, memo) : ''), reasons });
+      ambiguous.push({ ...source, id: `imp${Date.now()}_${i}`, date, kind, amt, memo, cat: cat || (kind ? guessCategory(kind, memo) : ''), reasons });
     }
   });
 

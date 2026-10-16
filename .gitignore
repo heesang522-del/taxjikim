@@ -40,10 +40,14 @@
 *.log.*
 **/logs/
 
+# 다운로드 파일
+workers
 
-import
+# 실행 위치에 따라 생기는 사용자 업로드와 세무 PDF 원본은 공유하지 않는다.
+/storage/tax-pdfs/
+/back/storage/tax-pdfs/
 
-# 프론트엔드 전용 제외 규칙 (기존 front/.gitignore)
+# 프론트엔드 전용 제외 규칙
 /front/**/node_modules
 /front/**/dist
 /front/**/dist-ssr
@@ -60,7 +64,7 @@ import
 /front/**/migration-backup/
 /front/**/.npm-cache/
 
-# 백엔드 전용 제외 규칙 (기존 back/.gitignore)
+# 백엔드 전용 제외 규칙
 /back/**/HELP.md
 /back/**/.gradle
 /back/**/build/
@@ -71,6 +75,8 @@ import
 # Maven 빌드 결과와 Java 컴파일 파일
 /back/**/target/
 /back/**/*.class
+
+# 사용자 업로드 파일
 
 ### STS ###
 /back/**/.apt_generated
@@ -106,10 +112,10 @@ import
 /back/sql/schema.sql
 /back/local/
 
-# 사용자 업로드는 제외하고 기본 프로필 SVG만 공유한다.
+# 업로드는 제외하고 현재 저장 위치의 기본 프로필 이미지 하나만 공유한다.
 **/uploads/
-!/back/uploads/
-/back/uploads/*
-!/back/uploads/profile/
-/back/uploads/profile/*
-!/back/uploads/profile/default-profile.svg
+!/uploads/
+/uploads/*
+!/uploads/profile/
+/uploads/profile/*
+!/uploads/profile/default-profile.svg

@@ -1,7 +1,7 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Tabs } from '../components/common/index';
 import { BOARD_TABS, BOARD_WRITE_TABS } from '../data/content';
@@ -19,7 +19,17 @@ export default function BoardPage() {
   const [scope, setScope] = useState('title');
   const [query, setQuery] = useState('');
   const navigate = useNavigate();
-  const { posts } = useBoard();
+  const { posts, loadPosts } = useBoard();
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  // 목록에 진입할 때마다 DB를 다시 읽어 신규 등록·삭제 결과를 반영한다.
+  useEffect(() => {
+    let active = true;
+    loadPosts()
+      .catch(() => { if (active) setError('게시글을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [loadPosts]);
   const { isAdmin } = useAuth();
   const all = tab === '전체';
   const q = query.trim().toLowerCase();
@@ -60,7 +70,9 @@ export default function BoardPage() {
           <Button variant="soft" size="sm" to={`${ROUTES.boardWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
         </div>
       </div>
-      {rows.length
+      {loading ? <p className="state-msg" role="status">게시글을 불러오는 중입니다.</p>
+        : error ? <p className="state-msg" role="alert">{error}</p>
+        : rows.length
         ? <DataTable columns={columns} rows={rows} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.boardPost(p.id))} />
         : <p className="state-msg">{q ? '검색 결과가 없습니다' : '등록된 글이 없습니다'}</p>}
     </Card>
