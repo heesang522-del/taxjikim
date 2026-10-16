@@ -132,3 +132,7 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 인증용 mock 계정·잠금·접속 기록도 메모리에서만 관리한다. 이전 인증 관련 웹 스토리지 키 6개는 앱 시작 시 양쪽 저장소에서 제거한다.
 - 다른 기능의 게시글·상담·계산 기록 웹 스토리지 사용은 유지한다.
+
+## 댓글 API 경로 보정 (2026-10-16)
+
+- 공통 client의 baseURL /api와 겹치던 댓글 경로 접두사를 제거했다. 조회·등록은 /api/posts/{postId}/comments, 삭제는 /api/posts/{postId}/comments/{commentId}로 요청한다. 쿠키 인증은 유지한다.
