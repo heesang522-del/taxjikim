@@ -19,7 +19,7 @@ export function normalizeTaxPdfResult(result) {
   return { ...result, evidence: result.evidence || null };
 }
 
-export async function uploadTaxPdfApi(file, { accessToken, taxYear, signal } = {}) {
+export async function uploadTaxPdfApi(file, { taxYear, signal } = {}) {
   const formData = new FormData();
   formData.append('file', file);
   formData.append('taxYear', String(taxYear));
@@ -28,7 +28,6 @@ export async function uploadTaxPdfApi(file, { accessToken, taxYear, signal } = {
       // PDF 분석은 일반 API보다 오래 걸릴 수 있어 요청 대기 시간을 별도로 설정한다.
       timeout: 120000,
       signal,
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     });
     const result = response.data;
     if (!result?.success) {
@@ -51,11 +50,10 @@ export async function uploadTaxPdfApi(file, { accessToken, taxYear, signal } = {
 }
 
 // 저장 성공 응답을 받은 뒤에만 계산 내역에 반영한다.
-export async function saveReviewedTransactionApi(payload, accessToken) {
+export async function saveReviewedTransactionApi(payload) {
   try {
-    const response = await client.post('/tax/reviewed-transactions', payload, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+    // 본문만 전송하고 회원 인증은 HttpOnly 쿠키로 처리한다.
+    const response = await client.post('/tax/reviewed-transactions', payload);
     if (!response.data?.success || !response.data.data?.transactionId)
       throw new Error('거래 저장 응답을 확인할 수 없습니다.');
     return response.data.data;
@@ -67,11 +65,9 @@ export async function saveReviewedTransactionApi(payload, accessToken) {
 }
 
 // 기존 거래 수정은 POST 재시도와 구분해 같은 거래 ID를 유지한다.
-export async function updateReviewedTransactionApi(payload, accessToken) {
+export async function updateReviewedTransactionApi(payload) {
   try {
-    const response = await client.put('/tax/reviewed-transactions', payload, {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-    });
+    const response = await client.put('/tax/reviewed-transactions', payload);
     if (!response.data?.success || !response.data.data?.transactionId)
       throw new Error('거래 수정 응답을 확인할 수 없습니다.');
     return response.data.data;

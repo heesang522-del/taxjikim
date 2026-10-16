@@ -3,7 +3,6 @@
 
 import { Button, Card, DataTable, Icon, Pill } from '../common/index';
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '../../store/useAuthStore';
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES } from '../../data/options';
 import { YEAR } from '../../data/taxConstants';
 import { won } from '../../utils/format';
@@ -188,7 +187,6 @@ export default function EntryTable() {
 
 function ReviewItem({ item, index, document }) {
   const { confirmReviewItem, excludeReviewItem, fileRows, updatePdfDraft } = useTax();
-  const { accessToken } = useAuth();
   const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const previous = item.editedRow;
@@ -295,19 +293,16 @@ function ReviewItem({ item, index, document }) {
       // 월 집계는 실제 거래가 아니므로 날짜가 필수인 거래 저장 API로 전송하지 않는다.
       if (document.fileId && !summaryPeriod) {
         const persist = item.persisted ? updateReviewedTransactionApi : saveReviewedTransactionApi;
-        const saved = await persist(
-          {
-            fileId: document.fileId,
-            itemIndex: index,
-            taxYear: YEAR,
-            transactionType: kind === 'in' ? 'INCOME' : 'EXPENSE',
-            transactionDate: date,
-            category: cat,
-            description: memo.trim(),
-            amount: value,
-          },
-          accessToken
-        );
+        const saved = await persist({
+          fileId: document.fileId,
+          itemIndex: index,
+          taxYear: YEAR,
+          transactionType: kind === 'in' ? 'INCOME' : 'EXPENSE',
+          transactionDate: date,
+          category: cat,
+          description: memo.trim(),
+          amount: value,
+        });
         row = {
           ...row,
           kind: saved.transactionType === 'INCOME' ? 'in' : 'out',

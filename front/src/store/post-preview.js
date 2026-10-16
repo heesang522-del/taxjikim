@@ -22,8 +22,7 @@ export function filterBlockedFiles(files) {
   return validFiles;
 }
 
-export async function uploadFileChunks(file, { accessToken } = {}) {
-  if (!accessToken) throw new Error('로그인이 필요합니다. 다시 로그인해 주세요.');
+export async function uploadFileChunks(file) {
   if (!file.size) throw new Error('빈 파일은 업로드할 수 없습니다.');
   if (!filterBlockedFiles([file]).length)
     throw new Error('사진·동영상만 업로드할 수 있습니다. PDF·ZIP·실행파일은 차단됩니다.');
@@ -46,7 +45,8 @@ export async function uploadFileChunks(file, { accessToken } = {}) {
 
     const response = await fetch('/api/posts/upload-chunk', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${accessToken}` },
+      // 같은 출처 요청의 인증 쿠키만 사용하며 토큰을 JavaScript에 보관하지 않는다.
+      credentials: 'same-origin',
       body: formData,
     });
 

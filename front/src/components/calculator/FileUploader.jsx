@@ -22,7 +22,7 @@ export default function FileUploader({ onUploadSuccess }) {
   useEffect(() => () => uploadController.current?.abort(), []);
   const [currentName, setCurrentName] = useState('');
   const [loading, setLoading] = useState(false);
-  const { accessToken } = useAuth();
+  const { loggedIn } = useAuth();
   const {
     uploadedFiles: files,
     fileRows,
@@ -66,7 +66,7 @@ export default function FileUploader({ onUploadSuccess }) {
         if (controller.signal.aborted) break;
         setCurrentName(file.name);
         try {
-          const result = await uploadTaxPdfApi(file, { accessToken, taxYear: YEAR, signal: controller.signal });
+          const result = await uploadTaxPdfApi(file, { taxYear: YEAR, signal: controller.signal });
           if (controller.signal.aborted) break;
           const fileInfo = {
             key: fileKey(file),
@@ -143,7 +143,7 @@ export default function FileUploader({ onUploadSuccess }) {
           금액 검토 문서는 별도 분석 결과로 표시하며, 기재금액을 경비나 공제액으로 자동 합산하지 않습니다.
         </p>
         <p className="small muted">
-          {accessToken
+          {loggedIn
             ? '업로드한 원본 PDF와 인식된 거래를 서버에 저장합니다.'
             : '비회원은 분석 결과만 체험하며, 원본 PDF와 거래는 서버에 보관하지 않습니다.'}
         </p>

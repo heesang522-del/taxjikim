@@ -2,10 +2,8 @@ import { uploadFileChunks, filterBlockedFiles } from '../../store/post-preview.j
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getAnonymousPost, saveAnonymousPost } from '../../api/anonymousPosts';
-import { useAuth } from '../../store/useAuthStore';
 
 export default function PostEdit() {
-  const { accessToken } = useAuth();
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false);
   const [searchParams] = useSearchParams();
@@ -97,7 +95,7 @@ export default function PostEdit() {
       const uploadedFiles = [];
       // 기존 청크 함수를 순서대로 호출하고, 서버 병합 성공 후에만 게시글에 연결한다.
       for (const file of newFiles) {
-        const storedFileName = await uploadFileChunks(file, { accessToken });
+        const storedFileName = await uploadFileChunks(file);
         uploadedFiles.push({
           fileId: crypto.randomUUID(),
           originalFileName: file.name,

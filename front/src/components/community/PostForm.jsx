@@ -7,14 +7,19 @@ import { Button, Card, SelectField, TextAreaField, TextField } from '../common/i
 import { BOARD_WRITE_TABS } from '../../data/content';
 import { useAuth } from '../../store/useAuthStore';
 import { useToast } from '../../store/useToastStore';
-import { uploadFileChunks, filterBlockedFiles, imagePreviewProps, videoPreviewProps } from '../../store/post-preview.js';
+import {
+  uploadFileChunks,
+  filterBlockedFiles,
+  imagePreviewProps,
+  videoPreviewProps,
+} from '../../store/post-preview.js';
 import { createPost, updatePost } from '../../api/post.js';
 import { ROUTES } from '../../utils/routes';
 
 export default function PostForm({ heading, initial, submitLabel, onCancel, postId, onSubmit }) {
   const toast = useToast();
   const navigate = useNavigate();
-  const { isAdmin, accessToken } = useAuth();
+  const { isAdmin, loggedIn } = useAuth();
   const [tab, setTab] = useState(initial.tab);
   const [title, setTitle] = useState(initial.title);
   const [body, setBody] = useState(initial.body);
@@ -25,10 +30,13 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
   const [isUploading, setIsUploading] = useState(false);
   const previewUrls = useRef(new Set());
   // 새로 선택한 로컬 미리보기 URL은 화면을 벗어날 때 해제한다. 서버 URL은 유지한다.
-  useEffect(() => () => {
-    previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
-    previewUrls.current.clear();
-  }, []);
+  useEffect(
+    () => () => {
+      previewUrls.current.forEach((url) => URL.revokeObjectURL(url));
+      previewUrls.current.clear();
+    },
+    []
+  );
 
   const tabOptions = isAdmin ? BOARD_WRITE_TABS : BOARD_WRITE_TABS.filter((t) => t !== '공지');
 
@@ -50,7 +58,9 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.add(previewUrl);
       return {
-        file, name: file.name, previewUrl,
+        file,
+        name: file.name,
+        previewUrl,
         mediaType: /\.(mp4|webm|mov)$/i.test(file.name) ? 'video' : 'image',
       };
     });
@@ -82,8 +92,8 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       onSubmit({ tab, title, body, files: files.map((file) => file.name) });
       return;
     }
-    // 인증 정보가 없으면 파일부터 업로드하지 않고 재로그인을 안내한다.
-    if (!accessToken) {
+    // 화면은 로그인 여부만 확인하고 실제 작성자 인증은 서버의 쿠키 검사에 맡긴다.
+    if (!loggedIn) {
       toast('로그인이 필요합니다. 다시 로그인해 주세요.');
       return;
     }
@@ -95,7 +105,7 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       // 파일 청크 업로드 처리
       for (const item of files) {
         if (item.file) {
-          const storedFileName = await uploadFileChunks(item.file, { accessToken });
+          const storedFileName = await uploadFileChunks(item.file);
           uploadedFiles.push({
             fileId: crypto.randomUUID(),
             newUpload: true,
@@ -119,13 +129,16 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
 
       if (uploadedFiles.length > 0) {
         // 서버는 병합된 파일명 목록으로 게시글과 첨부파일을 연결한다.
-        formData.append('savedFileNamesJson', JSON.stringify(uploadedFiles.filter((file) => file.newUpload).map((file) => file.storedFileName)));
+        formData.append(
+          'savedFileNamesJson',
+          JSON.stringify(uploadedFiles.filter((file) => file.newUpload).map((file) => file.storedFileName))
+        );
       }
 
       // 💡 3. 실제 백엔드 API를 호출하여 DB에 적재!
-      // 수정에서도 서버가 토큰의 회원 번호로 작성자 권한을 검사한다.
-      if (postId) await updatePost(postId, formData, accessToken);
-      else await createPost(formData, accessToken);
+      // 수정에서도 서버가 인증 쿠키의 회원 번호로 작성자 권한을 검사한다.
+      if (postId) await updatePost(postId, formData);
+      else await createPost(formData);
 
       toast(postId ? '게시글이 수정되었습니다.' : '게시글이 성공적으로 등록되었습니다.');
       navigate(ROUTES.board); // 등록 후 실제 게시판 목록을 다시 조회한다.
@@ -199,14 +212,40 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
                       border: '1px solid var(--border, #e2e8f0)',
                     }}
                   >
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, minWidth: 0, flex: 1 }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        gap: 10,
+                        minWidth: 0,
+                        flex: 1,
+                      }}
+                    >
                       {item.previewUrl ? (
-                        item.mediaType === 'video' ? <video {...videoPreviewProps} src={item.previewUrl} controls preload="metadata" style={{ width: '100%', maxWidth: 560, maxHeight: 360, borderRadius: 6 }} /> : <img
-                          {...imagePreviewProps}
-                          src={item.previewUrl}
-                          alt="미리보기"
-                          style={{ display: 'block', width: '100%', maxWidth: 560, maxHeight: 360, objectFit: 'contain', borderRadius: 6 }}
-                        />
+                        item.mediaType === 'video' ? (
+                          <video
+                            {...videoPreviewProps}
+                            src={item.previewUrl}
+                            controls
+                            preload="metadata"
+                            style={{ width: '100%', maxWidth: 560, maxHeight: 360, borderRadius: 6 }}
+                          />
+                        ) : (
+                          <img
+                            {...imagePreviewProps}
+                            src={item.previewUrl}
+                            alt="미리보기"
+                            style={{
+                              display: 'block',
+                              width: '100%',
+                              maxWidth: 560,
+                              maxHeight: 360,
+                              objectFit: 'contain',
+                              borderRadius: 6,
+                            }}
+                          />
+                        )
                       ) : (
                         <div
                           style={{
