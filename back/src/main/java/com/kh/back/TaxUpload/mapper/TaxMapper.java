@@ -12,6 +12,7 @@ public interface TaxMapper {
     Long lockOwnedPdf(@Param("fileId") Long fileId, @Param("userId") Long userId);
     TaxTransactionDto findReviewedTransaction(@Param("fileId") Long fileId, @Param("itemIndex") int itemIndex, @Param("userId") Long userId);
     void insertReviewedTransaction(TaxTransactionDto transaction);
+    void updateReviewedTransaction(TaxTransactionDto transaction);
 
     void insertPdfFile(FileMetadataDto file);
 

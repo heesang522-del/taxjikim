@@ -1,6 +1,6 @@
 package com.kh.back.TaxUpload.controller;
 
-import com.kh.back.TaxUpload.dto.TaxPdfUploadResult;
+import java.util.Map;
 import com.kh.back.TaxUpload.service.YearEndTaxService;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.dto.ApiResponse;
@@ -18,7 +18,7 @@ public class YearEndTaxController {
     public YearEndTaxController(YearEndTaxService yearEndTaxService) { this.yearEndTaxService = yearEndTaxService; }
 
     @PostMapping("/upload-pdf")
-    public ApiResponse<TaxPdfUploadResult> uploadTaxPdf(@RequestParam("file") MultipartFile file,
+    public ApiResponse<Map<String, Object>> uploadTaxPdf(@RequestParam("file") MultipartFile file,
             @RequestParam("taxYear") int taxYear, @AuthenticationPrincipal CustomUserDetails principal) throws IOException {
         if (taxYear < 1900 || taxYear > 9999) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "귀속연도를 확인해 주세요.");
@@ -29,14 +29,14 @@ public class YearEndTaxController {
     }
 
     @PostMapping("/upload-ledger-pdf")
-    public ApiResponse<TaxPdfUploadResult> uploadLedgerPdf(@RequestParam("file") MultipartFile file,
+    public ApiResponse<Map<String, Object>> uploadLedgerPdf(@RequestParam("file") MultipartFile file,
             @RequestParam("taxYear") int taxYear, @AuthenticationPrincipal CustomUserDetails principal) throws IOException {
         validateYear(taxYear);
         return ApiResponse.ok(yearEndTaxService.uploadLedgerPdf(file, principal == null ? null : principal.getUserId(), taxYear));
     }
 
     @PostMapping("/upload-evidence-pdf")
-    public ApiResponse<TaxPdfUploadResult> uploadEvidencePdf(@RequestParam("file") MultipartFile file,
+    public ApiResponse<Map<String, Object>> uploadEvidencePdf(@RequestParam("file") MultipartFile file,
             @RequestParam("taxYear") int taxYear, @AuthenticationPrincipal CustomUserDetails principal) throws IOException {
         validateYear(taxYear);
         return ApiResponse.ok(yearEndTaxService.uploadEvidencePdf(file, principal == null ? null : principal.getUserId(), taxYear));
@@ -47,6 +47,13 @@ public class YearEndTaxController {
             @RequestBody com.kh.back.TaxUpload.dto.TaxTransactionDto.ReviewedTransactionRequest request,
             @AuthenticationPrincipal CustomUserDetails principal) {
         return ApiResponse.ok(yearEndTaxService.saveReviewedTransaction(request, principal == null ? null : principal.getUserId()));
+    }
+
+    @PutMapping("/reviewed-transactions")
+    public ApiResponse<com.kh.back.TaxUpload.dto.TaxTransactionDto> updateReviewedTransaction(
+            @RequestBody com.kh.back.TaxUpload.dto.TaxTransactionDto.ReviewedTransactionRequest request,
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        return ApiResponse.ok(yearEndTaxService.updateReviewedTransaction(request, principal == null ? null : principal.getUserId()));
     }
 
     private void validateYear(int year) {

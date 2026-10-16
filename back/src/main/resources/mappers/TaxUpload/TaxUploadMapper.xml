@@ -55,4 +55,11 @@
         VALUES (#{taxInputId}, #{userId}, #{transactionType}, #{transactionDate}, #{description},
         #{category}, #{amount}, #{taxYear}, TRUE, #{sourceFileId}, #{sourceItemIndex})
     </insert>
+    <update id="updateReviewedTransaction">
+        UPDATE TAX_TRANSACTIONS SET TAX_INPUT_ID = #{taxInputId}, TAX_YEAR = #{taxYear},
+            TRANSACTION_TYPE = #{transactionType}, TRANSACTION_DATE = #{transactionDate},
+            DESCRIPTION = #{description}, CATEGORY = #{category}, AMOUNT = #{amount}, IS_EDITED = TRUE
+        WHERE TRANSACTION_ID = #{transactionId} AND USER_ID = #{userId}
+          AND SOURCE_FILE_ID = #{sourceFileId} AND SOURCE_ITEM_INDEX = #{sourceItemIndex}
+    </update>
 </mapper>

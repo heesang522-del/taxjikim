@@ -10,7 +10,6 @@
         <result property="userId" column="USER_ID" />
         <result property="writer" column="WRITER" />
         <result property="boardType" column="BOARD_TYPE" />
-        <result property="jobCategory" column="JOB_CATEGORY" />
         <result property="title" column="TITLE" />
         <result property="content" column="CONTENT" />
         <result property="isPublic" column="IS_PUBLIC" />
@@ -44,7 +43,6 @@
         INSERT INTO POSTS (
             USER_ID,
             BOARD_TYPE,
-            JOB_CATEGORY,
             TITLE,
             CONTENT,
             IS_PUBLIC
@@ -97,7 +95,6 @@
             p.USER_ID,
             <include refid="postWriter" />,
             p.BOARD_TYPE,
-            p.JOB_CATEGORY,
             p.TITLE,
             p.CONTENT,
             p.IS_PUBLIC,
@@ -176,7 +173,6 @@
         SET
             TITLE = #{title},
             CONTENT = #{content},
-           JOB_CATEGORY = #{jobCategory},      <!-- // TODO : 삭제 -->
             IS_PUBLIC = #{isPublic},
             UPDATED_AT = CURRENT_TIMESTAMP
         WHERE POST_ID = #{postId}

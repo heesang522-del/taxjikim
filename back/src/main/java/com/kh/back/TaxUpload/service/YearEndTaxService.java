@@ -1,9 +1,6 @@
 package com.kh.back.TaxUpload.service;
 
-import com.kh.back.TaxUpload.dto.TaxPdfUploadResult;
 import com.kh.back.TaxUpload.dto.TaxTransactionDto;
-import com.kh.back.TaxUpload.dto.TaxPdfUploadResult.*;
-import com.kh.back.TaxUpload.dto.TaxPdfUploadResult.YearEndEvidenceResult.*;
 
 import com.kh.back.TaxUpload.mapper.TaxMapper;
 import com.kh.back.common.exception.ApiException;
@@ -41,22 +38,21 @@ public class YearEndTaxService {
     public YearEndTaxService(TaxMapper taxMapper) { this.taxMapper = taxMapper; }
 
     @Transactional(rollbackFor = Exception.class)
-    public TaxPdfUploadResult uploadPdf(MultipartFile file, Long userId, int taxYear) throws IOException {
-        return processPdf(file, userId, taxYear, null);
+    public Map<String, Object> uploadPdf(MultipartFile file, Long userId, int taxYear) throws IOException {
+        return processPdf(file, userId, taxYear);
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public TaxPdfUploadResult uploadLedgerPdf(MultipartFile file, Long userId, int taxYear) throws IOException {
-        return processPdf(file, userId, taxYear, TaxPdfDocumentKind.LEDGER);
+    public Map<String, Object> uploadLedgerPdf(MultipartFile file, Long userId, int taxYear) throws IOException {
+        return processPdf(file, userId, taxYear);
     }
 
     @Transactional(rollbackFor = Exception.class)
-    public TaxPdfUploadResult uploadEvidencePdf(MultipartFile file, Long userId, int taxYear) throws IOException {
-        return processPdf(file, userId, taxYear, TaxPdfDocumentKind.YEAR_END_EVIDENCE);
+    public Map<String, Object> uploadEvidencePdf(MultipartFile file, Long userId, int taxYear) throws IOException {
+        return processPdf(file, userId, taxYear);
     }
 
-    private TaxPdfUploadResult processPdf(MultipartFile file, Long userId, int taxYear,
-                                         TaxPdfDocumentKind requestedKind) throws IOException {
+    private Map<String, Object> processPdf(MultipartFile file, Long userId, int taxYear) throws IOException {
         String originalName = file.getOriginalFilename();
         if (file.isEmpty() || originalName == null || !originalName.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
             throw badRequest("유효한 PDF 파일을 선택해 주세요.");
@@ -68,8 +64,7 @@ public class YearEndTaxService {
         final long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(20);
         List<TaxTransactionDto> transactions;
         int skipped;
-        TaxPdfDocumentKind kind;
-        YearEndEvidenceResult evidence = null;
+        Map<String, Object> evidence = null;
         // PDF 검증·파싱이 성공한 다음에만 파일 저장과 DB 변경을 시작한다.
         try (PDDocument document = Loader.loadPDF(bytes)) {
             if (document.isEncrypted()) throw badRequest("암호를 해제한 PDF를 선택해 주세요.");
@@ -95,18 +90,10 @@ public class YearEndTaxService {
             }
             String text = String.join("\n", pages.stream().map(PdfPageText::text).toList());
             if (text.isBlank()) throw badRequest("추출 가능한 글자가 없습니다. 스캔 PDF의 OCR은 아직 지원하지 않습니다.");
-            // 제목은 허용 조건이 아니다. 명확한 장부 행을 먼저 읽고 나머지는 검토 대상으로 돌린다.
-            List<TaxTransactionDto> ledgerRows = parseTransactions(text, userId, taxYear);
-            if (requestedKind == TaxPdfDocumentKind.LEDGER && looksLikeEvidence(text) && ledgerRows.isEmpty()) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "PDF_DOCUMENT_TYPE_MISMATCH", "계산 가능한 장부 행이 없습니다. 일반 PDF 업로드에서 검토해 주세요.");
-            }
-            kind = requestedKind != null ? requestedKind
-                    : ledgerRows.isEmpty() ? TaxPdfDocumentKind.YEAR_END_EVIDENCE : TaxPdfDocumentKind.LEDGER;
-            transactions = kind == TaxPdfDocumentKind.LEDGER ? ledgerRows : List.of();
-            // 장부와 검토 후보가 함께 있는 문서도 후보를 잃지 않는다.
+            // 모든 추출 내역을 같은 편집 목록에 보내고 확정 거래 저장은 사용자 확인 뒤 수행한다.
+            transactions = List.of();
             evidence = parseEvidence(pages, taxYear);
-            if (kind == TaxPdfDocumentKind.LEDGER && evidence.items().isEmpty()) evidence = null;
-            skipped = kind == TaxPdfDocumentKind.LEDGER ? countSkipped(text, transactions.size()) : 0;
+            skipped = 0;
         } catch (InvalidPasswordException error) {
             throw badRequest("암호를 해제한 PDF를 선택해 주세요.");
         } catch (IOException error) {
@@ -114,7 +101,7 @@ public class YearEndTaxService {
         }
 
         // 비회원은 추출만 체험하며 개인 원본과 DB 기록을 서버에 남기지 않는다.
-        if (userId == null) return new TaxPdfUploadResult(null, originalName, transactions, skipped, false, kind, evidence);
+        if (userId == null) return buildPdfResponse(null, originalName, transactions, skipped, false, evidence);
         Files.createDirectories(storageDirectory);
         Path savedPath = storageDirectory.resolve(UUID.randomUUID() + ".pdf");
         Files.write(savedPath, bytes, StandardOpenOption.CREATE_NEW);
@@ -133,14 +120,14 @@ public class YearEndTaxService {
             metadata.setOriginalFileName(originalName);
             metadata.setFilePath(savedPath.toString());
             metadata.setFileSize((long) bytes.length);
-            metadata.setFileType(kind == TaxPdfDocumentKind.LEDGER ? "TAX_LEDGER" : "TAX_EVIDENCE");
+            metadata.setFileType(transactions.isEmpty() ? "TAX_EVIDENCE" : "TAX_LEDGER");
             taxMapper.insertPdfFile(metadata);
             if (!transactions.isEmpty()) {
                 Long inputId = findOrCreateInput(userId, taxYear);
                 transactions.forEach(transaction -> transaction.setTaxInputId(inputId));
                 taxMapper.insertTaxTransactions(transactions);
             }
-            return new TaxPdfUploadResult(metadata.getFileId(), originalName, transactions, skipped, true, kind, evidence);
+            return buildPdfResponse(metadata.getFileId(), originalName, transactions, skipped, true, evidence);
         } catch (RuntimeException error) {
             cleanup(savedPath);
             throw error;
@@ -149,6 +136,15 @@ public class YearEndTaxService {
 
     @Transactional(rollbackFor = Exception.class)
     public TaxTransactionDto saveReviewedTransaction(TaxTransactionDto.ReviewedTransactionRequest request, Long userId) {
+        return persistReviewedTransaction(request, userId, false);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public TaxTransactionDto updateReviewedTransaction(TaxTransactionDto.ReviewedTransactionRequest request, Long userId) {
+        return persistReviewedTransaction(request, userId, true);
+    }
+
+    private TaxTransactionDto persistReviewedTransaction(TaxTransactionDto.ReviewedTransactionRequest request, Long userId, boolean update) {
         if (userId == null) throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTH_REQUIRED", "로그인이 필요합니다.");
         if (request == null || request.fileId() == null || request.fileId() <= 0
                 || request.itemIndex() == null || request.itemIndex() < 0 || request.itemIndex() > 100000
@@ -168,7 +164,8 @@ public class YearEndTaxService {
         }
         // 응답 유실 후 재시도에도 최초 저장 결과를 그대로 반환한다.
         TaxTransactionDto existing = taxMapper.findReviewedTransaction(request.fileId(), request.itemIndex(), userId);
-        if (existing != null) return existing;
+        if (!update && existing != null) return existing;
+        if (update && existing == null) throw new ApiException(HttpStatus.NOT_FOUND, "TRANSACTION_NOT_FOUND", "수정할 검토 거래를 찾을 수 없습니다.");
         TaxTransactionDto transaction = new TaxTransactionDto();
         transaction.setTaxInputId(findOrCreateInput(userId, request.taxYear()));
         transaction.setUserId(userId);
@@ -181,7 +178,13 @@ public class YearEndTaxService {
         transaction.setEdited(true);
         transaction.setSourceFileId(request.fileId());
         transaction.setSourceItemIndex(request.itemIndex());
-        taxMapper.insertReviewedTransaction(transaction);
+        // 수정은 기존 ID를 유지하고 최초 등록만 새 거래를 생성한다.
+        if (update) {
+            transaction.setTransactionId(existing.getTransactionId());
+            taxMapper.updateReviewedTransaction(transaction);
+        } else {
+            taxMapper.insertReviewedTransaction(transaction);
+        }
         return transaction;
     }
 
@@ -197,6 +200,33 @@ public class YearEndTaxService {
         return ((Number) values.get("taxInputId")).longValue();
     }
 
+    // 별도 응답 타입 없이 기존 화면이 사용하는 JSON 필드를 유지한다.
+    private Map<String, Object> buildPdfResponse(Long fileId, String originalName,
+            List<TaxTransactionDto> transactions, int skipped, boolean persisted, Map<String, Object> evidence) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("fileId", fileId);
+        result.put("originalFileName", originalName);
+        result.put("transactions", transactions);
+        result.put("skippedCount", skipped);
+        result.put("persisted", persisted);
+        result.put("evidence", evidence);
+        return result;
+    }
+
+    private Map<String, Object> buildReviewItem(String label, BigDecimal amount, int page,
+            boolean confirmed, Object... details) {
+        Map<String, Object> item = new LinkedHashMap<>();
+        item.put("label", label);
+        item.put("reportedAmount", amount);
+        item.put("page", page);
+        item.put("confirmed", confirmed);
+        item.put("transactionDate", details.length > 0 ? details[0] : null);
+        item.put("valueKind", details.length > 1 ? details[1] : "SUMMARY");
+        item.put("transactionMonth", details.length > 2 ? details[2] : null);
+        item.put("transactionType", details.length > 3 ? details[3] : null);
+        return item;
+    }
+
     private ApiException badRequest(String message) { return new ApiException(HttpStatus.BAD_REQUEST, "PDF_IMPORT_ERROR", message); }
     private void cleanup(Path path) {
         try { Files.deleteIfExists(path); } catch (IOException error) {
@@ -209,7 +239,7 @@ public class YearEndTaxService {
 
     private static final List<String> INCOME_CATEGORIES = List.of("프리랜서 용역비", "인세·저작권료", "광고·후원 수익", "기타 수입");
     private static final List<String> EXPENSE_CATEGORIES = List.of("장비·소프트웨어", "외주·인건비", "교통·출장", "통신비", "임차료·작업공간", "광고·마케팅", "교육·도서", "기타 경비");
-    private static final Pattern DATE = Pattern.compile("(?<!\\d)(\\d{4})[-/.](\\d{1,2})[-/.](\\d{1,2})(?!\\d)");
+    private static final Pattern DATE = Pattern.compile("(?<!\\d)(\\d{4})\\s*(?:[-/.]|년)\\s*(\\d{1,2})\\s*(?:[-/.]|월)\\s*(\\d{1,2})\\s*일?(?!\\d)");
     private static final Pattern KIND = Pattern.compile("(?<!\\S)(수입|입금|지출|출금)(?!\\S)");
     private static final Pattern AMOUNT = Pattern.compile("(?:^|\\s)(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*원?\\s*$");
 
@@ -257,25 +287,25 @@ public class YearEndTaxService {
     private static final Pattern YEAR_LABEL = Pattern.compile("귀속\\s*연도\\s*[:：]?\\s*((?:19|20)\\d{2})(?!\\d)");
     private static final Pattern TOTAL = Pattern.compile("^(합계|총계|총\\s*사용금액|총\\s*의료비)(?:\\s*[:：]\\s*|\\s+)(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*원?\\s*$");
 
-    public EvidenceType detectEvidenceType(String text) {
+    public String detectEvidenceType(String text) {
         String normalized = text.replaceAll("\\s+", "");
         // 종류 표시는 참고 정보이며 업로드 허용 여부에는 사용하지 않는다.
         // 안내문에 등장하는 다른 카드 종류보다 명시된 문서 구분을 우선한다.
         var heading = Pattern.compile("[\\[［]\\s*(신용카드|직불카드\\s*등|체크카드|의료비)\\s*[\\]］]").matcher(normalized);
-        Set<EvidenceType> markedTypes = new HashSet<>();
+        Set<String> markedTypes = new HashSet<>();
         while (heading.find()) {
             String name = heading.group(1).replaceAll("\\s+", "");
-            markedTypes.add(name.equals("의료비") ? EvidenceType.MEDICAL : name.equals("신용카드") ? EvidenceType.CREDIT_CARD : EvidenceType.DEBIT_CARD);
+            markedTypes.add(name.equals("의료비") ? "MEDICAL" : name.equals("신용카드") ? "CREDIT_CARD" : "DEBIT_CARD");
         }
         if (markedTypes.size() == 1) return markedTypes.iterator().next();
-        if (markedTypes.size() > 1) return EvidenceType.UNKNOWN;
+        if (markedTypes.size() > 1) return "UNKNOWN";
         boolean medical = normalized.contains("의료비");
         boolean debit = normalized.contains("직불카드") || normalized.contains("체크카드");
         boolean credit = normalized.contains("신용카드");
         // 한 문서에 여러 종류가 섞이면 하나의 종류로 임의 확정하지 않는다.
         int count = (medical ? 1 : 0) + (debit ? 1 : 0) + (credit ? 1 : 0);
-        if (count != 1) return EvidenceType.UNKNOWN;
-        return medical ? EvidenceType.MEDICAL : debit ? EvidenceType.DEBIT_CARD : EvidenceType.CREDIT_CARD;
+        if (count != 1) return "UNKNOWN";
+        return medical ? "MEDICAL" : debit ? "DEBIT_CARD" : "CREDIT_CARD";
     }
 
     public boolean looksLikeEvidence(String text) {
@@ -286,17 +316,17 @@ public class YearEndTaxService {
                 || normalized.contains("신용카드등사용") || normalized.contains("직불카드등사용");
     }
 
-    public YearEndEvidenceResult parseEvidence(List<PdfPageText> pages, int requestedYear) {
+    public Map<String, Object> parseEvidence(List<PdfPageText> pages, int requestedYear) {
         String text = String.join("\n", pages.stream().map(PdfPageText::text).toList());
-        EvidenceType type = detectEvidenceType(text);
+        String type = detectEvidenceType(text);
         Set<Integer> years = new HashSet<>();
         for (Pattern pattern : List.of(YEAR, YEAR_LABEL)) {
             var matcher = pattern.matcher(text);
             while (matcher.find()) years.add(Integer.parseInt(matcher.group(1)));
         }
         Integer documentYear = years.size() == 1 ? years.iterator().next() : null;
-        List<Item> items = new ArrayList<>();
-        if (type == EvidenceType.MEDICAL) items.addAll(parseMedicalEvidence(pages));
+        List<Map<String, Object>> items = new ArrayList<>();
+        if ("MEDICAL".equals(type)) items.addAll(parseMedicalEvidence(pages));
         // 제목이 없어도 명확한 집계 열 구조를 읽을 수 있다.
         if (items.isEmpty()) {
             items.addAll(parseCardSummary(pages));
@@ -310,38 +340,55 @@ public class YearEndTaxService {
                     if (!match.matches()) continue;
                     BigDecimal amount = new BigDecimal(match.group(2).replace(",", ""));
                     if (amount.compareTo(BigDecimal.valueOf(9007199254740991L)) <= 0) {
-                        items.add(new Item("증빙 기재 합계(확인 필요)", amount, page.page(), false));
+                        items.add(buildReviewItem("증빙 기재 합계(확인 필요)", amount, page.page(), false));
                     }
                 }
             }
         }
         if (items.isEmpty()) items.addAll(parseReviewCandidates(pages, requestedYear));
+        // 완전히 읽힌 거래도 편집 가능한 후보로 전달해 내용·카테고리 등을 자동으로 채운다.
+        for (PdfPageText page : pages) {
+            for (TaxTransactionDto row : parseTransactions(page.text(), null, requestedYear)) {
+                var item = buildReviewItem(row.getDescription(), row.getAmount(), page.page(), false,
+                        row.getTransactionDate().toString(), "DETAIL", null, row.getTransactionType());
+                item.put("description", row.getDescription());
+                item.put("category", row.getCategory());
+                items.add(item);
+            }
+        }
         List<String> notices = new ArrayList<>();
         notices.add("증빙 기재금액은 사업 경비나 공제액으로 자동 반영하지 않습니다.");
         if (documentYear == null) notices.add("귀속연도를 확정하지 못했습니다. 원본에서 확인해 주세요.");
-        if (items.stream().anyMatch(item -> "VALIDATION_TOTAL".equals(item.valueKind()))) {
-            notices.add("카드 집계의 네 항목 합계와 전체 사용금액이 일치하는지 검증했습니다. 전체 합계는 검증용이며 거래로 추가할 수 없습니다.");
+        if (items.stream().anyMatch(item -> "VALIDATION_TOTAL".equals(item.get("valueKind")))) {
+            notices.add("카드 집계의 네 항목 합계와 전체 사용금액이 일치하는지 검증했습니다. 전체 합계는 같은 문서의 다른 금액과 중복 합산하지 마세요.");
             notices.add("카드 사용금액은 사업용 지출로 확정된 값이 아닙니다. 원본과 용도를 확인해 필요한 금액만 추가하세요.");
         }
-        if (items.stream().anyMatch(item -> "MONTHLY_SUMMARY".equals(item.valueKind()))) {
+        if (items.stream().anyMatch(item -> "MONTHLY_SUMMARY".equals(item.get("valueKind")))) {
             notices.add("월별 금액은 각 발급기관 행의 12개월 합계와 기재 합계가 일치한 경우만 표시합니다. 실제 거래일은 제공되지 않으며 연간 집계와 중복 합산하지 않습니다.");
         }
-        if (type == EvidenceType.MEDICAL && !items.isEmpty()) {
+        if ("MEDICAL".equals(type) && !items.isEmpty()) {
             notices.add("일별 지출과 인별합계를 구분해 표시합니다. 상세 금액과 합계를 자동 합산하지 마세요.");
             notices.add("반복 표기된 전체 합계와 기관별 소계는 추가 금액으로 합산하지 않습니다.");
         } else if (items.size() > 1) notices.add("합계 후보가 여러 개입니다. 소계·중복 여부를 확인하고 자동 합산하지 마세요.");
-        ReviewStatus status = items.isEmpty() ? ReviewStatus.UNSUPPORTED_FORMAT : ReviewStatus.NEEDS_REVIEW;
+        String status = items.isEmpty() ? "UNSUPPORTED_FORMAT" : "NEEDS_REVIEW";
         if (items.isEmpty()) notices.add("날짜·금액 또는 항목명·금액의 구조를 찾지 못했습니다. 원본을 확인하고 직접 입력해 주세요.");
         if (documentYear != null && documentYear != requestedYear) {
-            status = ReviewStatus.YEAR_MISMATCH;
+            status = "YEAR_MISMATCH";
             notices.add("선택한 귀속연도와 PDF에 명시된 연도가 다릅니다.");
         }
-        return new YearEndEvidenceResult(type, documentYear, requestedYear, status, List.copyOf(items), List.copyOf(notices));
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("evidenceType", type);
+        result.put("documentYear", documentYear);
+        result.put("requestedTaxYear", requestedYear);
+        result.put("status", status);
+        result.put("items", List.copyOf(items));
+        result.put("notices", List.copyOf(notices));
+        return result;
     }
 
-    private List<Item> parseCardMonthly(List<PdfPageText> pages, Integer documentYear) {
+    private List<Map<String, Object>> parseCardMonthly(List<PdfPageText> pages, Integer documentYear) {
         if (documentYear == null) return List.of();
-        List<Item> result = new ArrayList<>();
+        List<Map<String, Object>> result = new ArrayList<>();
         String number = "(?:\\d{1,3}(?:,\\d{3})+|\\d+)";
         Pattern four = Pattern.compile("^" + number + "(?:\\s+" + number + "){3}$");
         Pattern middle = Pattern.compile("(?:일반|전통시장|대중교통|문화체육)\\s+(" + number + "(?:\\s+" + number + "){4})$");
@@ -379,7 +426,7 @@ public class YearEndTaxService {
                         || amounts.stream().reduce(BigDecimal.ZERO, BigDecimal::add).compareTo(total) != 0) continue;
                 String category = lines[i].substring(match.start(), match.start(1)).trim();
                 for (int month = 1; month <= 12; month++) {
-                    result.add(new Item(category + " 월별 사용금액", amounts.get(month - 1), page.page(), false,
+                    result.add(buildReviewItem(category + " 월별 사용금액", amounts.get(month - 1), page.page(), false,
                             null, "MONTHLY_SUMMARY", String.format(Locale.ROOT, "%04d-%02d", documentYear, month)));
                 }
             }
@@ -387,8 +434,8 @@ public class YearEndTaxService {
         return result;
     }
 
-    private List<Item> parseCardSummary(List<PdfPageText> pages) {
-        List<Item> result = new ArrayList<>();
+    private List<Map<String, Object>> parseCardSummary(List<PdfPageText> pages) {
+        List<Map<String, Object>> result = new ArrayList<>();
         String[] labels = {"일반 사용금액", "전통시장 사용금액", "대중교통 사용금액", "문화체육 사용금액", "전체 사용금액 합계(검증용)"};
         Pattern values = Pattern.compile("^(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\s*원)?(?:\\s+(\\d{1,3}(?:,\\d{3})+|\\d+)(?:\\s*원)?){4}$");
         for (PdfPageText page : pages) {
@@ -407,7 +454,7 @@ public class YearEndTaxService {
                 BigDecimal sum = amounts.subList(0, 4).stream().reduce(BigDecimal.ZERO, BigDecimal::add);
                 if (sum.compareTo(amounts.get(4)) != 0) continue;
                 for (int col = 0; col < 5; col++) {
-                    result.add(new Item(labels[col], amounts.get(col), page.page(), false, null,
+                    result.add(buildReviewItem(labels[col], amounts.get(col), page.page(), false, null,
                             col == 4 ? "VALIDATION_TOTAL" : "CATEGORY_SUMMARY"));
                 }
             }
@@ -416,8 +463,8 @@ public class YearEndTaxService {
     }
 
     // 제목·업종과 무관하게 명시된 금액만 후보로 읽는다. 날짜/식별번호만 있는 줄은 제외한다.
-    private List<Item> parseReviewCandidates(List<PdfPageText> pages, int requestedYear) {
-        List<Item> result = new ArrayList<>();
+    private List<Map<String, Object>> parseReviewCandidates(List<PdfPageText> pages, int requestedYear) {
+        List<Map<String, Object>> result = new ArrayList<>();
         Pattern labeled = Pattern.compile("^(.{0,80}?(?:금액|대금|보증금|수수료|합계|총계))\\s*[:：]?\\s+(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*원?\\s*$");
         for (PdfPageText page : pages) {
             for (String raw : page.text().split("\\R")) {
@@ -431,25 +478,41 @@ public class YearEndTaxService {
                     try {
                         LocalDate day = LocalDate.of(Integer.parseInt(date.group(1)), Integer.parseInt(date.group(2)), Integer.parseInt(date.group(3)));
                         BigDecimal value = medicalAmount(amount.group(1));
-                        if (value != null) result.add(new Item("거래 금액(용도 확인 필요)", value, page.page(), false, day.toString(), "DETAIL"));
+                        if (value != null) {
+                            var item = buildReviewItem("거래 금액(용도 확인 필요)", value, page.page(), false, day.toString(), "DETAIL");
+                            // 원문에서 읽은 내용·구분·카테고리만 전달하고 없는 값은 채우지 않는다.
+                            var kind = KIND.matcher(line);
+                            String category = java.util.stream.Stream.concat(INCOME_CATEGORIES.stream(), EXPENSE_CATEGORIES.stream())
+                                    .filter(line::contains).findFirst().orElse("");
+                            String description = line.substring(0, amount.start(1)).replace(date.group(), "").trim();
+                            if (kind.find()) {
+                                item.put("transactionType", Set.of("수입", "입금").contains(kind.group(1)) ? "INCOME" : "EXPENSE");
+                                description = description.replace(kind.group(), "").trim();
+                            }
+                            if (!category.isEmpty()) description = description.replace(category, "").trim();
+                            // 식별번호·연락처가 있는 행은 내용을 복사하지 않는다.
+                            if (!description.matches(".*(?:주민|계좌|전화|연락처|등록번호).*")) item.put("description", description);
+                            item.put("category", category);
+                            result.add(item);
+                        }
                     } catch (java.time.DateTimeException ignored) { }
                 } else if (label.matches()) {
                     BigDecimal value = medicalAmount(label.group(2));
                     // 원문 개인정보는 라벨에 복사하지 않는다.
-                    if (value != null) result.add(new Item("기재 금액(용도 확인 필요)", value, page.page(), false));
+                    if (value != null) result.add(buildReviewItem("기재 금액(용도 확인 필요)", value, page.page(), false));
                 }
             }
         }
         return result;
     }
 
-    private List<Item> parseMedicalEvidence(List<PdfPageText> pages) {
-        Pattern detail = Pattern.compile("(?<!\\d)(\\d{4}-\\d{2}-\\d{2})\\s+(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*$");
+    private List<Map<String, Object>> parseMedicalEvidence(List<PdfPageText> pages) {
+        Pattern detail = Pattern.compile(DATE.pattern() + "\\s+(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*$");
         Pattern summary = Pattern.compile("^(의료비|안경구입비|산후조리원)\\s*인별합계금액\\s+(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*$");
         Pattern repeatedTotal = Pattern.compile("^인별합계금액\\s+(\\d{1,3}(?:,\\d{3})+|\\d+)\\s*$");
-        List<Item> details = new ArrayList<>();
-        List<Item> summaries = new ArrayList<>();
-        List<Item> fallbackTotals = new ArrayList<>();
+        List<Map<String, Object>> details = new ArrayList<>();
+        List<Map<String, Object>> summaries = new ArrayList<>();
+        List<Map<String, Object>> fallbackTotals = new ArrayList<>();
         Set<String> seenSummaries = new HashSet<>();
         for (PdfPageText page : pages) {
             boolean inMedicalTable = false;
@@ -465,10 +528,10 @@ public class YearEndTaxService {
                 var totalMatch = repeatedTotal.matcher(line);
                 if (detailMatch.find()) {
                     try {
-                        LocalDate date = LocalDate.parse(detailMatch.group(1));
-                        BigDecimal amount = medicalAmount(detailMatch.group(2));
+                        LocalDate date = LocalDate.of(Integer.parseInt(detailMatch.group(1)), Integer.parseInt(detailMatch.group(2)), Integer.parseInt(detailMatch.group(3)));
+                        BigDecimal amount = medicalAmount(detailMatch.group(4));
                         // 원본의 의료비 지출 내역임이 명확하므로 구분을 함께 반환한다. 경비 인정 여부는 별도 확인한다.
-                        if (amount != null) details.add(new Item("의료비 일별 지출", amount, page.page(), false, date.toString(), "DETAIL", null, "EXPENSE"));
+                        if (amount != null) details.add(buildReviewItem("의료비 일별 지출", amount, page.page(), false, date.toString(), "DETAIL", null, "EXPENSE"));
                     } catch (java.time.DateTimeException ignored) {
                         // 잘못 인식한 날짜는 추측해서 고치지 않는다.
                     }
@@ -476,11 +539,11 @@ public class YearEndTaxService {
                     BigDecimal amount = medicalAmount(summaryMatch.group(2));
                     String key = summaryMatch.group(1) + ":" + amount;
                     if (amount != null && seenSummaries.add(key)) {
-                        summaries.add(new Item(summaryMatch.group(1) + " 인별합계금액", amount, page.page(), false));
+                        summaries.add(buildReviewItem(summaryMatch.group(1) + " 인별합계금액", amount, page.page(), false));
                     }
                 } else if (totalMatch.matches()) {
                     BigDecimal amount = medicalAmount(totalMatch.group(1));
-                    if (amount != null && seenSummaries.add("전체:" + amount)) fallbackTotals.add(new Item("의료비 전체 인별합계금액", amount, page.page(), false));
+                    if (amount != null && seenSummaries.add("전체:" + amount)) fallbackTotals.add(buildReviewItem("의료비 전체 인별합계금액", amount, page.page(), false));
                 }
             }
         }
