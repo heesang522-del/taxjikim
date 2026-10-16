@@ -12,6 +12,13 @@ build/
 # 사용자 업로드 파일
 **/uploads/
 
+# 기본 프로필 이미지만 공유하고 사용자 업로드 파일은 계속 제외한다.
+!/uploads/
+/uploads/*
+!/uploads/profile/
+/uploads/profile/*
+!/uploads/profile/default-profile.svg
+
 ### STS ###
 .apt_generated
 .classpath
