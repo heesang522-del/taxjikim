@@ -1,10 +1,10 @@
 ## 1. PR이란?
 
-PR(Pull Request)은 **개인 브랜치의 변경을 다른 브랜치에 합쳐 달라는 요청**이다.
+PR(Pull Request)은 **티켓별 PR 전용 브랜치의 변경을 다른 브랜치에 합쳐 달라는 요청**이다. 개발은 계속 개인 브랜치에서 하고, 제출할 티켓만 분리한다.
 
 | 단계 | 의미 |
 | --- | --- |
-| Push | 작업한 커밋을 GitHub의 개인 브랜치에 올린다. |
+| Push | 로컬 커밋을 GitHub의 해당 브랜치에 올린다. |
 | PR 생성 | 개인 브랜치의 변경을 `develop` 등에 합쳐 달라고 요청한다. |
 | 승인(Approve) | 검토자가 내용을 확인하고 반영해도 된다고 표시한다. |
 | Merge | 변경을 대상 브랜치에 실제로 합친다. |
@@ -21,24 +21,27 @@ PR(Pull Request)은 **개인 브랜치의 변경을 다른 브랜치에 합쳐 �
 
 ## 3. PR 생성 전 준비
 
-1. 해당 TJK 티켓의 작업을 완료하고 커밋한다.
-2. 최신 `develop`을 개인 브랜치에 반영한다.
-3. 충돌이 있으면 해결한다.
-4. 변경한 기능과 영향을 받는 기존 기능을 실행 확인한다.
-5. 개인 브랜치에 push한다.
+1. 개인 브랜치에서 해당 TJK 티켓의 작업을 완료하고 커밋한다.
+2. 최신 `origin/develop`에서 `pr/{개인명}/TJK-{번호}`를 생성한다.
+3. 해당 티켓 커밋만 선택해 반영한다. 개인 브랜치 전체를 merge하지 않는다.
+4. diff에서 다른 티켓의 변경이 없는지 확인하고, 분리한 브랜치에서 실행 확인한다.
+5. PR 전용 브랜치를 push한다.
 
-아래 `{개인명}`은 본인의 브랜치명으로 바꾼다. 진행 중인 변경을 커밋한 상태에서 실행한다.
+예시: 개인 브랜치 `feature/heesang`의 TJK-109 작업을 제출한다. 진행 중인 변경은 먼저 커밋하거나 보관한다.
 
 ```
-git switch feature/{개인명}
 git fetch origin
-git merge origin/develop
+git switch -c pr/heesang/TJK-109 origin/develop
 ```
 
-충돌 해결과 실행 확인을 마친 뒤 push한다.
+그다음 `git cherry-pick <해당 티켓 커밋 SHA>`로 필요한 커밋만 반영한다. 여러 커밋은 작성 순서대로 선택한다. 커밋에 다른 작업이 섞였다면 변경 부분을 분리해 커밋한다.
+
+diff 확인과 실행 확인을 마친 뒤 push한다.
 
 ```
-git push -u origin feature/{개인명}
+git diff --stat origin/develop...HEAD
+git diff origin/develop...HEAD
+git push -u origin pr/heesang/TJK-109
 ```
 
 `develop`과 `main`에 직접 push하지 않는다.
@@ -58,15 +61,15 @@ GitHub 저장소에서 다음 순서로 이동한다.
 | 항목 | 선택 | 의미 |
 | --- | --- | --- |
 | **base** | `develop` | 변경을 받을 브랜치 |
-| **compare** | `feature/{개인명}` | 작업한 변경이 있는 브랜치 |
+| **compare** | `pr/{개인명}/TJK-{번호}` | 해당 티켓 변경만 분리한 브랜치 |
 
 **예시**
 
 ```
-base: develop ← compare: feature/heesang
+base: develop ← compare: pr/heesang/TJK-109
 ```
 
-이 선택은 “feature/heesang의 변경을 develop에 합쳐 달라”는 뜻이다.
+이 선택은 “TJK-109의 변경만 develop에 합쳐 달라”는 뜻이다. 기존 `work/{개인명}/TJK-{번호}`로 제출한 PR은 이름을 바꾸지 않아도 된다.
 
 ### ③ 변경 내용 확인
 
@@ -195,7 +198,7 @@ PR 작성자는 자신의 PR을 승인할 수 없다.
 
 ### 수정 요청을 받았을 때
 
-해당 PR의 개인 브랜치에서 수정하고 커밋·push한다.
+해당 PR 전용 브랜치에서 수정하고 커밋·push한다. 리뷰 수정 커밋은 개인 브랜치에도 `cherry-pick` 등으로 반영해 두 브랜치의 작업 내용이 달라지지 않게 한다.
 
 - 수정 내용은 기존 PR에 자동으로 포함된다.
 - PR을 새로 만들 필요는 없다.
@@ -221,7 +224,7 @@ Merge 전에 다음 내용을 확인한다.
 
 **Squash and merge와 Rebase and merge는 사용하지 않는다.**
 
-개인 브랜치는 재사용하므로 **Delete branch를 누르지 않는다.**
+개인 `feature` 브랜치는 재사용하므로 삭제하지 않는다. PR 전용 브랜치는 통합 확인과 개인 브랜치 반영을 마친 뒤 형상관리자와 확인해 삭제한다.
 
 Merge 후에는 최신 `develop`에서 통합 결과를 확인한다. 문제가 없으면 티켓을 완료한다.
 
@@ -234,63 +237,36 @@ git pull --ff-only origin develop
 
 ## 9. PR 검토 중 다음 티켓 작업하기
 
-PR은 연결된 브랜치의 최신 변경을 따라간다. 같은 개인 브랜치에 다음 작업을 push하면 기존 PR에도 포함된다.
+**개발은 `feature/{개인명}`에서 계속하고, PR을 제출할 때만 `pr/{개인명}/TJK-{번호}` 브랜치로 해당 티켓의 변경을 분리한다.**
 
-따라서 검토 중 다음 티켓은 임시 브랜치에서 진행한다.
+예를 들어 김희상의 개인 브랜치가 `feature/khs`이고 제출할 티켓이 TJK-109라면 다음 순서로 진행한다.
 
-### 예시 상황
+1. `feature/khs`에서 TJK-109를 개발하고 티켓별로 커밋한다.
+2. 최신 `origin/develop`에서 `pr/khs/TJK-109` 브랜치를 만든다.
+3. TJK-109에 해당하는 변경만 옮겨 실행 확인 후 `pr/khs/TJK-109`를 push한다.
+4. `pr/khs/TJK-109` → `develop` PR을 생성한다.
+5. PR을 제출한 뒤에는 **`feature/khs`로 돌아가 다음 작업을 계속한다.**
 
-- 개인 브랜치: `feature/heesang`
-- 검토 중인 PR: TJK-2
-- 다음 작업: TJK-3
-- 임시 브랜치: `work/heesang/TJK-3`
-
-### ① 임시 브랜치 생성
-
-```
-git switch feature/heesang
-git switch -c work/heesang/TJK-3
-```
-
-### ② 다음 작업 진행
-
-TJK-3의 변경은 임시 브랜치에서 커밋·push한다.
+PR에는 `pr/khs/TJK-109`만 연결되므로 `feature/khs`에서 다른 티켓을 작업·push해도 기존 PR에는 추가되지 않는다.
 
 ```
-git push -u origin work/heesang/TJK-3
+git switch feature/khs
 ```
 
-기존 TJK-2 PR의 수정 요청은 `feature/heesang`에서 처리한다. 브랜치를 이동하기 전에는 진행 중인 변경을 커밋하는 등 정리한다.
+- 다음 작업도 `feature/khs`에서 티켓별로 커밋한다.
+- 다음 티켓이 TJK-101이라면 최신 `origin/develop`에서 **새 브랜치 `pr/khs/TJK-101`**을 만들어 해당 변경만 제출한다. 기존 `pr/khs/TJK-109`에 추가하지 않는다.
+- 다른 미반영 티켓이 선행 조건이면 PR 본문에 의존 관계를 적고 먼저 반영할 작업을 정한다.
+- TJK-109 리뷰 수정은 `pr/khs/TJK-109`에서 진행하고 수정 커밋을 `feature/khs`에도 반영한다.
 
-### ③ 기존 PR 반영 완료 후 개인 브랜치로 복귀
-
-**기존 PR의 승인·Merge·통합 확인이 끝난 뒤** 진행한다. 임시 브랜치의 작업은 먼저 커밋한다.
+PR merge·통합 확인 후에는 개인 브랜치에 최신 `develop`을 반영한다. 진행 중인 다른 작업은 먼저 커밋하거나 보관하며 reset으로 제거하지 않는다.
 
 ```
-git switch feature/heesang
+git switch feature/khs
 git fetch origin
 git merge origin/develop
-git merge work/heesang/TJK-3
 ```
 
-충돌이 발생하면 해결하고 관련 기능을 실행 확인한다. 이후 개인 브랜치에 push한다.
-
-```
-git push origin feature/heesang
-```
-
-### ④ 다음 PR 생성 및 임시 브랜치 정리
-
-`feature/heesang → develop` PR을 생성한다. TJK-3의 변경만 포함되는지 확인한다.
-
-임시 브랜치의 모든 변경이 개인 브랜치에 합쳐지고 확인되면, 형상관리자와 미반영 변경 여부를 확인한 뒤 정리한다.
-
-```
-git branch -d work/heesang/TJK-3
-git push origin --delete work/heesang/TJK-3
-```
-
-로컬 삭제가 거부되면 미반영 커밋을 확인한다. 강제 삭제하지 않는다.
+충돌이 발생하면 해당 담당자와 확인하고 기능을 검증한다. 개인 브랜치는 계속 유지하고, 완료된 PR 전용 브랜치는 형상관리자와 확인 후 정리한다. 로컬 브랜치 삭제가 거부되면 강제 삭제하지 않고 미반영 변경부터 확인한다.
 
 ## 10. main으로 보내는 PR
 
