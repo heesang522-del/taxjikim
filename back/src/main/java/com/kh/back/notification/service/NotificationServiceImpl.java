@@ -30,4 +30,10 @@ public class NotificationServiceImpl implements NotificationService {
     public long getUnreadCount(Long userId) {
         return notificationMapper.countUnreadByUserId(userId);
     }
+
+    @Override
+    @Transactional
+    public void markAllAsRead(Long userId) {
+        notificationMapper.markAllAsReadByUserId(userId);
+    }
 }
