@@ -1,5 +1,15 @@
 # API 초안
 
+## 로그인 실패 정책 (2026-10-16)
+
+- POST /auth/sessions: 1~5회 안내, 6회 30초·7회 1분·8회 3분·9회 5분 차단, 10회 LOCKED. 성공·관리자 해제 시만 초기화한다.
+- 실패 응답의 error.details는 failedAttempts, remainingAttempts, blockedUntil, serverTime, locked를 포함한다. 일시 차단은 429 / LOGIN_TEMPORARILY_BLOCKED다.
+- 별도 차단 상태 조회 API는 사용하지 않는다. 로그인 버튼 클릭 시 POST /auth/sessions 응답으로 차단 여부와 남은 시간을 확인한다.
+- GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED 목록, 최대 100개.
+- DELETE /admin/account-locks/{loginId}: ADMIN 전용 제한 해제, 기존 로그인 종료, 실패 기록 초기화.
+- POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
+- 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
+
 모든 함수는 `src/api/*.js`의 async 함수이며, 현재는 `src/mocks/*.json`을 300~800ms 지연 후 반환한다. 화면은 `useApi(함수)` 훅으로만 호출한다.
 
 | 함수 | 파일 | 사용 화면 | 응답 mock |
