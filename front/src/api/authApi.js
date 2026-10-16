@@ -41,3 +41,11 @@ export function logoutSession() {
     method: 'DELETE',
   });
 }
+
+export function getLockedAccounts() {
+  return requestAuth({ url: '/admin/account-locks' });
+}
+
+export function unlockAccount(loginId) {
+  return requestAuth({ url: `/admin/account-locks/${encodeURIComponent(loginId)}`, method: 'DELETE' });
+}

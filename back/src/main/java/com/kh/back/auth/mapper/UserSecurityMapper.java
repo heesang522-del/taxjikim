@@ -3,6 +3,8 @@ package com.kh.back.auth.mapper;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import com.kh.back.user.dto.UserDto;
+import com.kh.back.auth.dto.LockedAccountDto;
+import java.util.List;
 
 @Mapper
 public interface UserSecurityMapper {
@@ -18,4 +20,5 @@ public interface UserSecurityMapper {
     int unlockAccount(@Param("loginId") String loginId);
 
     UserDto findForAuthentication(@Param("loginId") String loginId);
+    List<LockedAccountDto> findLockedAccounts();
 }

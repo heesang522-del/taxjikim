@@ -29,4 +29,12 @@
         FOR UPDATE
     </select>
 
+    <select id="findLockedAccounts" resultType="com.kh.back.auth.dto.LockedAccountDto">
+        SELECT USER_ID AS userId, LOGIN_ID AS loginId, USER_STATUS AS userStatus
+        FROM users
+        WHERE USER_STATUS IN ('LOCKED', 'BANNED')
+        ORDER BY USER_ID DESC
+        LIMIT 100
+    </select>
+
 </mapper>

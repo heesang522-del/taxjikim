@@ -52,6 +52,7 @@ public class SecurityConfig {
                 .securityContext(context -> context.securityContextRepository(new NullSecurityContextRepository()))
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/api/v1/admin/account-locks", "/api/v1/admin/account-locks/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors
