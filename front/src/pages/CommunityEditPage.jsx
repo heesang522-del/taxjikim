@@ -24,7 +24,10 @@ export default function BoardEditPage() {
   if (!loggedIn) {
     return <NoticeCard title="로그인이 필요합니다" desc="글 수정은 로그인 후 이용할 수 있습니다." action={<Button variant="primary" to={ROUTES.auth}>로그인</Button>} />;
   }
-  if (post.deletedByAdmin || post.author !== user?.nickname) {
+  const mine = post.source === 'server'
+    ? String(post.userId) === String(user?.userId)
+    : post.author === user?.nickname;
+  if (post.deletedByAdmin || !mine) {
     return <NoticeCard title="수정할 수 없는 글입니다" desc="내가 쓴 글만 수정할 수 있습니다." action={<Button variant="primary" to={ROUTES.boardPost(post.id)}>글로 돌아가기</Button>} />;
   }
 
@@ -37,7 +40,8 @@ export default function BoardEditPage() {
   return (
     <PostForm
       heading="글 수정"
-      initial={{ tab: post.tab, title: post.title, body: post.body, files: post.files ?? [] }}
+      postId={post.source === 'server' ? post.id : undefined}
+      initial={{ tab: post.tab, title: post.title, body: post.body, files: post.attachments ?? post.files ?? [] }}
       submitLabel="수정 완료"
       onSubmit={submit}
       onCancel={() => navigate(ROUTES.boardPost(post.id))}

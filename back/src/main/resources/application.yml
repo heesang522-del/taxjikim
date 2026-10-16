@@ -7,8 +7,9 @@ spring:
   mail:
     host: smtp.gmail.com
     port: 587
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
+    # 메일 설정이 없어도 서버는 시작하고, 발송 요청 시 설정 여부를 확인한다.
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
     # Gmail 앱 비밀번호를 환경변수로 제공한다.
     properties:
       mail:
