@@ -237,21 +237,31 @@ git pull --ff-only origin develop
 
 ## 9. PR 검토 중 다음 티켓 작업하기
 
-PR 전용 브랜치만 PR에 연결되므로 개인 브랜치에서 다음 티켓을 계속 작업해도 기존 PR에는 포함되지 않는다.
+**개발은 `feature/{개인명}`에서 계속하고, PR을 제출할 때만 `pr/{개인명}/TJK-{번호}` 브랜치로 해당 티켓의 변경을 분리한다.**
+
+예를 들어 김희상의 개인 브랜치가 `feature/khs`이고 제출할 티켓이 TJK-109라면 다음 순서로 진행한다.
+
+1. `feature/khs`에서 TJK-109를 개발하고 티켓별로 커밋한다.
+2. 최신 `origin/develop`에서 `pr/khs/TJK-109` 브랜치를 만든다.
+3. TJK-109에 해당하는 변경만 옮겨 실행 확인 후 `pr/khs/TJK-109`를 push한다.
+4. `pr/khs/TJK-109` → `develop` PR을 생성한다.
+5. PR을 제출한 뒤에는 **`feature/khs`로 돌아가 다음 작업을 계속한다.**
+
+PR에는 `pr/khs/TJK-109`만 연결되므로 `feature/khs`에서 다른 티켓을 작업·push해도 기존 PR에는 추가되지 않는다.
 
 ```
-git switch feature/heesang
+git switch feature/khs
 ```
 
-- 다음 작업은 개인 브랜치에서 티켓별로 커밋한다.
-- 제출할 때 다시 최신 `origin/develop`에서 새 PR 전용 브랜치를 만들고 해당 티켓 변경만 반영한다.
+- 다음 작업도 `feature/khs`에서 티켓별로 커밋한다.
+- 다음 티켓이 TJK-101이라면 최신 `origin/develop`에서 **새 브랜치 `pr/khs/TJK-101`**을 만들어 해당 변경만 제출한다. 기존 `pr/khs/TJK-109`에 추가하지 않는다.
 - 다른 미반영 티켓이 선행 조건이면 PR 본문에 의존 관계를 적고 먼저 반영할 작업을 정한다.
-- 리뷰 수정은 해당 PR 전용 브랜치에서 진행하고 개인 브랜치에도 반영한다.
+- TJK-109 리뷰 수정은 `pr/khs/TJK-109`에서 진행하고 수정 커밋을 `feature/khs`에도 반영한다.
 
 PR merge·통합 확인 후에는 개인 브랜치에 최신 `develop`을 반영한다. 진행 중인 다른 작업은 먼저 커밋하거나 보관하며 reset으로 제거하지 않는다.
 
 ```
-git switch feature/heesang
+git switch feature/khs
 git fetch origin
 git merge origin/develop
 ```
