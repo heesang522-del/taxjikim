@@ -74,9 +74,6 @@ export default function PostDetail() {
       {/* 게시글 헤더 영역 */}
       <div className="border-b pb-4 mb-4">
         <span className="text-xs bg-blue-100 text-blue-800 font-semibold px-2.5 py-0.5 rounded">{post.boardType}</span>
-        {post.jobCategory && (
-          <span className="ml-2 text-xs bg-gray-100 text-gray-800 px-2.5 py-0.5 rounded">{post.jobCategory}</span>
-        )}
         <h1 className="text-2xl font-bold mt-2 text-gray-900">{post.title}</h1>
         <p className="text-sm text-gray-500 mt-1">작성일: {post.createdAt || post.createAt}</p>
       </div>

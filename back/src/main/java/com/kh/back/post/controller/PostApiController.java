@@ -94,7 +94,6 @@ public class PostApiController {
             @RequestParam("title") String title,
             @RequestParam("content") String content,
             @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
-            @RequestParam(value = "jobCategory", required = false) String jobCategory,
             @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
             @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
             @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
@@ -130,7 +129,6 @@ public class PostApiController {
             postDto.setTitle(title);
             postDto.setContent(content);
             postDto.setBoardType(boardType);
-            postDto.setJobCategory(jobCategory);
             postDto.setPublic(isPublic);
             postDto.setWriter(principal.getUserDto().getNickname());
 
@@ -153,7 +151,6 @@ public class PostApiController {
             @RequestParam("title") String title,
             @RequestParam("content") String content,
             @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
-            @RequestParam(value = "jobCategory", required = false) String jobCategory,
             @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
             @RequestParam(value = "deleteFileIds", required = false) List<Long> deleteFileIds,
             @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
@@ -188,7 +185,6 @@ public class PostApiController {
         postDto.setTitle(title);
         postDto.setContent(content);
         postDto.setBoardType(boardType);
-        postDto.setJobCategory(jobCategory);
         postDto.setPublic(isPublic);
 
         postService.updateWithFiles(postDto, deleteFileIds, savedFileNames);

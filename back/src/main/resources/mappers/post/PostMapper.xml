@@ -49,7 +49,6 @@
         ) VALUES (
             #{userId},
             #{boardType},
-            #{jobCategory},
             #{title},
             #{content},
             #{isPublic}

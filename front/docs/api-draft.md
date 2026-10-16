@@ -117,3 +117,8 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 검토 항목의 선택 필드 `description`, `category`, `transactionType`, `transactionDate`는 실제 추출된 값이 있을 때 입력 초기값으로 사용한다.
 - 누락 필드는 빈칸이며, 금액만 있는 후보도 업로드 직후 목록에 표시한다. 저장 전 후보는 계산에서 제외한다.
+
+## 게시판 직군 태그 제거 (2026-10-16)
+
+- 게시글 등록·수정 API는 jobCategory를 받거나 저장하지 않는다.
+- 게시글 수정 화면의 jobCategory 상태·전송과 상세 화면의 직군 태그 표시를 제거했다.
