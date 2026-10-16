@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.post.mapper.PostMapper">
+
+    <!-- 1. Post ResultMap (게시글 + 첨부파일 목록 매핑) -->
+    <resultMap id="PostResultMap" type="com.kh.back.post.dto.PostDto">
+        <id property="postId" column="POST_ID" />
+        <result property="userId" column="USER_ID" />
+        <result property="writer" column="WRITER" />
+        <result property="boardType" column="BOARD_TYPE" />
+        <result property="title" column="TITLE" />
+        <result property="content" column="CONTENT" />
+        <result property="isPublic" column="IS_PUBLIC" />
+        <result property="viewCount" column="VIEW_COUNT" />
+        <result property="createdAt" column="CREATED_AT" />
+        <result property="updatedAt" column="UPDATED_AT" />
+
+        <!-- 첨부파일 목록 연결 -->
+        <collection property="files"
+                    ofType="com.kh.back.post.dto.FileMetadataDto"
+                    javaType="java.util.List">
+            <id property="fileId" column="FILE_ID" />
+            <result property="postId" column="FILE_POST_ID" />
+            <result property="userId" column="FILE_USER_ID" />
+            <result property="originalFileName" column="ORIGINAL_FILE_NAME" />
+            <result property="storedFileName" column="STORED_FILE_NAME" />
+            <result property="filePath" column="FILE_PATH" />
+            <result property="fileSize" column="FILE_SIZE" />
+            <result property="fileExtension" column="FILE_EXTENSION" />
+            <result property="fileType" column="FILE_TYPE" />
+            <result property="createdAt" column="FILE_CREATED_AT" />
+            <result property="deletedAt" column="FILE_DELETED_AT" />
+        </collection>
+    </resultMap>
+
+    <!-- 2. 게시글 등록 (POSTS) - answerStatus 제외 -->
+    <insert id="save"
+            parameterType="com.kh.back.post.dto.PostDto"
+            useGeneratedKeys="true"
+            keyProperty="postId">
+        INSERT INTO POSTS (
+            USER_ID,
+            BOARD_TYPE,
+            TITLE,
+            CONTENT,
+            IS_PUBLIC
+        ) VALUES (
+            #{userId},
+            #{boardType},
+            #{title},
+            #{content},
+            #{isPublic}
+        )
+    </insert>
+
+    <!-- 3. 첨부파일 등록 (FILE_META) -->
+    <insert id="saveFileMeta"
+            parameterType="com.kh.back.post.dto.FileMetadataDto"
+            useGeneratedKeys="true"
+            keyProperty="fileId">
+        INSERT INTO FILE_META (
+            POST_ID,
+            USER_ID,
+            STORED_FILE_NAME,
+            FILE_PATH,
+            FILE_EXTENSION,
+            FILE_SIZE,
+            FILE_TYPE,
+            ORIGINAL_FILE_NAME
+        ) VALUES (
+            #{postId},
+            #{userId},
+            #{storedFileName},
+            #{filePath},
+            #{fileExtension},
+            #{fileSize},
+            #{fileType},
+            #{originalFileName}
+        )
+    </insert>
+
+    <!-- 작성자 표시명은 게시글의 회원 ID로 조회한다. 현재 접속자의 이름을 사용하지 않는다. -->
+    <sql id="postWriter">
+        COALESCE((SELECT CASE WHEN u.USER_STATUS = 'DELETED' THEN '탈퇴한 회원'
+            ELSE u.NICKNAME END FROM users u WHERE u.USER_ID = p.USER_ID), '알 수 없는 사용자') AS WRITER
+    </sql>
+
+    <!-- 4. 게시글 상세 조회 (첨부파일 목록 포함) -->
+    <select id="findById" resultMap="PostResultMap">
+        SELECT
+            p.POST_ID,
+            p.USER_ID,
+            <include refid="postWriter" />,
+            p.BOARD_TYPE,
+            p.TITLE,
+            p.CONTENT,
+            p.IS_PUBLIC,
+            p.VIEW_COUNT,
+            p.CREATED_AT,
+            p.UPDATED_AT,
+            p.DELETED_AT,
+            f.FILE_ID,
+            f.POST_ID AS FILE_POST_ID,
+            f.USER_ID AS FILE_USER_ID,
+            f.ORIGINAL_FILE_NAME,
+            f.STORED_FILE_NAME,
+            f.FILE_PATH,
+            f.FILE_SIZE,
+            f.FILE_EXTENSION,
+            f.FILE_TYPE,
+            f.CREATED_AT AS FILE_CREATED_AT,
+            f.DELETED_AT AS FILE_DELETED_AT
+        FROM POSTS p
+        LEFT JOIN FILE_META f ON p.POST_ID = f.POST_ID
+        WHERE p.POST_ID = #{postId}
+            AND p.DELETED_AT IS NULL
+    </select>
+
+    <!-- 삭제된 글은 기록을 보존하되 목록과 페이지 개수에서 제외한다. -->
+    <sql id="visiblePosts">
+        DELETED_AT IS NULL
+    </sql>
+
+    <sql id="searchPosts">
+        <if test="keyword != null and keyword != ''">
+            AND (TITLE LIKE CONCAT('%', #{keyword}, '%')
+                OR CONTENT LIKE CONCAT('%', #{keyword}, '%'))
+        </if>
+    </sql>
+
+    <sql id="postOrder">
+        <choose>
+            <when test="sort == 'popular'">VIEW_COUNT DESC, POST_ID DESC</when>
+            <otherwise>POST_ID DESC</otherwise>
+        </choose>
+    </sql>
+
+    <select id="findAll" resultType="com.kh.back.post.dto.PostDto">
+        SELECT p.*, <include refid="postWriter" /> FROM POSTS p
+        WHERE <include refid="visiblePosts" />
+        ORDER BY <include refid="postOrder" />
+    </select>
+
+    <select id="findPage" resultType="com.kh.back.post.dto.PostDto">
+        SELECT p.*, <include refid="postWriter" /> FROM POSTS p
+        WHERE <include refid="visiblePosts" />
+        <include refid="searchPosts" />
+        ORDER BY <include refid="postOrder" />
+        LIMIT #{size} OFFSET #{offset}
+    </select>
+
+    <select id="countAll" resultType="int">
+        SELECT COUNT(*) FROM POSTS
+        WHERE <include refid="visiblePosts" />
+        <include refid="searchPosts" />
+    </select>
+
+    <!-- 첨부 기록도 삭제하지 않으며, 삭제된 글의 첨부는 일반 조회에서 숨긴다. -->
+    <select id="findFilesByPostId" resultType="com.kh.back.post.dto.FileMetadataDto">
+        SELECT f.* FROM FILE_META f
+        INNER JOIN POSTS p ON p.POST_ID = f.POST_ID
+        WHERE f.POST_ID = #{postId}
+            AND p.DELETED_AT IS NULL
+            AND f.DELETED_AT IS NULL
+    </select>
+
+    <!-- 5. 게시글 수정 -->
+    <update id="update" parameterType="com.kh.back.post.dto.PostDto">
+        UPDATE POSTS
+        SET
+            TITLE = #{title},
+            CONTENT = #{content},
+            IS_PUBLIC = #{isPublic},
+            UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE POST_ID = #{postId}
+            AND DELETED_AT IS NULL
+    </update>
+
+    <!-- 6. 게시글 삭제 (소프트 딜리트) -->
+    <update id="deleteById">
+        UPDATE POSTS
+        SET
+            DELETED_AT = CURRENT_TIMESTAMP
+        WHERE POST_ID = #{postId}
+            AND DELETED_AT IS NULL
+    </update>
+
+</mapper>

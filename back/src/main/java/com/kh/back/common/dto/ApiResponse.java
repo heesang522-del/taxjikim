@@ -3,6 +3,8 @@ package com.kh.back.common.dto;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Map;
 
 /**
  * 모든 API 가 같은 모양으로 응답하기 위한 공통 봉투.
@@ -30,7 +32,11 @@ public class ApiResponse<T> {
 
     // 실패
     public static ApiResponse<Void> fail(String code, String message) {
-        return new ApiResponse<>(false, null, null, new ErrorInfo(code, message));
+        return fail(code, message, null);
+    }
+
+    public static ApiResponse<Void> fail(String code, String message, Map<String, String> fields) {
+        return new ApiResponse<>(false, null, null, new ErrorInfo(code, message, fields));
     }
 
     @Getter
@@ -38,5 +44,7 @@ public class ApiResponse<T> {
     public static class ErrorInfo {
         private final String code;    // 예: COMPANY_NOT_FOUND
         private final String message; // 사람이 읽는 설명
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private final Map<String, String> fields;
     }
 }

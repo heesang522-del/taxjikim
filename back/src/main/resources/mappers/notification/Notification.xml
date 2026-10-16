@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.notification.mapper.NotificationMapper">
+
+    <!-- 공지사항 게시글 업로드 시 활성 회원 전체에게 알림 생성 -->
+    <insert id="insertNoticeBroadcast">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, IS_READ)
+        SELECT USER_ID, 'NOTICE', 'POST', #{targetId}, #{title}, FALSE
+        FROM `users`
+        WHERE USER_STATUS = 'ACTIVE'
+    </insert>
+
+    <!-- 로그인한 회원의 알림 목록 조회 (최신순, 삭제되지 않은 알림만) -->
+    <select id="findByUserId" resultType="com.kh.back.notification.dto.NotificationDto">
+        SELECT
+            NOTIFICATION_ID AS notificationId,
+            USER_ID         AS userId,
+            TYPE            AS type,
+            TARGET_TYPE     AS targetType,
+            TARGET_ID       AS targetId,
+            TITLE           AS title,
+            IS_READ         AS isRead,
+            CREATED_AT      AS createdAt
+        FROM NOTIFICATIONS
+        WHERE USER_ID = #{userId}
+          AND DELETED_AT IS NULL
+        ORDER BY CREATED_AT DESC
+    </select>
+
+    <!-- 로그인한 회원의 미읽음 알림 수 조회 -->
+    <select id="countUnreadByUserId" resultType="long">
+        SELECT COUNT(*)
+        FROM NOTIFICATIONS
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </select>
+
+    <!--
+    로그인한 회원의 미읽음 알림을 전체 읽음 처리
+    알림이 열릴 때 동작
+         -->
+    <update id="markAllAsReadByUserId">
+        UPDATE NOTIFICATIONS
+        SET IS_READ = TRUE
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </update>
+
+</mapper>

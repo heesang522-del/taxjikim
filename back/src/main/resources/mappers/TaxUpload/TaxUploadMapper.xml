@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.TaxUpload.mapper.TaxMapper">
+
+    <insert id="insertPdfFile" useGeneratedKeys="true" keyProperty="fileId">
+        INSERT INTO FILE_META (USER_ID, STORED_FILE_NAME, FILE_PATH, FILE_EXTENSION, FILE_SIZE, FILE_TYPE, ORIGINAL_FILE_NAME)
+        VALUES (#{userId}, #{storedFileName}, #{filePath}, 'pdf', #{fileSize}, #{fileType}, #{originalFileName})
+    </insert>
+
+    <select id="findTaxInputIdByUserAndYear" resultType="java.lang.Long">
+        SELECT TAX_INPUT_ID
+        FROM TAX_INPUTS
+        WHERE USER_ID = #{userId} AND TAX_YEAR = #{taxYear}
+        LIMIT 1
+    </select>
+
+    <insert id="insertTaxInput" parameterType="java.util.Map" useGeneratedKeys="true" keyProperty="taxInputId">
+        INSERT INTO TAX_INPUTS (
+        USER_ID, TAX_YEAR, REGION, JOB, INCOME_TYPE, AUTO_WITHHOLDING, TOTAL_INCOME, TOTAL_EXPENSE, EXPECTED_TAX
+        )
+        VALUES (
+        #{userId}, #{taxYear}, #{region}, #{job}, #{incomeType}, #{autoWithholding}, #{totalIncome}, #{totalExpense}, #{expectedTax}
+        )
+    </insert>
+
+    <insert id="insertTaxTransactions" parameterType="java.util.List">
+        INSERT INTO TAX_TRANSACTIONS (
+        TAX_INPUT_ID, USER_ID, TRANSACTION_TYPE, TRANSACTION_DATE, DESCRIPTION, CATEGORY, AMOUNT, TAX_YEAR, IS_EDITED
+        )
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+            #{item.taxInputId}, #{item.userId}, #{item.transactionType}, #{item.transactionDate}, #{item.description}, #{item.category}, #{item.amount}, #{item.taxYear}, #{item.isEdited}
+            )
+        </foreach>
+    </insert>
+
+    <!-- 파일 행 잠금으로 같은 파일의 동시 승인 요청을 순서대로 처리한다. -->
+    <select id="lockOwnedPdf" resultType="java.lang.Long">
+        SELECT FILE_ID FROM FILE_META WHERE FILE_ID = #{fileId} AND USER_ID = #{userId}
+        AND DELETED_AT IS NULL AND FILE_TYPE IN ('TAX_LEDGER', 'TAX_EVIDENCE') FOR UPDATE
+    </select>
+    <select id="findReviewedTransaction" resultType="com.kh.back.TaxUpload.dto.TaxTransactionDto">
+        SELECT TRANSACTION_ID AS transactionId, TAX_INPUT_ID AS taxInputId, USER_ID AS userId,
+        TRANSACTION_TYPE AS transactionType, TRANSACTION_DATE AS transactionDate,
+        DESCRIPTION AS description, CATEGORY AS category, AMOUNT AS amount, TAX_YEAR AS taxYear,
+        IS_EDITED AS edited, SOURCE_FILE_ID AS sourceFileId, SOURCE_ITEM_INDEX AS sourceItemIndex
+        FROM TAX_TRANSACTIONS WHERE SOURCE_FILE_ID = #{fileId} AND SOURCE_ITEM_INDEX = #{itemIndex} AND USER_ID = #{userId}
+    </select>
+    <insert id="insertReviewedTransaction" useGeneratedKeys="true" keyProperty="transactionId">
+        INSERT INTO TAX_TRANSACTIONS (TAX_INPUT_ID, USER_ID, TRANSACTION_TYPE, TRANSACTION_DATE,
+        DESCRIPTION, CATEGORY, AMOUNT, TAX_YEAR, IS_EDITED, SOURCE_FILE_ID, SOURCE_ITEM_INDEX)
+        VALUES (#{taxInputId}, #{userId}, #{transactionType}, #{transactionDate}, #{description},
+        #{category}, #{amount}, #{taxYear}, TRUE, #{sourceFileId}, #{sourceItemIndex})
+    </insert>
+    <update id="updateReviewedTransaction">
+        UPDATE TAX_TRANSACTIONS SET TAX_INPUT_ID = #{taxInputId}, TAX_YEAR = #{taxYear},
+            TRANSACTION_TYPE = #{transactionType}, TRANSACTION_DATE = #{transactionDate},
+            DESCRIPTION = #{description}, CATEGORY = #{category}, AMOUNT = #{amount}, IS_EDITED = TRUE
+        WHERE TRANSACTION_ID = #{transactionId} AND USER_ID = #{userId}
+          AND SOURCE_FILE_ID = #{sourceFileId} AND SOURCE_ITEM_INDEX = #{sourceItemIndex}
+    </update>
+</mapper>

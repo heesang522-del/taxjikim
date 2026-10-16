@@ -1,20 +1,39 @@
 spring:
+  servlet:
+    multipart:
+      # 2MB 청크와 multipart 필드·경계 데이터까지 받을 수 있게 여유를 둔다.
+      max-file-size: 6MB
+      max-request-size: 7MB
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    # 메일 설정이 없어도 서버는 시작하고, 발송 요청 시 설정 여부를 확인한다.
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    # Gmail 앱 비밀번호를 환경변수로 제공한다.
+    properties:
+      mail:
+        smtp:
+          auth: true
+          connectiontimeout: 5000
+          timeout: 5000
+          starttls:
+            enable: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+
   datasource:
-    url: jdbc:mysql://${DB_HOST:192.168.10.16}:3306/TAXJIKIM?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    url: ${DB_URL:jdbc:mysql://192.168.10.16:3306/TAXJIKIM?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: ${DB_USERNAME:server}
     password: ${DB_PASSWORD:server}
     driver-class-name: com.mysql.cj.jdbc.Driver
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQLDialect
 
 # 서버 포트 (React 의 vite.config.js API_TARGET 과 같아야 한다)
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 mybatis:
   # Mapper XML 위치
@@ -30,15 +49,18 @@ logging:
   level:
     com.kh.back: debug
 
-# 🌟 S3Config에서 참조하는 AWS S3 설정 추가
-aws:
-  s3:
-    bucket: your-bucket-name
-    access-key: "YOUR_AWS_ACCESS_KEY"
-    secret-key: "YOUR_AWS_SECRET_KEY"
-    region: ap-northeast-2
 
-# 🌟 파일 업로드 디렉토리 설정 추가
-file:
-  upload-dir:
-    post: "C:/uploads/post"
+
+# 회원 정리·휴면 처리 주기. 실제 실행에는 @EnableScheduling이 필요하다.
+# 별도 zone 지정이 없으므로 JVM의 시간대를 기준으로 실행한다.
+custom:
+  cron: "0 0 3 * * *"
+
+jwt:
+  secret: my-temporary-secret-key-for-jwt-authentication-demo-project-2026-safe
+  access-token-expiration: 1800000 # 30분, 밀리초
+  refresh-token-expiration: 1209600000 # 14일, 밀리초
+
+  file:
+    upload-dir:
+      post: C:/TAXJIKIM/back/uploads/posts

@@ -1,15 +1,17 @@
 package com.kh.back.post.controller;
 
+import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.common.exception.ApiException;
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.service.PostService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,6 +19,11 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/posts")
 public class PostApiController {
+
+    // 임시 청크가 저장될 폴더 경로
+    private final String TEMP_DIR = "C:/uploads/temp/";
+    // 최종 병합된 파일이 저장될 폴더 경로
+    private final String UPLOAD_DIR = "C:/uploads/files/";
 
     private final PostService postService;
 
@@ -45,18 +52,21 @@ public class PostApiController {
         result.put("totalPages", totalPages);
         result.put("hasNext", page < totalPages);
 
-        return ApiResponse.ok(result); // success -> ok 로 변경
+        return ApiResponse.ok(result);
     }
 
     /**
      * 2. 대용량 파일 청크 업로드 API
      */
     @PostMapping("/upload-chunk")
-    public ResponseEntity<Map<String, Object>> uploadChunk(ChunkDto dto) {
+    public ResponseEntity<Map<String, Object>> uploadChunk(
+            @AuthenticationPrincipal CustomUserDetails principal, ChunkDto dto) {
+        requireUserId(principal);
         Map<String, Object> response = new HashMap<>();
 
         try {
             String savedFileName = postService.processChunkUpload(dto);
+
             boolean completed = (savedFileName != null);
 
             Map<String, Object> data = new HashMap<>();
@@ -80,26 +90,47 @@ public class PostApiController {
      */
     @PostMapping(consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
     public ResponseEntity<?> createPost(
+            @AuthenticationPrincipal CustomUserDetails principal,
             @RequestParam("title") String title,
-            @RequestParam(value = "place", required = false) String place,
             @RequestParam("content") String content,
-            @RequestParam(value = "transportCost", defaultValue = "0") Long transportCost,
-            @RequestParam(value = "foodCost", defaultValue = "0") Long foodCost,
-            @RequestParam(value = "otherCost", defaultValue = "0") Long otherCost,
+            @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
+            @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
             @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
             @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
     ) {
+        // 인증된 작성자가 없으면 저장하지 않고 공통 예외 처리기로 401 응답을 전달한다.
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+
         try {
-            List<String> savedFileNames = parseSavedFileNames(savedFileNamesJson, savedFileNamesAlt);
+            String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank()) ? savedFileNamesJson : savedFileNamesAlt;
+
+            List<String> savedFileNames = new java.util.ArrayList<>();
+            if (jsonStr != null && !jsonStr.isBlank() && !jsonStr.equals("[]")) {
+                String cleaned = jsonStr.trim();
+                if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+                    cleaned = cleaned.substring(1, cleaned.length() - 1);
+                }
+                if (!cleaned.isBlank()) {
+                    String[] parts = cleaned.split(",");
+                    for (String part : parts) {
+                        String fileName = part.trim().replaceAll("^\"|\"$", "");
+                        if (!fileName.isEmpty()) {
+                            savedFileNames.add(fileName);
+                        }
+                    }
+                }
+            }
 
             PostDto postDto = new PostDto();
+            // 작성자 ID는 클라이언트 입력 대신 서버가 확인한 로그인 정보에서 가져온다.
+            postDto.setUserId(principal.getUserId());
             postDto.setTitle(title);
-            postDto.setPlace(place);
             postDto.setContent(content);
-            postDto.setTransportCost(transportCost);
-            postDto.setFoodCost(foodCost);
-            postDto.setOtherCost(otherCost);
-            postDto.setWriter("익명");
+            postDto.setBoardType(boardType);
+            postDto.setPublic(isPublic);
+            postDto.setWriter(principal.getUserDto().getNickname());
 
             postService.saveWithFiles(postDto, savedFileNames);
 
@@ -115,63 +146,67 @@ public class PostApiController {
      */
     @PostMapping(value = {"/{postId}", "/{postId}/update"}, consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
     public ApiResponse<Void> updatePost(
+            @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable Long postId,
             @RequestParam("title") String title,
-            @RequestParam(value = "place", required = false) String place,
             @RequestParam("content") String content,
-            @RequestParam(value = "transportCost", defaultValue = "0") Long transportCost,
-            @RequestParam(value = "foodCost", defaultValue = "0") Long foodCost,
-            @RequestParam(value = "otherCost", defaultValue = "0") Long otherCost,
-            @RequestParam(value = "deleteImageIds", required = false) List<Long> deleteImageIds,
+            @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
+            @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
+            @RequestParam(value = "deleteFileIds", required = false) List<Long> deleteFileIds,
             @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
             @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
     ) throws IOException {
 
-        List<String> savedFileNames = parseSavedFileNames(savedFileNamesJson, savedFileNamesAlt);
+        Long userId = requireUserId(principal);
+        postService.requireAuthor(postId, userId);
 
-        PostDto postDto = new PostDto();
-        postDto.setPostId(postId);
-        postDto.setTitle(title);
-        postDto.setPlace(place);
-        postDto.setContent(content);
-        postDto.setTransportCost(transportCost);
-        postDto.setFoodCost(foodCost);
-        postDto.setOtherCost(otherCost);
+        String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank()) ? savedFileNamesJson : savedFileNamesAlt;
 
-        postService.updateWithFiles(postDto, deleteImageIds, savedFileNames);
-        return ApiResponse.ok(null); // success -> ok 로 변경
-    }
-
-    // 등록과 수정에서 같은 파일명 처리 규칙을 사용한다.
-    private List<String> parseSavedFileNames(String savedFileNamesJson, String savedFileNamesAlt) {
-        String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank())
-                ? savedFileNamesJson : savedFileNamesAlt;
-        List<String> savedFileNames = new ArrayList<>();
-        if (jsonStr == null || jsonStr.isBlank() || jsonStr.equals("[]")) {
-            return savedFileNames;
-        }
-
-        String cleaned = jsonStr.trim();
-        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
-            cleaned = cleaned.substring(1, cleaned.length() - 1);
-        }
-        if (!cleaned.isBlank()) {
-            for (String part : cleaned.split(",")) {
-                String fileName = part.trim().replaceAll("^\"|\"$", "");
-                if (!fileName.isEmpty()) {
-                    savedFileNames.add(fileName);
+        List<String> savedFileNames = new java.util.ArrayList<>();
+        if (jsonStr != null && !jsonStr.isBlank() && !jsonStr.equals("[]")) {
+            String cleaned = jsonStr.trim();
+            if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
+                cleaned = cleaned.substring(1, cleaned.length() - 1);
+            }
+            if (!cleaned.isBlank()) {
+                String[] parts = cleaned.split(",");
+                for (String part : parts) {
+                    String fileName = part.trim().replaceAll("^\"|\"$", "");
+                    if (!fileName.isEmpty()) {
+                        savedFileNames.add(fileName);
+                    }
                 }
             }
         }
-        return savedFileNames;
+
+        PostDto postDto = new PostDto();
+        postDto.setPostId(postId);
+        postDto.setUserId(userId);
+        postDto.setTitle(title);
+        postDto.setContent(content);
+        postDto.setBoardType(boardType);
+        postDto.setPublic(isPublic);
+
+        postService.updateWithFiles(postDto, deleteFileIds, savedFileNames);
+        return ApiResponse.ok(null);
     }
 
     /**
      * 5. 게시글 삭제 API
      */
     @DeleteMapping("/{postId}")
-    public ApiResponse<Void> deletePost(@PathVariable Long postId) {
+    public ApiResponse<Void> deletePost(
+            @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long postId) {
+        postService.requireAuthor(postId, requireUserId(principal));
         postService.deleteById(postId);
-        return ApiResponse.ok(null); // success -> ok 로 변경
+        return ApiResponse.ok(null);
+    }
+
+    private Long requireUserId(CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+        return principal.getUserId();
     }
 }
+

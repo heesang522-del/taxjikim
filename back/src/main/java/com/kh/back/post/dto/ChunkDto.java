@@ -1,9 +1,10 @@
 package com.kh.back.post.dto;
 
-
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.web.multipart.MultipartFile;
-
-
+@Getter
+@Setter
 public class ChunkDto {
     private MultipartFile file;
     private String uploadId; // 추가
