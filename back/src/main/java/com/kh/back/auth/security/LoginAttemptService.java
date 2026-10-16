@@ -1,12 +1,9 @@
 package com.kh.back.auth.security;
 
-// 인증 보조 업무의 호출 규격과 구현을 분리한다.
+import com.kh.back.auth.dto.LoginAttemptDto;
+
 public interface LoginAttemptService {
+    LoginAttemptDto getAttempt(String loginId);
+    LoginAttemptDto loginFailed(String loginId);
     void loginSucceeded(String loginId);
-
-    int loginFailed(String loginId);
-
-    void setBlockTime(String loginId, long minutes);
-
-    long getRemainingBlockMinutes(String loginId);
 }

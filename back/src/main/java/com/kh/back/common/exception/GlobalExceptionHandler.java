@@ -16,6 +16,7 @@ import org.springframework.web.multipart.support.MissingServletRequestPartExcept
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.validation.BindException;
 import org.springframework.security.core.AuthenticationException;
+import com.kh.back.auth.security.LoginFailureException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mail.MailException;
 import java.util.LinkedHashMap;
@@ -76,6 +77,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<Void>> handleAuthentication(AuthenticationException e) {
+        if (e instanceof LoginFailureException failure) {
+            HttpStatus status = "LOGIN_TEMPORARILY_BLOCKED".equals(failure.getCode())
+                    ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED;
+            return ResponseEntity.status(status).body(ApiResponse.fail(failure.getCode(),
+                    failure.getMessage(), null, failure.getDetails()));
+        }
         String code = e.getMessage() == null ? "AUTHENTICATION_FAILED" : e.getMessage();
         String message = switch (code) {
             case "DORMANT" -> "휴면 계정입니다. 재활성화가 필요합니다.";

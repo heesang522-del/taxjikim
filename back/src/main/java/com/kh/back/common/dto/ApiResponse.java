@@ -36,7 +36,11 @@ public class ApiResponse<T> {
     }
 
     public static ApiResponse<Void> fail(String code, String message, Map<String, String> fields) {
-        return new ApiResponse<>(false, null, null, new ErrorInfo(code, message, fields));
+        return fail(code, message, fields, null);
+    }
+
+    public static ApiResponse<Void> fail(String code, String message, Map<String, String> fields, Object details) {
+        return new ApiResponse<>(false, null, null, new ErrorInfo(code, message, fields, details));
     }
 
     @Getter
@@ -46,5 +50,7 @@ public class ApiResponse<T> {
         private final String message; // 사람이 읽는 설명
         @JsonInclude(JsonInclude.Include.NON_NULL)
         private final Map<String, String> fields;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private final Object details;
     }
 }
