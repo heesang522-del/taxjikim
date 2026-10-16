@@ -2,7 +2,7 @@
 'use no memo';
 
 import { useEffect } from 'react';
-import { beatPresence, clearPresence, PRESENCE_BEAT, syncAccountsFromStorage, useAuth } from '../../store/useAuthStore';
+import { beatPresence, clearPresence, PRESENCE_BEAT, useAuth } from '../../store/useAuthStore';
 import { syncBoardFromStorage } from '../../store/useBoardStore';
 import { syncInquiryFromStorage } from '../../store/useInquiryStore';
 import { syncChatFromStorage, useChatStore } from '../../store/useChatStore';
@@ -12,10 +12,9 @@ import { syncChatFromStorage, useChatStore } from '../../store/useChatStore';
 export default function StoreSync() {
   const { user } = useAuth();
 
-  // 다른 탭에서 계정·글·댓글·문의·채팅이 바뀌면 목록을 다시 읽는다
+  // 인증 정보는 메모리로만 관리하고, 기존 게시글·문의·채팅의 탭 동기화는 유지한다.
   useEffect(() => {
     const handleStorage = (e) => {
-      syncAccountsFromStorage(e.key);
       syncBoardFromStorage(e.key);
       syncInquiryFromStorage(e.key);
       syncChatFromStorage(e.key);
