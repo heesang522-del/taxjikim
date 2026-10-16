@@ -59,7 +59,9 @@ public class PostApiController {
      * 2. 대용량 파일 청크 업로드 API
      */
     @PostMapping("/upload-chunk")
-    public ResponseEntity<Map<String, Object>> uploadChunk(ChunkDto dto) {
+    public ResponseEntity<Map<String, Object>> uploadChunk(
+            @AuthenticationPrincipal CustomUserDetails principal, ChunkDto dto) {
+        requireUserId(principal);
         Map<String, Object> response = new HashMap<>();
 
         try {
@@ -130,7 +132,7 @@ public class PostApiController {
             postDto.setBoardType(boardType);
             postDto.setJobCategory(jobCategory);
             postDto.setPublic(isPublic);
-            postDto.setWriter("익명");
+            postDto.setWriter(principal.getUserDto().getNickname());
 
             postService.saveWithFiles(postDto, savedFileNames);
 
@@ -146,6 +148,7 @@ public class PostApiController {
      */
     @PostMapping(value = {"/{postId}", "/{postId}/update"}, consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
     public ApiResponse<Void> updatePost(
+            @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable Long postId,
             @RequestParam("title") String title,
             @RequestParam("content") String content,
@@ -156,6 +159,9 @@ public class PostApiController {
             @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
             @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
     ) throws IOException {
+
+        Long userId = requireUserId(principal);
+        postService.requireAuthor(postId, userId);
 
         String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank()) ? savedFileNamesJson : savedFileNamesAlt;
 
@@ -178,6 +184,7 @@ public class PostApiController {
 
         PostDto postDto = new PostDto();
         postDto.setPostId(postId);
+        postDto.setUserId(userId);
         postDto.setTitle(title);
         postDto.setContent(content);
         postDto.setBoardType(boardType);
@@ -192,9 +199,18 @@ public class PostApiController {
      * 5. 게시글 삭제 API
      */
     @DeleteMapping("/{postId}")
-    public ApiResponse<Void> deletePost(@PathVariable Long postId) {
+    public ApiResponse<Void> deletePost(
+            @AuthenticationPrincipal CustomUserDetails principal, @PathVariable Long postId) {
+        postService.requireAuthor(postId, requireUserId(principal));
         postService.deleteById(postId);
         return ApiResponse.ok(null);
+    }
+
+    private Long requireUserId(CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+        return principal.getUserId();
     }
 }
 

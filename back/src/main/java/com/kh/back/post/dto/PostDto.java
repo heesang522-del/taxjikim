@@ -14,15 +14,10 @@ public class PostDto {
 
     // 🌟 DB 스키마(POSTS)에 맞춘 필수 필드 추가
     private String boardType;    // INFO / TIP / NOTICE / FAQ / QNA
-    private String jobCategory;  // 직군 태그
     private boolean isPublic = true; // QNA 전용 공개 여부 (기본값 true)
 
     private String title;
     private String content;
-    private String place;
-    private Long transportCost;
-    private Long foodCost;
-    private Long otherCost;
     private int viewCount;
     private String answerStatus;
 

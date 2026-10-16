@@ -39,3 +39,6 @@
 *.log
 *.log.*
 **/logs/
+
+# 다운로드 파일
+workers
