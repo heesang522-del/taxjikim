@@ -16,7 +16,7 @@ async function requestAuth(config) {
       detail?.message ??
         (cause.response
           ? '서버 오류가 발생했습니다.'
-        : cause.isAxiosError
+          : cause.isAxiosError
             ? '서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'
             : cause.message)
     );
@@ -29,10 +29,9 @@ export function loginSession(loginId, password) {
   return requestAuth({ url: '/auth/sessions', method: 'POST', data: { loginId, password, rememberMe: false } });
 }
 
-export function logoutSession(accessToken) {
+export function logoutSession() {
   return requestAuth({
     url: '/auth/sessions/current',
     method: 'DELETE',
-    headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
   });
 }

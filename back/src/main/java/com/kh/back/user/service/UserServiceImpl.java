@@ -4,6 +4,8 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.service.EmailVerificationService;
 import com.kh.back.common.util.FileUtil;
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.validation.InputValidator;
+import com.kh.back.common.validation.PasswordValidator;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +66,16 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void joinUser(UserDto userDto, MultipartFile profileFile) {
+        InputValidator.requireText("loginId", userDto.getLoginId());
+        InputValidator.requireText("password", userDto.getPassword());
+        InputValidator.requireText("name", userDto.getName());
+        InputValidator.requireText("nickname", userDto.getNickname());
+        InputValidator.requireText("email", userDto.getEmail());
+        InputValidator.requireMaxLength("loginId", userDto.getLoginId(), 50);
+        InputValidator.requireMaxLength("name", userDto.getName(), 50);
+        InputValidator.requireMaxLength("nickname", userDto.getNickname(), 50);
+        InputValidator.requireMaxLength("email", userDto.getEmail(), 255);
+        PasswordValidator.validate("password", userDto.getPassword());
         // 이메일 인증 완료 여부 확인
         validateEmailVerification(userDto.getEmail());
         userDto.setPassword(
@@ -100,6 +112,8 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void updateNickname(String loginId, String nickname) {
+        InputValidator.requireText("nickname", nickname);
+        InputValidator.requireMaxLength("nickname", nickname, 50);
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
         updateDto.setNickname(nickname);
@@ -110,16 +124,23 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void updateEmail(String loginId, String email) {
+        InputValidator.requireText("email", email);
+        InputValidator.requireMaxLength("email", email, 255);
+        // 계정 찾기에 사용하는 이메일은 새 주소 인증이 완료된 경우에만 변경한다.
+        validateEmailVerification(email);
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
         updateDto.setEmail(email);
         userMapper.updateUserFields(updateDto);
         refreshSecurityContext(loginId);
+        emailVerificationService.removeVerification(email);
     }
 
     @Transactional
     @Override
     public void updatePasswordInSettings(String loginId, String currentPassword, String newPassword) {
+        InputValidator.requireText("currentPassword", currentPassword);
+        PasswordValidator.validate("newPassword", newPassword);
         UserDto user = userMapper.findByLoginId(loginId);
         if (user == null || !passwordEncoder.matches(currentPassword, user.getPassword())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CURRENT_PASSWORD_INVALID", "현재 비밀번호가 올바르지 않습니다.");

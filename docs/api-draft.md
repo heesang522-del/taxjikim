@@ -22,6 +22,10 @@
 | POST | `/api/v1/auth/dormancy-recoveries` | JSON `loginId`, `email`, `code` |
 | POST | `/api/v1/auth/deletion-recoveries` | JSON `loginId`, `email`, `code` |
 | POST | `/api/v1/auth/account-unlocks` | JSON `token` |
+| POST | `/api/v1/auth/account-lookups/email-verifications` | JSON `name`, `email` |
+| POST | `/api/v1/auth/account-lookups` | JSON `name`, `email`, `code`; data는 로그인 아이디 |
+| POST | `/api/v1/auth/password-resets/email-verifications` | JSON `loginId`, `email` |
+| POST | `/api/v1/auth/password-resets` | JSON `loginId`, `email`, `newPassword` |
 | POST | `/api/v1/email-verifications` | JSON `email` |
 | PATCH | `/api/v1/email-verifications` | JSON `email`, `code` |
 
@@ -49,11 +53,11 @@
 ```
 
 자동 로그인 선택·토큰 만료 시간·쿠키 Secure 설정·Redis 세션 교체 규칙은 기존 설정과 로직을 유지한다.
-현재 React 로그인은 `rememberMe: false`로 요청한다. 성공 응답의 토큰과 회원 번호·아이디·권한을 같은 탭의 sessionStorage에 저장한다.
+현재 React 로그인은 `rememberMe: false`로 요청한다. 성공 응답의 토큰과 회원 번호·아이디·권한은 현재 페이지 메모리에만 보관한다. 세션 스토리지 저장·복원은 제거했으며 새로고침 시 GET /users/me로 기존 JWT 쿠키 인증 상태를 확인해 화면을 복원한다.
 React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 브라우저 인증 상태를 비운다. 명시적인 Bearer가 있으면 그 세션을 우선 처리하고, 현재 Redis sid와 일치하는 경우에만 종료한다.
 회원 조회는 실제 테이블 `users`를 사용하고 삭제된 `DELETED_AT`을 조회하지 않는다. 탈퇴·복구 SQL의 후속 정리는 별도 작업이다.
 계정 복구는 기존에 추가한 이메일·상태·탈퇴 기간 검사와 SQL 조건을 유지한다.
-아이디 찾기·비밀번호 재설정 서비스와 메일 링크의 화면 연결은 이번 컨벤션 정리에서 새로 구현하지 않는다.
+아이디 찾기·비밀번호 재설정은 2026-10-15에 기존 서비스를 호출하는 API와 화면을 연결했다. 비밀번호 재설정 성공 시 기존 Redis 로그인 세션을 종료한다. 잠금 해제 메일 링크 연결은 후속 작업이다.
 
 ## 회원
 
@@ -71,6 +75,10 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 | DELETE | `/api/v1/users/me` | JSON `currentPassword` |
 
 회원 고유 번호는 `userId`, 로그인 아이디는 `loginId`이다. 가입 성공의 `data`는 생성된 회원 고유 번호이다.
+회원가입은 이름·닉네임·로그인 아이디·비밀번호·이메일을 전송하며 생년월일은 선택이다. 프로필 이미지가 있으면 multipart 필드 `profile`로 전송한다. 삭제한 전화번호·직군·신고 알림 컬럼은 전송하지 않는다.
+인증번호는 현재 서버 메모리 캐시에서 5분, 인증 완료 기록은 10분간 유지된다. 브라우저에서 인증번호를 생성하거나 응답에 노출하지 않는다.
+이메일 변경은 새 이메일의 서버 인증 완료 기록이 필요하며 성공한 뒤 해당 기록을 소비한다.
+탈퇴는 현재 비밀번호 확인 후 users 행을 즉시 삭제하고 로그인 세션과 인증 쿠키를 정리한다. 연결된 FK가 삭제를 막으면 409 오류를 반환한다. FK의 삭제 정책과 구 탈퇴 복구·스케줄러 정리는 후속 작업이다.
 중복 검사 `data`는 중복이면 `true`, 사용 가능하면 `false`이다.
 기존 `/user` 폼·JSP 컨트롤러 처리를 JSON API로 옮겼다. 신규 React 화면은 만들지 않는다.
 
@@ -110,3 +118,7 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 
 로컬의 Git 제외 테스트로 API 경로·응답·오류·날짜 형식과 기존 계정 복구 조건을 검증한다.
 실제 SMTP·S3 발송 및 게시글·파일 DB 동작은 이번 검증 범위에서 제외한다.
+# 새 비밀번호 입력 조건 (2026-10-15)
+
+- 회원가입의 password, 회원정보 변경·비밀번호 재설정의 newPassword는 8~20자, 공백 금지, 영문·숫자·특수문자(!@#$%^&*) 각각 하나 이상 포함 조건을 공통 적용한다.
+- 위반 시 400 VALIDATION_ERROR와 해당 필드의 error.fields를 반환한다. 로그인·현재 비밀번호 대조에는 적용하지 않는다.

@@ -18,6 +18,7 @@ import com.kh.back.auth.security.LoginAttemptService;
 import com.kh.back.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import com.kh.back.common.validation.InputValidator;
+import com.kh.back.common.validation.PasswordValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -194,7 +195,7 @@ public class AuthServiceImpl implements AuthService {
     public void resetPassword(String loginId, String email, String newPassword) {
         InputValidator.requireText("loginId", loginId);
         InputValidator.requireText("email", email);
-        InputValidator.requireText("newPassword", newPassword);
+        PasswordValidator.validate("newPassword", newPassword);
         // 인증한 이메일이 비밀번호를 바꾸려는 계정에 등록된 이메일인지 확인한다.
         UserDto user = userMapper.findByLoginId(loginId);
         if (user == null || !email.equals(user.getEmail())) {
@@ -209,6 +210,8 @@ public class AuthServiceImpl implements AuthService {
             throw new ApiException(HttpStatus.CONFLICT, "PASSWORD_RESET_CONFLICT", "계정 정보가 변경되었습니다. 다시 확인해주세요.");
         }
 
+        // 계정 찾기로 비밀번호를 재설정하면 기존 로그인도 종료한다.
+        loginSessionRepository.revokeCurrentSession(user.getUserId());
         // 실제 변경 성공 후에만 인증 완료 기록을 소비한다.
         emailVerificationService.removeVerification(email);
     }

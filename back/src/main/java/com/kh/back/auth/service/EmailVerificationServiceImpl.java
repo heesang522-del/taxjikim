@@ -2,7 +2,7 @@ package com.kh.back.auth.service;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -13,10 +13,16 @@ import org.springframework.http.HttpStatus;
 import com.kh.back.common.validation.InputValidator;
 
 @Service
-@RequiredArgsConstructor
 public class EmailVerificationServiceImpl implements EmailVerificationService {
 
     private final JavaMailSender mailSender;
+    private final String senderEmail;
+
+    public EmailVerificationServiceImpl(JavaMailSender mailSender,
+                                        @Value("${spring.mail.username}") String senderEmail) {
+        this.mailSender = mailSender;
+        this.senderEmail = senderEmail;
+    }
 
     /* [수정] DB Repository 삭제 후 Caffeine In-Memory Cache 객체 생성
      * - verificationCodes: (이메일 -> 인증번호) 저장 (유효기간: 5분)
@@ -47,9 +53,18 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
         // 이메일 발송
         SimpleMailMessage message = new SimpleMailMessage();
+        // 실제 발신 주소는 기존 메일 계정을 사용하고, 수신자에게 서비스 이름을 함께 표시한다.
+        message.setFrom("TaxJiKim <" + senderEmail + ">");
         message.setTo(email);
-        message.setSubject("[example.demo] 이메일 인증번호 안내");
-        message.setText("안녕하세요.\n요청하신 인증번호는 [" + authCode + "] 입니다.\n5분 이내에 입력해주세요.");
+        message.setSubject("[TaxJiKim] 이메일 인증번호 안내");
+        message.setText("""
+                TaxJiKim 이메일 인증번호입니다.
+
+                %s
+
+                인증번호는 발송 후 5분간 유효합니다.
+                직접 요청하지 않았다면 이 메일을 무시해주세요.
+                """.formatted(authCode));
 
         mailSender.send(message);
     }

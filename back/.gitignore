@@ -43,4 +43,5 @@ out/
 /src/test/
 
 # 로컬 SQL 자료는 Git에 올리지 않는다.
+/sql/schema.sql
 /local/
