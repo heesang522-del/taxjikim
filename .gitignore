@@ -39,3 +39,83 @@
 *.log
 *.log.*
 **/logs/
+
+
+import
+
+# 프론트엔드 전용 제외 규칙 (기존 front/.gitignore)
+/front/**/node_modules
+/front/**/dist
+/front/**/dist-ssr
+/front/**/*.local
+
+# Editor directories and files
+/front/**/*.suo
+/front/**/*.ntvs*
+/front/**/*.njsproj
+/front/**/*.sln
+/front/**/*.sw?
+
+# 로컬 이전 백업과 npm 캐시는 저장소에 올리지 않는다.
+/front/**/migration-backup/
+/front/**/.npm-cache/
+
+# 백엔드 전용 제외 규칙 (기존 back/.gitignore)
+/back/**/HELP.md
+/back/**/.gradle
+/back/**/build/
+!/back/gradle/wrapper/gradle-wrapper.jar
+!/back/**/src/main/**/build/
+!/back/**/src/test/**/build/
+
+# Maven 빌드 결과와 Java 컴파일 파일
+/back/**/target/
+/back/**/*.class
+
+# 사용자 업로드 파일
+/back/**/uploads/
+
+### STS ###
+/back/**/.apt_generated
+/back/**/.classpath
+/back/**/.factorypath
+/back/**/.project
+/back/**/.settings
+/back/**/.springBeans
+/back/**/.sts4-cache
+/back/**/bin/
+!/back/**/src/main/**/bin/
+!/back/**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+/back/**/out/
+!/back/**/src/main/**/out/
+!/back/**/src/test/**/out/
+
+### NetBeans ###
+/back/nbproject/private/
+/back/nbbuild/
+/back/dist/
+/back/nbdist/
+/back/.nb-gradle/
+
+# 개인 JWT 서명 키 (Git에 올리지 않는다)
+/back/config/jwt-secret.properties
+
+# 테스트 소스는 로컬에서만 관리한다.
+/back/src/test/
+
+# 로컬 SQL 자료는 Git에 올리지 않는다.
+/back/sql/schema.sql
+/back/local/
+
+# 사용자 업로드는 제외하고 기본 프로필 SVG만 공유한다.
+/uploads/*
+!/uploads/profile/
+/uploads/profile/*
+!/uploads/profile/default-profile.svg
+!/back/uploads/
+/back/uploads/*
+!/back/uploads/profile/
+/back/uploads/profile/*
+!/back/uploads/profile/default-profile.svg
