@@ -7,7 +7,8 @@
     <!-- 1. 계정 잠금 처리 (USER_STATUS -> 'LOCKED') -->
     <update id="lockAccount">
         UPDATE `users`
-        SET USER_STATUS = 'LOCKED'
+        SET USER_STATUS = 'LOCKED',
+            UPDATED_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
           AND USER_STATUS = 'ACTIVE'
     </update>
@@ -15,7 +16,8 @@
     <!-- 2. 관리자 해제. 휴면 등 다른 상태를 임의로 활성화하지 않는다. -->
     <update id="unlockAccount">
         UPDATE `users`
-        SET USER_STATUS = 'ACTIVE'
+        SET USER_STATUS = 'ACTIVE',
+            UPDATED_AT = NOW()
         WHERE LOGIN_ID = #{loginId}
           AND USER_STATUS IN ('LOCKED', 'BANNED')
     </update>
@@ -30,7 +32,8 @@
     </select>
 
     <select id="findLockedAccounts" resultType="com.kh.back.auth.dto.LockedAccountDto">
-        SELECT USER_ID AS userId, LOGIN_ID AS loginId, USER_STATUS AS userStatus
+        SELECT USER_ID AS userId, LOGIN_ID AS loginId, USER_STATUS AS userStatus,
+               UPDATED_AT AS updatedAt
         FROM users
         WHERE USER_STATUS IN ('LOCKED', 'BANNED')
         ORDER BY USER_ID DESC

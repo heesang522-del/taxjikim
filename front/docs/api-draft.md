@@ -1,5 +1,9 @@
 # API 초안
 
+## 관리자 제한 계정 시각 (2026-10-16)
+
+- GET /admin/account-locks 응답에 updatedAt을 추가한다. users.UPDATED_AT을 한국 시간대가 포함된 ISO 8601 문자열로 전달한다.
+
 ## 로그인 실패 정책 (2026-10-16)
 
 - POST /auth/sessions: 1~5회 안내, 6회 30초·7회 1분·8회 3분·9회 5분 차단, 10회 LOCKED. 성공·관리자 해제 시만 초기화한다.
