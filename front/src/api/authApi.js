@@ -21,6 +21,7 @@ async function requestAuth(config) {
             : cause.message)
     );
     error.code = detail?.code ?? cause.code;
+    error.details = detail?.details ?? cause.details;
     throw error;
   }
 }

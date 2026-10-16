@@ -7,13 +7,8 @@ import { loginSession, logoutSession } from '../api/authApi.js';
 import { getMyProfile } from '../api/userApi.js';
 
 const ACCOUNTS_KEY = 'taxlab.accounts.v1';
-const LOCK_KEY = 'taxlab.login-lock.v1';
 const PRESENCE_KEY = 'taxlab.presence.v1';
 
-/** 로그인 실패를 허용하는 횟수. 이 횟수를 넘겨 실패하면(6번째 실패) 잠긴다. */
-export const MAX_LOGIN_FAILS = 5;
-/** 잠금 시간(초). 잠금이 풀린 뒤 또 실패할 때마다 다음 단계로 늘어난다. 마지막(5분) 잠금이 풀린 뒤에도 실패하면 계정이 이용 정지된다. */
-export const LOCK_STEPS = [30, 60, 180, 300];
 /** 접속 중으로 보는 시간(ms). 로그인한 탭이 이 주기로 접속 표시를 갱신한다. */
 const PRESENCE_TTL = 45_000;
 export const PRESENCE_BEAT = 15_000;
@@ -95,17 +90,6 @@ export const useAuthStore = create((set, get) => {
     sessionBlocked: false,
     clearSessionBlocked: () => set({ sessionBlocked: false }),
 
-    /** 잠금 상태 확인. 잠겨 있으면 남은 초를 돌려준다. */
-    lockLeft: (id) => {
-      const rec = readJson(LOCK_KEY, {})[id];
-      return rec && rec.until > Date.now() ? Math.ceil((rec.until - Date.now()) / 1000) : 0;
-    },
-    /** 가장 긴(마지막) 잠금 단계인지. 이 잠금이 풀린 뒤 또 실패하면 계정이 정지되므로 미리 알릴 때 쓴다. */
-    lockIsFinal: (id) => {
-      const rec = readJson(LOCK_KEY, {})[id];
-      return Boolean(rec) && rec.level >= LOCK_STEPS.length;
-    },
-
     // 새로고침 시 브라우저가 보내는 HttpOnly 쿠키로 서버에 인증 여부를 확인한다.
     checkAuth: () => {
       if (initialRequest) return initialRequest;
@@ -146,6 +130,7 @@ export const useAuthStore = create((set, get) => {
           reason: error.code === 'BANNED' ? 'suspended' : 'error',
           message: error.message,
           code: error.code,
+          details: error.details,
         };
       }
     },
@@ -176,20 +161,15 @@ export const useAuthStore = create((set, get) => {
       }
     },
 
-    /** 관리자가 계정을 정지·해제한다. 정상으로 되돌리면 로그인 실패 횟수와 잠금 단계도 초기화한다. */
+    /** MOCK: 예시 회원 목록의 표시 상태만 변경한다. 실제 계정 해제는 관리자 API를 사용한다. */
     setAccountStatus: (id, status) => {
       mutateAccounts((list) =>
         list.map((a) => {
           if (a.id !== id) return a;
-          const { suspendedBy, ...rest } = a;
+          const { suspendedBy: _suspendedBy, ...rest } = a;
           return status === '정지' ? { ...rest, status, suspendedBy: 'admin' } : { ...rest, status };
         })
       );
-      if (status === '정상') {
-        const locks = readJson(LOCK_KEY, {});
-        delete locks[id];
-        writeJson(LOCK_KEY, locks);
-      }
     },
 
     /** 이미 쓰고 있는 값이면 어떤 항목인지 돌려준다 ('id' | 'nickname' | 'email'). */
@@ -212,9 +192,6 @@ export const useAuthStore = create((set, get) => {
 
     resetPassword: (id, pw) => {
       mutateAccounts((list) => list.map((a) => (a.id === id.trim() ? { ...a, pw } : a)));
-      const locks = readJson(LOCK_KEY, {});
-      delete locks[id.trim()];
-      writeJson(LOCK_KEY, locks);
     },
   };
 });
