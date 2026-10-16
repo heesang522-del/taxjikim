@@ -2,10 +2,10 @@ import { client } from './client.js';
 
 async function requestComments(postId, config = {}) {
   try {
-    // 댓글도 공통 client를 사용하며 인증 쿠키는 브라우저가 자동으로 보낸다.
+    // baseURL에 /api가 있으므로 요청 경로에는 중복해서 붙이지 않는다. 인증은 쿠키를 사용한다.
     const response = await client.request({
       baseURL: '/api',
-      url: `/api/posts/${encodeURIComponent(postId)}/comments`,
+      url: `/posts/${encodeURIComponent(postId)}/comments`,
       ...config,
     });
     if (!response.data?.success) throw new Error('댓글 요청에 실패했습니다.');
@@ -35,7 +35,7 @@ export function createComment(postId, content) {
 
 export function deleteComment(postId, commentId) {
   return requestComments(postId, {
-    url: `/api/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+    url: `/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
     method: 'DELETE',
   });
 }
