@@ -72,9 +72,6 @@ import
 /back/**/target/
 /back/**/*.class
 
-# 사용자 업로드 파일
-/back/**/uploads/
-
 ### STS ###
 /back/**/.apt_generated
 /back/**/.classpath
@@ -110,10 +107,7 @@ import
 /back/local/
 
 # 사용자 업로드는 제외하고 기본 프로필 SVG만 공유한다.
-/uploads/*
-!/uploads/profile/
-/uploads/profile/*
-!/uploads/profile/default-profile.svg
+**/uploads/
 !/back/uploads/
 /back/uploads/*
 !/back/uploads/profile/
