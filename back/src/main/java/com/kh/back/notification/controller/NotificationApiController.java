@@ -32,4 +32,14 @@ public class NotificationApiController {
         return ApiResponse.ok(notificationService.getNotifications(principal.getUserId()));
     }
 
+    //로그인한 회원의 미읍음 알림 수 조회
+    @GetMapping("/unread-count")
+    public ApiResponse<Long> getUnreadCount(@AuthenticationPrincipal CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+
+        return ApiResponse.ok(notificationService.getUnreadCount(principal.getUserId()));
+    }
+
 }

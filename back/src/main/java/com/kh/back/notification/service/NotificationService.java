@@ -11,4 +11,7 @@ public interface NotificationService {
 
     // 로그인한 회원의 알림 목록 조회
     List<NotificationDto> getNotifications(Long userId);
+
+    // 로그인한 회원의 미읍음 알림 수 조회
+    long getUnreadCount(Long userId);
 }

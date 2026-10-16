@@ -29,4 +29,13 @@
         ORDER BY CREATED_AT DESC
     </select>
 
+    <!-- 로그인한 회원의 미읍음 알림 수 조회 -->
+    <select id="countUnreadByUserId" resultType="long">
+        SELECT COUNT(*)
+        FROM NOTIFICATIONS
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </select>
+
 </mapper>
