@@ -17,11 +17,14 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
 
     private final JavaMailSender mailSender;
     private final String senderEmail;
+    private final String senderPassword;
 
     public EmailVerificationServiceImpl(JavaMailSender mailSender,
-                                        @Value("${spring.mail.username}") String senderEmail) {
+                                        @Value("${spring.mail.username:}") String senderEmail,
+                                        @Value("${spring.mail.password:}") String senderPassword) {
         this.mailSender = mailSender;
         this.senderEmail = senderEmail;
+        this.senderPassword = senderPassword;
     }
 
     /* [수정] DB Repository 삭제 후 Caffeine In-Memory Cache 객체 생성
@@ -46,10 +49,12 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     @Override
     public void sendVerificationCode(String email) {
         InputValidator.requireText("email", email);
+        // 메일 계정이 없는 개발 환경에서도 서버는 실행하되, 발송 요청은 명확히 실패시킨다.
+        if (senderEmail.isBlank() || senderPassword.isBlank()) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MAIL_UNAVAILABLE",
+                    "메일 발송 설정이 준비되지 않았습니다. 관리자에게 문의해주세요.");
+        }
         String authCode = createAuthCode();
-
-        /* [수정] DB 저장 대신 Caffeine Cache 메모리에 저장 (자동으로 5분 후 만료됨) */
-        verificationCodes.put(email, authCode);
 
         // 이메일 발송
         SimpleMailMessage message = new SimpleMailMessage();
@@ -67,6 +72,8 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
                 """.formatted(authCode));
 
         mailSender.send(message);
+        // 실제 발송에 성공한 인증번호만 저장하고, 이 시점부터 유효시간을 계산한다.
+        verificationCodes.put(email, authCode);
     }
 
     // 인증번호 검증 처리 (DB 관련 @Transactional 제거)
