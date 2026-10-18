@@ -2,6 +2,7 @@ package com.kh.back.post.service;
 
 import com.kh.back.common.dto.PageMeta;
 import com.kh.back.common.validation.PostValidator;
+import com.kh.back.notification.service.NotificationService;
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.FileMetadataDto;
 import com.kh.back.post.dto.PostDto;
@@ -26,15 +27,19 @@ public class PostServiceImpl implements PostService {
 
     private final PostMapper postMapper;
     private final PostValidator postValidator;
+    private final NotificationService notificationService;
 
     private static final String WEB_PREFIX = "/uploads/post";
+    private static final String NOTICE_BOARD_TYPE = "NOTICE";
 
     public PostServiceImpl(
             PostMapper postMapper,
-            PostValidator postValidator
+            PostValidator postValidator,
+            NotificationService notificationService
     ) {
         this.postMapper = postMapper;
         this.postValidator = postValidator;
+        this.notificationService = notificationService;
     }
 
     /**
@@ -166,6 +171,11 @@ public class PostServiceImpl implements PostService {
 
                 postMapper.saveFileMeta(fileDto);
             }
+        }
+
+        // 공지사항 게시글이면 전체 활성 회원에게 알림을 발송한다.
+        if (NOTICE_BOARD_TYPE.equalsIgnoreCase(postDto.getBoardType())) {
+            notificationService.broadcastNoticePost(postId, postDto.getTitle());
         }
     }
 
