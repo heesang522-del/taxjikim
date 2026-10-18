@@ -21,7 +21,7 @@ public class CommentService {
     private final NotificationService notificationService;
 
     // 댓글 알림을 보낼 게시판 종류. 공지(NOTICE)는 업로드 시 전체 알림이 따로 있어 제외한다.
-    private static final Set<String> COMMENT_NOTIFY_BOARD_TYPES = Set.of("INFO", "TIP");
+    private static final Set<String> COMMENT_NOTIFY_BOARD_TYPES = Set.of("INFO", "TIP", "QNA");
 
     public List<CommentDto> findByPostId(Long postId) {
         requirePost(postId);
