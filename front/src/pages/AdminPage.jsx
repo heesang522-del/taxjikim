@@ -10,9 +10,9 @@ import { useToast } from '../store/useToastStore';
 import { useBoard } from '../store/useBoardStore';
 import { useInquiry } from '../store/useInquiryStore';
 import { useReports } from '../utils/useReports';
-import { useMembers } from '../utils/useMembers';
 import { useFaq } from '../utils/useFaq';
 import { useChat } from '../store/useChatStore';
+import { AccountLockManagement } from '../components/admin/AccountLockManagement';
 
 const ADMIN_TABS = [['usage', '모델·처리 현황'], ['members', '회원·게시판 관리'], ['support', '고객 지원']];
 const StatCard = ({ title, data }) => <Card title={title}>{data.map(([l, v]) => <HBar key={l} label={l} value={v} display={`${v}%`} scale={2} />)}</Card>;
@@ -117,7 +117,6 @@ export default function AdminPage() {
   const { posts, updatePost } = useBoard();
   const { inquiries } = useInquiry();
   const { reports } = useReports();
-  const { members, toggleStatus } = useMembers();
   const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
   const { waitingCount } = useChat();
 
@@ -199,19 +198,7 @@ export default function AdminPage() {
             <StatCard title="소득 구간별" data={ADMIN_STATS.income} />
             <StatCard title="지역별" data={ADMIN_STATS.region} />
           </div>
-          <Card title="회원 관리" icon="users" aside={<Pill tone="neutral">{members.length}명</Pill>}>
-            <DataTable columns={[
-              { key: 'n', header: '닉네임', render: (m) => m.nickname },
-              { key: 'e', header: '이메일', render: (m) => m.email },
-              { key: 'd', header: '가입일', render: (m) => m.joinedAt },
-              { key: 's', header: '상태', align: 'right', render: (m) => <Pill tone={m.status === '정상' ? 'success' : 'danger'}>{m.status}</Pill> },
-              { key: 'a', header: '', align: 'right', render: (m) => (
-                <Button size="sm" variant={m.status === '정상' ? 'danger' : 'soft'} onClick={() => { toggleStatus(m.id); toast(m.status === '정상' ? '이용을 정지했습니다' : '이용 정지를 해제했습니다'); }}>
-                  {m.status === '정상' ? '이용 정지' : '정지 해제'}
-                </Button>
-              ) },
-            ]} rows={members} rowKey={(m) => m.id} />
-          </Card>
+          <AccountLockManagement />
           <Card title="신고 접수" icon="shieldAlert" aside={<Pill tone="danger">{reportsPending}건 대기</Pill>}>
             <DataTable columns={[
               { key: 't', header: '유형', render: (r) => <Pill>{r.targetType === 'post' ? '게시글' : '댓글'}</Pill> },
