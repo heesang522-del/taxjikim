@@ -2,6 +2,7 @@ package com.kh.back.chat.mapper;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatRoomSummaryDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -36,4 +37,16 @@ public interface ChatMapper {
 
     // 방 삭제. CHAT_ROOMS/CHAT_MESSAGES에는 DELETED_AT이 없어 소프트 삭제가 아닌 실제 삭제다.
     int deleteRoomById(@Param("roomId") Long roomId);
+
+    // 관리자용: 상태별 상담방 목록 (닉네임·첫 메시지 포함)
+    List<ChatRoomSummaryDto> findRoomsByStatus(@Param("status") String status);
+
+    // 대기 상담방 수 (관리자 대시보드)
+    long countWaitingRooms();
+
+    // 입장(claim). STATUS가 WAITING일 때만 성공 — 동시 입장 방지용 조건부 UPDATE
+    int claimRoom(@Param("roomId") Long roomId, @Param("adminId") Long adminId);
+
+    // 상담 종료. 담당 관리자 본인의 IN_PROGRESS 방일 때만 성공
+    int closeRoom(@Param("roomId") Long roomId, @Param("adminId") Long adminId);
 }

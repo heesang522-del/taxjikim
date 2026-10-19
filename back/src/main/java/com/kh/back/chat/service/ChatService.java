@@ -2,6 +2,7 @@ package com.kh.back.chat.service;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatRoomSummaryDto;
 
 import java.util.List;
 
@@ -24,4 +25,19 @@ public interface ChatService {
 
     // 본인 방에서 상대방이 보낸 안 읽은 메시지 수 조회
     long getUnreadCount(Long roomId, Long requesterId);
+
+    // 관리자용: 상태별(WAITING/IN_PROGRESS/CLOSED) 상담방 목록
+    List<ChatRoomSummaryDto> getRoomsByStatus(String status);
+
+    // 관리자용: 대기 상담방 수 (대시보드)
+    long getWaitingCount();
+
+    // 관리자 입장. 대기 방일 때만 성공하고, 담당 관리자로 기록된다
+    ChatRoomDto enterRoom(Long roomId, Long adminId);
+
+    // 상담 종료. 담당 관리자 본인의 진행중 방일 때만 성공
+    void closeRoom(Long roomId, Long adminId);
+
+    // 담당 관리자 본인 방의 메시지 목록 조회
+    List<ChatMessageDto> getMessagesForAdmin(Long roomId, Long adminId);
 }
