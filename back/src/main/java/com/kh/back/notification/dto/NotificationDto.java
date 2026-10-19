@@ -16,6 +16,7 @@ public class NotificationDto {
     private String targetType;  // 알림이 가리키는 대상 종류, 예: POST
     private Long targetId;      // 대상 ID (공지사항 게시글 ID)
     private String title;       // 제목
+    private String message;     // 본문 (예: 댓글 알림의 "닉네임: 내용 미리보기")
     private boolean isRead;      // 읽음 여부 (Y/N)
     private LocalDateTime createdAt;
     private LocalDateTime deletedAt;
