@@ -1,5 +1,11 @@
 # API 초안
 
+## TJK-109 관리자 계정 잠금 해제
+
+- GET /admin/account-locks: ADMIN 전용 실제 BANNED·LOCKED 목록, 최대 100개. userId·loginId·userStatus·updatedAt을 반환한다.
+- updatedAt은 한국 시간대가 포함된 ISO 8601 문자열이다.
+- DELETE /admin/account-locks/{loginId}: ADMIN 전용 해제. ACTIVE로 변경하고 기존 로그인 세션·실패 기록을 초기화한다.
+
 모든 함수는 `src/api/*.js`의 async 함수이며, 현재는 `src/mocks/*.json`을 300~800ms 지연 후 반환한다. 화면은 `useApi(함수)` 훅으로만 호출한다.
 
 | 함수 | 파일 | 사용 화면 | 응답 mock |
