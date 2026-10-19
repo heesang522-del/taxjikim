@@ -73,4 +73,49 @@
         WHERE ROOM_ID = #{roomId}
     </delete>
 
+    <!-- 관리자용 상태별 목록. 대기는 오래 기다린 순, 진행중/종료는 최신순으로 보여준다. -->
+    <select id="findRoomsByStatus" resultType="com.kh.back.chat.dto.ChatRoomSummaryDto">
+        SELECT
+            cr.ROOM_ID,
+            cr.USER_ID,
+            u.NICKNAME,
+            cr.ADMIN_ID,
+            cr.STATUS,
+            cr.CREATED_AT,
+            cr.CLOSED_AT,
+            (SELECT m.CONTENT FROM CHAT_MESSAGES m
+                WHERE m.ROOM_ID = cr.ROOM_ID
+                ORDER BY m.CREATED_AT ASC
+                LIMIT 1) AS FIRST_MESSAGE
+        FROM CHAT_ROOMS cr
+        INNER JOIN USERS u ON u.USER_ID = cr.USER_ID
+        WHERE cr.STATUS = #{status}
+        <choose>
+            <when test="status == 'WAITING'">ORDER BY cr.CREATED_AT ASC</when>
+            <otherwise>ORDER BY cr.CREATED_AT DESC</otherwise>
+        </choose>
+    </select>
+
+    <!-- 대기 상담방 수 (관리자 대시보드) -->
+    <select id="countWaitingRooms" resultType="long">
+        SELECT COUNT(*) FROM CHAT_ROOMS WHERE STATUS = 'WAITING'
+    </select>
+
+    <!-- 동시 입장 방지: STATUS가 WAITING일 때만 1행이 바뀐다. 두 관리자가 거의 동시에 호출해도 DB가 행 단위로 직렬화해 한쪽만 성공한다. -->
+    <update id="claimRoom">
+        UPDATE CHAT_ROOMS
+        SET ADMIN_ID = #{adminId}, STATUS = 'IN_PROGRESS'
+        WHERE ROOM_ID = #{roomId}
+          AND STATUS = 'WAITING'
+    </update>
+
+    <!-- 담당 관리자 본인의 IN_PROGRESS 방만 종료할 수 있다. -->
+    <update id="closeRoom">
+        UPDATE CHAT_ROOMS
+        SET STATUS = 'CLOSED', CLOSED_AT = CURRENT_TIMESTAMP
+        WHERE ROOM_ID = #{roomId}
+          AND ADMIN_ID = #{adminId}
+          AND STATUS = 'IN_PROGRESS'
+    </update>
+
 </mapper>
