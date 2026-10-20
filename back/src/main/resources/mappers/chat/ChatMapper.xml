@@ -118,4 +118,15 @@
           AND STATUS = 'IN_PROGRESS'
     </update>
 
+    <!-- 담당 관리자가 진행중으로 맡고 있는 모든 방의 안 읽은 메시지 수 합계 (대시보드) -->
+    <select id="countUnreadForAdmin" resultType="long">
+        SELECT COUNT(*)
+        FROM CHAT_MESSAGES m
+        INNER JOIN CHAT_ROOMS r ON r.ROOM_ID = m.ROOM_ID
+        WHERE r.ADMIN_ID = #{adminId}
+          AND r.STATUS = 'IN_PROGRESS'
+          AND m.SENDER_ID != #{adminId}
+          AND m.IS_READ = FALSE
+    </select>
+
 </mapper>

@@ -124,11 +124,26 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public List<ChatMessageDto> getMessagesForAdmin(Long roomId, Long adminId) {
-        ChatRoomDto room = requireRoom(roomId);
-        if (!adminId.equals(room.getAdminId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "담당 관리자만 조회할 수 있습니다.");
-        }
+        requireAdminRoom(roomId, adminId);
         return chatMapper.findMessagesByRoomId(roomId);
+    }
+
+    @Override
+    @Transactional
+    public void markAsReadForAdmin(Long roomId, Long adminId) {
+        requireAdminRoom(roomId, adminId);
+        chatMapper.markMessagesAsRead(roomId, adminId);
+    }
+
+    @Override
+    public long getUnreadCountForAdmin(Long roomId, Long adminId) {
+        requireAdminRoom(roomId, adminId);
+        return chatMapper.countUnreadByRoomId(roomId, adminId);
+    }
+
+    @Override
+    public long getTotalUnreadCountForAdmin(Long adminId) {
+        return chatMapper.countUnreadForAdmin(adminId);
     }
 
     private ChatRoomDto requireRoom(Long roomId) {
@@ -144,6 +159,15 @@ public class ChatServiceImpl implements ChatService {
         ChatRoomDto room = requireRoom(roomId);
         if (!requesterId.equals(room.getUserId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "본인 상담방만 조회할 수 있습니다.");
+        }
+        return room;
+    }
+
+    // 관리자 전용 API용 소유자 검증. 담당 관리자 본인의 방인지 확인한다.
+    private ChatRoomDto requireAdminRoom(Long roomId, Long adminId) {
+        ChatRoomDto room = requireRoom(roomId);
+        if (!adminId.equals(room.getAdminId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "담당 관리자만 조회할 수 있습니다.");
         }
         return room;
     }
