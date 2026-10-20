@@ -14,7 +14,7 @@ public class ChatRoomSummaryDto {
     private Long roomId;
     private Long userId;
     private String nickname;      // 상담 요청 회원 닉네임
-    private String firstMessage;  // 첫 메시지 미리보기
+    private String lastMessage;   // 가장 최근 메시지 미리보기
     private Long adminId;
     private String status;
     private LocalDateTime createdAt;

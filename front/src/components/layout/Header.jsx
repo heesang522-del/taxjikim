@@ -7,14 +7,12 @@ import { NAV_ITEMS, ROUTES } from '../../utils/routes';
 import { useAuth } from '../../store/useAuthStore';
 import { useToast } from '../../store/useToastStore';
 import { useNotifications } from '../../utils/useNotifications';
-import { useChat } from '../../store/useChatStore';
 import { Button, Icon, Modal, Pill } from '../common/index';
 
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
   const { items, unreadCount, markAllRead } = useNotifications();
-  const { setOpen: openChat } = useChat();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -108,32 +106,14 @@ export function Header() {
         <Modal title="알림" onClose={() => setNotifOpen(false)}>
           <div className="grid" style={{ gap: 8, minWidth: 280, maxWidth: 360 }}>
             {items.length ? (
-              items.map((n) =>
-                n.action === 'chat' ? (
-                  <button
-                    key={n.id}
-                    type="button"
-                    className="notif-item"
-                    style={{ textAlign: 'left', width: '100%', background: 'none', border: 0, cursor: 'pointer' }}
-                    onClick={() => {
-                      setNotifOpen(false);
-                      openChat(true);
-                    }}
-                  >
-                    <p style={{ fontWeight: 600 }}>{n.title}</p>
-                    <p className="small muted">
-                      {n.desc} · {n.createdAt}
-                    </p>
-                  </button>
-                ) : (
-                  <Link key={n.id} to={n.to} className="notif-item" onClick={() => setNotifOpen(false)}>
-                    <p style={{ fontWeight: 600 }}>{n.title}</p>
-                    <p className="small muted">
-                      {n.desc} · {n.createdAt}
-                    </p>
-                  </Link>
-                )
-              )
+              items.map((n) => (
+                <Link key={n.id} to={n.to} className="notif-item" onClick={() => setNotifOpen(false)}>
+                  <p style={{ fontWeight: 600 }}>{n.title}</p>
+                  <p className="small muted">
+                    {n.desc} · {n.createdAt}
+                  </p>
+                </Link>
+              ))
             ) : (
               <p className="state-msg">새 알림이 없습니다</p>
             )}

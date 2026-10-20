@@ -92,8 +92,8 @@
             cr.CLOSED_AT,
             (SELECT m.CONTENT FROM CHAT_MESSAGES m
                 WHERE m.ROOM_ID = cr.ROOM_ID
-                ORDER BY m.CREATED_AT ASC
-                LIMIT 1) AS FIRST_MESSAGE
+                ORDER BY m.CREATED_AT DESC
+                LIMIT 1) AS LAST_MESSAGE
         FROM CHAT_ROOMS cr
         INNER JOIN USERS u ON u.USER_ID = cr.USER_ID
         WHERE cr.STATUS = #{status}
@@ -101,6 +101,25 @@
             <when test="status == 'WAITING'">ORDER BY cr.CREATED_AT ASC</when>
             <otherwise>ORDER BY cr.CREATED_AT DESC</otherwise>
         </choose>
+    </select>
+
+    <!-- 방 단건 요약 조회. 새로고침 후 관리자 화면에서 선택했던 방을 복원할 때 쓴다(상태 무관). -->
+    <select id="findRoomSummaryById" resultType="com.kh.back.chat.dto.ChatRoomSummaryDto">
+        SELECT
+            cr.ROOM_ID,
+            cr.USER_ID,
+            u.NICKNAME,
+            cr.ADMIN_ID,
+            cr.STATUS,
+            cr.CREATED_AT,
+            cr.CLOSED_AT,
+            (SELECT m.CONTENT FROM CHAT_MESSAGES m
+                WHERE m.ROOM_ID = cr.ROOM_ID
+                ORDER BY m.CREATED_AT DESC
+                LIMIT 1) AS LAST_MESSAGE
+        FROM CHAT_ROOMS cr
+        INNER JOIN USERS u ON u.USER_ID = cr.USER_ID
+        WHERE cr.ROOM_ID = #{roomId}
     </select>
 
     <!-- 대기 상담방 수 (관리자 대시보드) -->
