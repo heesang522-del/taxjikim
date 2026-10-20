@@ -17,6 +17,7 @@ import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.validation.BindException;
 import org.springframework.security.core.AuthenticationException;
 import com.kh.back.auth.security.LoginFailureException;
+import com.kh.back.auth.dto.LoginAttemptDto;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.mail.MailException;
 import java.util.LinkedHashMap;
@@ -77,24 +78,33 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiResponse<Void>> handleAuthentication(AuthenticationException e) {
+        // 예외에서는 실패 사유와 기록만 받고, 사용자 안내 문구는 여기서 만든다.
+        String code;
+        LoginAttemptDto details = null;
         if (e instanceof LoginFailureException failure) {
-            HttpStatus status = "LOGIN_TEMPORARILY_BLOCKED".equals(failure.getCode())
-                    ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED;
-            return ResponseEntity.status(status).body(ApiResponse.fail(failure.getCode(),
-                    failure.getMessage(), null, failure.getDetails()));
+            code = failure.getCode();
+            details = failure.getDetails();
+        } else {
+            code = e.getMessage() == null ? "AUTHENTICATION_FAILED" : e.getMessage();
+            if (!java.util.Set.of("DORMANT", "LOCKED", "BANNED", "SESSION_REPLACED").contains(code)) {
+                code = "AUTHENTICATION_FAILED";
+            }
         }
-        String code = e.getMessage() == null ? "AUTHENTICATION_FAILED" : e.getMessage();
         String message = switch (code) {
             case "DORMANT" -> "휴면 계정입니다. 재활성화가 필요합니다.";
-            case "LOCKED" -> "계정이 잠겼습니다.";
+            case "LOCKED" -> "로그인 실패로 계정이 잠겼습니다. 관리자에게 문의하세요.";
             case "BANNED" -> "이용이 정지된 계정입니다.";
+            case "LOGIN_FAILED" -> "아이디 또는 비밀번호를 확인해주세요."
+                    + (details != null ? " 첫 잠금까지 " + details.remainingAttempts() + "회 남았습니다." : "");
+            case "LOGIN_TEMPORARILY_BLOCKED" -> "로그인이 일시 제한되었습니다. 남은 시간 후 다시 시도해주세요."
+                    + (details != null && details.failedAttempts() == 9
+                    ? " 다음 실패 시 계정이 잠기며 관리자 해제가 필요합니다." : "");
             case "SESSION_REPLACED" -> "현재 로그인이 종료되었습니다. 다시 로그인해주세요.";
             default -> "인증 정보가 올바르지 않거나 만료되었습니다.";
         };
-        if (!java.util.Set.of("DORMANT", "LOCKED", "BANNED", "SESSION_REPLACED").contains(code)) {
-            code = "AUTHENTICATION_FAILED";
-        }
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.fail(code, message));
+        HttpStatus status = "LOGIN_TEMPORARILY_BLOCKED".equals(code)
+                ? HttpStatus.TOO_MANY_REQUESTS : HttpStatus.UNAUTHORIZED;
+        return ResponseEntity.status(status).body(ApiResponse.fail(code, message, null, details));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
