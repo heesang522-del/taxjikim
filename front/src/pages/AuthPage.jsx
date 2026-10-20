@@ -21,15 +21,28 @@ const TITLES = Object.fromEntries(TABS);
 
 export default function AuthPage() {
   const [params] = useSearchParams();
-  // 주소(/login, /signup, /find-account)나 ?tab= 값으로 처음 보여줄 탭을 정한다
+  // 화면 종류를 URL에서 계산해 헤더 이동·뒤로가기와 표시 화면이 일치하도록 한다.
   const { pathname } = useLocation();
-  const pathTab = pathname === ROUTES.signup ? 'signup' : pathname === ROUTES.findAccount ? 'findid' : null;
-  const [tab, setTab] = useState(
-    pathTab ?? (TABS.some(([k]) => k === params.get('tab')) ? params.get('tab') : 'login')
-  );
+  const queryTab = params.get('tab');
+  const tab =
+    pathname === ROUTES.signup
+      ? 'signup'
+      : pathname === ROUTES.findAccount
+        ? queryTab === 'findpw'
+          ? 'findpw'
+          : 'findid'
+        : TABS.some(([key]) => key === queryTab)
+          ? queryTab
+          : 'login';
   const [signedUp, setSignedUp] = useState(false);
   const navigate = useNavigate();
   const toast = useToast();
+  const handleTab = (nextTab) => {
+    // 폼 내부 링크도 헤더와 같은 주소로 이동하며 계정 찾기의 종류만 쿼리에 둔다.
+    if (nextTab === 'signup') navigate(ROUTES.signup);
+    else if (nextTab === 'login') navigate(ROUTES.auth);
+    else navigate(`${ROUTES.findAccount}?tab=${nextTab}`);
+  };
   // 로그인에 성공하면 로그인 페이지로 오기 직전에 보던 페이지로 돌아간다 (없으면 메인)
   const enter = () => {
     navigate(takeReturnTo(), { replace: true });
@@ -62,15 +75,18 @@ export default function AuthPage() {
       )}
       <Card>
         {tab === 'login' && (
-          <LoginForm onSuccess={enter} onBlocked={() => navigate(ROUTES.blocked, { replace: true })} onTab={setTab} />
+          <LoginForm
+            onSuccess={enter}
+            onTab={handleTab}
+          />
         )}
         {tab === 'signup' && <SignupForm onDone={() => setSignedUp(true)} />}
-        {tab === 'findid' && <RecoveryForm key="findid" mode="id" onTab={setTab} />}
-        {tab === 'findpw' && <RecoveryForm key="findpw" mode="pw" onTab={setTab} />}
+        {tab === 'findid' && <RecoveryForm key="findid" mode="id" onTab={handleTab} />}
+        {tab === 'findpw' && <RecoveryForm key="findpw" mode="pw" onTab={handleTab} />}
       </Card>
       {tab !== 'login' && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
-          <Button variant="link" onClick={() => setTab('login')}>
+          <Button variant="link" onClick={() => handleTab('login')}>
             로그인으로 돌아가기
           </Button>
         </div>
@@ -80,7 +96,7 @@ export default function AuthPage() {
           title="가입 완료"
           onClose={() => {
             setSignedUp(false);
-            setTab('login');
+            handleTab('login');
           }}
         >
           <div className="grid" style={{ gap: 16, textAlign: 'center', justifyItems: 'center' }}>
@@ -98,7 +114,7 @@ export default function AuthPage() {
               autoFocus
               onClick={() => {
                 setSignedUp(false);
-                setTab('login');
+                handleTab('login');
               }}
             >
               로그인하기

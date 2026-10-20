@@ -1,10 +1,18 @@
 # API 초안
 
-## TJK-109 관리자 계정 잠금 해제
+## 관리자 제한 계정 시각 (2026-10-16)
 
-- GET /admin/account-locks: ADMIN 전용 실제 BANNED·LOCKED 목록, 최대 100개. userId·loginId·userStatus·updatedAt을 반환한다.
-- updatedAt은 한국 시간대가 포함된 ISO 8601 문자열이다.
-- DELETE /admin/account-locks/{loginId}: ADMIN 전용 해제. ACTIVE로 변경하고 기존 로그인 세션·실패 기록을 초기화한다.
+- GET /admin/account-locks 응답에 updatedAt을 추가한다. users.UPDATED_AT을 한국 시간대가 포함된 ISO 8601 문자열로 전달한다.
+
+## 로그인 실패 정책 (2026-10-16)
+
+- POST /auth/sessions: 1~5회 안내, 6회 30초·7회 1분·8회 3분·9회 5분 차단, 10회 LOCKED. 성공·관리자 해제 시만 초기화한다.
+- 실패 응답의 error.details는 failedAttempts, remainingAttempts, blockedUntil, serverTime, locked를 포함한다. 일시 차단은 429 / LOGIN_TEMPORARILY_BLOCKED다.
+- 별도 차단 상태 조회 API는 사용하지 않는다. 로그인 버튼 클릭 시 POST /auth/sessions 응답으로 차단 여부와 남은 시간을 확인한다.
+- GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED 목록, 최대 100개.
+- DELETE /admin/account-locks/{loginId}: ADMIN 전용 제한 해제, 기존 로그인 종료, 실패 기록 초기화.
+- POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
+- 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
 
 모든 함수는 `src/api/*.js`의 async 함수이며, 현재는 `src/mocks/*.json`을 300~800ms 지연 후 반환한다. 화면은 `useApi(함수)` 훅으로만 호출한다.
 
@@ -48,7 +56,7 @@
 ## 로그인·로그아웃 실제 API 연결 (2026-10-14)
 
 - 새 LoginForm과 Header 화면을 유지하며 실제 인증 API에 연결한다.
-- 로그인: POST /api/v1/auth/sessions, loginId·password·rememberMe(false)를 전송한다.
+- 로그인: POST /api/v1/auth/sessions, loginId·password·rememberMe를 전송한다. rememberMe는 자동 로그인 체크 여부이며 기본값은 false다. true이면 기존 백엔드 정책에 따라 리프레시 토큰을 HttpOnly 쿠키로 발급하고, false이면 기존 리프레시 쿠키를 삭제한다.
 - 성공 응답의 accessToken과 서버 회원 정보는 현재 페이지 메모리에만 보관한다. 세션 스토리지 저장·복원을 제거했으며 새로고침 시 GET /users/me로 기존 JWT 쿠키 인증 상태를 확인해 화면을 복원한다.
 - 로그인 화면의 실패 횟수·잠금 판단은 서버 응답을 사용한다. 브라우저 mock 잠금 시간 안내는 적용하지 않는다.
 - 로그아웃: DELETE /api/v1/auth/sessions/current를 기존 JWT 쿠키로 호출하고, 성공 후 화면의 인증 상태를 비운다.
@@ -64,7 +72,7 @@
 - 계정 찾기: 이름·이메일·인증번호로 로그인 아이디를 조회하고 화면에서 마스킹한다.
 - 비밀번호 재설정: 계정과 이메일 일치 및 메일 인증 후 서버에 새 비밀번호를 전송한다. 성공하면 기존 Redis 세션도 종료한다.
 - 마이페이지 회원 정보: GET /users/me로 읽고 닉네임·인증한 이메일·비밀번호·프로필 이미지 변경을 연결했다. 저장 성공 후 서버 정보를 다시 조회해 스토어를 갱신한다.
-- 탈퇴: 현재 비밀번호와 복구 불가 안내를 확인하고 DELETE /users/me를 요청한다. 성공 후 브라우저 인증 상태를 비운다. FK에 연결된 데이터가 있으면 서버 오류 안내를 표시하며 다른 테이블을 임의로 삭제하지 않는다.
+- 탈퇴: 복구 불가 경고의 확인 체크와 현재 비밀번호 입력 후에만 회원 삭제 버튼으로 DELETE /users/me를 요청한다. 성공 후 브라우저 인증 상태를 비운다. FK에 연결된 데이터가 있으면 서버 오류 안내를 표시하며 다른 테이블을 임의로 삭제하지 않는다.
 - 모든 회원 요청은 api/userApi.js → 공통 client → /api/v1 경로를 사용한다. 인증이 필요한 요청은 브라우저의 기존 HttpOnly JWT 쿠키로 인증하며 프론트는 Bearer 헤더를 만들지 않는다.
 - 대기 중 중복 요청을 막고 실패 메시지를 표시한다. 서버의 error.fields는 각 입력 필드에 연결한다.
 - 계정 찾기·재설정 API 상세 경로와 JSON은 루트 docs/api-draft.md를 기준으로 한다.
@@ -138,7 +146,3 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 인증용 mock 계정·잠금·접속 기록도 메모리에서만 관리한다. 이전 인증 관련 웹 스토리지 키 6개는 앱 시작 시 양쪽 저장소에서 제거한다.
 - 다른 기능의 게시글·상담·계산 기록 웹 스토리지 사용은 유지한다.
-
-## 댓글 API 경로 보정 (2026-10-16)
-
-- 공통 client의 baseURL /api와 겹치던 댓글 경로 접두사를 제거했다. 조회·등록은 /api/posts/{postId}/comments, 삭제는 /api/posts/{postId}/comments/{commentId}로 요청한다. 쿠키 인증은 유지한다.

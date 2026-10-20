@@ -2,7 +2,7 @@
 
 import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, Modal, TextField } from '../common/index';
 import { useAuth } from '../../store/useAuthStore';
@@ -33,26 +33,11 @@ export function ProfileSettings() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [deletePassword, setDeletePassword] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [pending, setPending] = useState('load');
+  const [deleteConfirmed, setDeleteConfirmed] = useState(false);
+  // 진입 시 회원 정보 확인은 공통 Layout에서 처리하고, 여기서는 수정 요청 상태만 관리한다.
+  const [pending, setPending] = useState('');
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
-
-  useEffect(() => {
-    let active = true;
-    refreshProfile()
-      .catch((cause) => {
-        if (active) {
-          setError(cause.message);
-          setFieldErrors(cause.fields ?? {});
-        }
-      })
-      .finally(() => {
-        if (active) setPending('');
-      });
-    return () => {
-      active = false;
-    };
-  }, [refreshProfile]);
 
   async function handleAction(key, operation, refresh = false) {
     if (pending) return;
@@ -158,6 +143,11 @@ export function ProfileSettings() {
   }
 
   function handleDelete() {
+    // 복구 불가 안내를 직접 확인한 경우에만 즉시 탈퇴 요청을 보낸다.
+    if (!deleteConfirmed) {
+      setError('탈퇴 안내를 확인하고 체크해주세요.');
+      return;
+    }
     if (!deletePassword) {
       setError('탈퇴 확인용 비밀번호를 입력하세요.');
       return;
@@ -294,10 +284,20 @@ export function ProfileSettings() {
             if (!pending) {
               setDeleting(false);
               setDeletePassword('');
+              setDeleteConfirmed(false);
             }
           }}
         >
           <p>탈퇴하면 로그인할 수 없으며 계정을 복구할 수 없습니다. 계속하려면 비밀번호를 입력해주세요.</p>
+          <label className="toggle" style={{ margin: '16px 0' }}>
+            <input
+              type="checkbox"
+              checked={deleteConfirmed}
+              disabled={Boolean(pending)}
+              onChange={(event) => setDeleteConfirmed(event.target.checked)}
+            />
+            탈퇴 즉시 회원 정보가 삭제되고 계정을 복구할 수 없음을 확인했습니다.
+          </label>
           <TextField
             id="me-delete"
             label="탈퇴 확인 비밀번호"
@@ -307,8 +307,12 @@ export function ProfileSettings() {
             onChange={(event) => setDeletePassword(event.target.value)}
             disabled={Boolean(pending)}
           />
-          <Button variant="danger" onClick={handleDelete} disabled={Boolean(pending)}>
-            탈퇴 확정
+          <Button
+            variant="danger"
+            onClick={handleDelete}
+            disabled={Boolean(pending) || !deleteConfirmed || !deletePassword}
+          >
+            회원 삭제
           </Button>
           {error && <p role="alert">{error}</p>}
         </Modal>

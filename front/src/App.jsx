@@ -14,7 +14,6 @@ import CommunityWritePage from './pages/CommunityWritePage';
 import CommunityEditPage from './pages/CommunityEditPage';
 import SupportPage from './pages/SupportPage';
 import SupportQnaPostPage from './pages/SupportQnaPostPage';
-import BlockedPage from './pages/BlockedPage';
 import AdminPage from './pages/AdminPage';
 import AdminReportsPage from './pages/AdminReportsPage';
 import AdminInquiriesPage from './pages/AdminInquiriesPage';
@@ -41,7 +40,6 @@ function App() {
         <Route path="login" element={<AuthPage key="login" />} />
         <Route path="signup" element={<AuthPage key="signup" />} />
         <Route path="find-account" element={<AuthPage key="find-account" />} />
-        <Route path="blocked" element={<BlockedPage />} />
         <Route path="mypage" element={<MyPage />} />
         <Route path="community" element={<CommunityPage />} />
         <Route path="community/new" element={<CommunityWritePage />} />

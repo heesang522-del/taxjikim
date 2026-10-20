@@ -20,7 +20,6 @@
 | DELETE | `/api/v1/auth/sessions/current` | `Authorization: Bearer {accessToken}` 또는 인증 쿠키 |
 | POST | `/api/v1/auth/tokens` | `refreshToken` 쿠키 |
 | POST | `/api/v1/auth/dormancy-recoveries` | JSON `loginId`, `email`, `code` |
-| POST | `/api/v1/auth/deletion-recoveries` | JSON `loginId`, `email`, `code` |
 | POST | `/api/v1/auth/account-unlocks` | JSON `token` |
 | POST | `/api/v1/auth/account-lookups/email-verifications` | JSON `name`, `email` |
 | POST | `/api/v1/auth/account-lookups` | JSON `name`, `email`, `code`; data는 로그인 아이디 |
@@ -55,8 +54,8 @@
 자동 로그인 선택·토큰 만료 시간·쿠키 Secure 설정·Redis 세션 교체 규칙은 기존 설정과 로직을 유지한다.
 현재 React 로그인은 `rememberMe: false`로 요청한다. 성공 응답의 토큰과 회원 번호·아이디·권한은 현재 페이지 메모리에만 보관한다. 세션 스토리지 저장·복원은 제거했으며 새로고침 시 GET /users/me로 기존 JWT 쿠키 인증 상태를 확인해 화면을 복원한다.
 React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 브라우저 인증 상태를 비운다. 명시적인 Bearer가 있으면 그 세션을 우선 처리하고, 현재 Redis sid와 일치하는 경우에만 종료한다.
-회원 조회는 실제 테이블 `users`를 사용하고 삭제된 `DELETED_AT`을 조회하지 않는다. 탈퇴·복구 SQL의 후속 정리는 별도 작업이다.
-계정 복구는 기존에 추가한 이메일·상태·탈퇴 기간 검사와 SQL 조건을 유지한다.
+회원 조회는 실제 테이블 `users`를 사용하고 삭제된 `DELETED_AT`을 조회하지 않는다. 탈퇴는 즉시 DELETE하며 탈퇴 대기·복구·만료 정리 SQL은 제거했다.
+휴면 복구는 이메일·DORMANT 상태 검사와 SQL 조건을 유지한다. 탈퇴 계정 복구 API는 제거했다.
 아이디 찾기·비밀번호 재설정은 2026-10-15에 기존 서비스를 호출하는 API와 화면을 연결했다. 비밀번호 재설정 성공 시 기존 Redis 로그인 세션을 종료한다. 잠금 해제 메일 링크 연결은 후속 작업이다.
 
 ## 회원
@@ -78,7 +77,7 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 회원가입은 이름·닉네임·로그인 아이디·비밀번호·이메일을 전송하며 생년월일은 선택이다. 프로필 이미지가 있으면 multipart 필드 `profile`로 전송한다. 삭제한 전화번호·직군·신고 알림 컬럼은 전송하지 않는다.
 인증번호는 현재 서버 메모리 캐시에서 5분, 인증 완료 기록은 10분간 유지된다. 브라우저에서 인증번호를 생성하거나 응답에 노출하지 않는다.
 이메일 변경은 새 이메일의 서버 인증 완료 기록이 필요하며 성공한 뒤 해당 기록을 소비한다.
-탈퇴는 현재 비밀번호 확인 후 users 행을 즉시 삭제하고 로그인 세션과 인증 쿠키를 정리한다. 연결된 FK가 삭제를 막으면 409 오류를 반환한다. FK의 삭제 정책과 구 탈퇴 복구·스케줄러 정리는 후속 작업이다.
+탈퇴는 현재 비밀번호 확인 후 users 행을 즉시 삭제하고 로그인 세션과 인증 쿠키를 정리한다. 연결된 FK가 삭제를 막으면 409 오류를 반환한다. 탈퇴 대기 복구와 30일 정리 스케줄러는 제거했다. FK의 삭제 정책은 별도 검토 대상이다.
 중복 검사 `data`는 중복이면 `true`, 사용 가능하면 `false`이다.
 기존 `/user` 폼·JSP 컨트롤러 처리를 JSON API로 옮겼다. 신규 React 화면은 만들지 않는다.
 
