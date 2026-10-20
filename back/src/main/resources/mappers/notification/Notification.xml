@@ -21,6 +21,7 @@
             TARGET_TYPE     AS targetType,
             TARGET_ID       AS targetId,
             TITLE           AS title,
+            MESSAGE         AS message,
             IS_READ         AS isRead,
             CREATED_AT      AS createdAt
         FROM NOTIFICATIONS
@@ -28,5 +29,32 @@
           AND DELETED_AT IS NULL
         ORDER BY CREATED_AT DESC
     </select>
+
+    <!-- 로그인한 회원의 미읽음 알림 수 조회 -->
+    <select id="countUnreadByUserId" resultType="long">
+        SELECT COUNT(*)
+        FROM NOTIFICATIONS
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </select>
+
+    <!--
+    로그인한 회원의 미읽음 알림을 전체 읽음 처리
+    알림이 열릴 때 동작
+         -->
+    <update id="markAllAsReadByUserId">
+        UPDATE NOTIFICATIONS
+        SET IS_READ = TRUE
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </update>
+
+    <!-- 게시글(정보공유·팁·QnA)에 댓글이 달렸을 때 게시글 작성자에게 알림 1건 생성 -->
+    <insert id="insertCommentNotification">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES (#{userId}, 'COMMENT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+    </insert>
 
 </mapper>

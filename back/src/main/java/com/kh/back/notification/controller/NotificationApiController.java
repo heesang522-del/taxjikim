@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -31,5 +32,27 @@ public class NotificationApiController {
 
         return ApiResponse.ok(notificationService.getNotifications(principal.getUserId()));
     }
+
+    //로그인한 회원의 미읽음 알림 수 조회
+    @GetMapping("/unread-count")
+    public ApiResponse<Long> getUnreadCount(@AuthenticationPrincipal CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+
+        return ApiResponse.ok(notificationService.getUnreadCount(principal.getUserId()));
+    }
+
+    //로그인한 회원의 미읽음 알림 전체 읽음 처리
+    @PatchMapping("/read-all")
+    public ApiResponse<Void> markAllAsRead(@AuthenticationPrincipal CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+
+        notificationService.markAllAsRead(principal.getUserId());
+        return ApiResponse.ok(null);
+    }
+
 
 }

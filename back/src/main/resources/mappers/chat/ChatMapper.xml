@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.chat.mapper.ChatMapper">
+
+    <!-- 상담 방 생성. 관리자는 입장 시 별도로 배정하므로 여기서는 다루지 않는다. -->
+    <insert id="insertRoom" parameterType="com.kh.back.chat.dto.ChatRoomDto"
+            useGeneratedKeys="true" keyProperty="roomId">
+        INSERT INTO CHAT_ROOMS (USER_ID, STATUS)
+        VALUES (#{userId}, 'WAITING')
+    </insert>
+
+    <!-- 회원당 열린 방은 앱에서 1개로 검사하므로 가장 최근 방 1건만 가져온다. -->
+    <select id="findOpenRoomByUserId" resultType="com.kh.back.chat.dto.ChatRoomDto">
+        SELECT ROOM_ID, USER_ID, ADMIN_ID, STATUS, CREATED_AT, CLOSED_AT
+        FROM CHAT_ROOMS
+        WHERE USER_ID = #{userId}
+          AND STATUS IN ('WAITING', 'IN_PROGRESS')
+        ORDER BY CREATED_AT DESC
+        LIMIT 1
+    </select>
+
+    <!-- 방 단건 조회 (상태 무관) -->
+    <select id="findRoomById" resultType="com.kh.back.chat.dto.ChatRoomDto">
+        SELECT ROOM_ID, USER_ID, ADMIN_ID, STATUS, CREATED_AT, CLOSED_AT
+        FROM CHAT_ROOMS
+        WHERE ROOM_ID = #{roomId}
+    </select>
+
+    <!-- 채팅 메시지 등록. IS_READ는 컬럼 기본값(FALSE)을 사용한다. -->
+    <insert id="insertMessage" parameterType="com.kh.back.chat.dto.ChatMessageDto"
+            useGeneratedKeys="true" keyProperty="messageId">
+        INSERT INTO CHAT_MESSAGES (ROOM_ID, SENDER_ID, CONTENT)
+        VALUES (#{roomId}, #{senderId}, #{content})
+    </insert>
+
+    <!-- 메시지 단건 조회. insertMessage 후 DB가 채운 CREATED_AT을 다시 읽어올 때 쓴다 -->
+    <select id="findMessageById" resultType="com.kh.back.chat.dto.ChatMessageDto">
+        SELECT MESSAGE_ID, ROOM_ID, SENDER_ID, CONTENT, IS_READ, CREATED_AT
+        FROM CHAT_MESSAGES
+        WHERE MESSAGE_ID = #{messageId}
+    </select>
+
+    <!-- 방의 전체 메시지를 오래된 순으로 조회 -->
+    <select id="findMessagesByRoomId" resultType="com.kh.back.chat.dto.ChatMessageDto">
+        SELECT MESSAGE_ID, ROOM_ID, SENDER_ID, CONTENT, IS_READ, CREATED_AT
+        FROM CHAT_MESSAGES
+        WHERE ROOM_ID = #{roomId}
+        ORDER BY CREATED_AT ASC
+    </select>
+
+    <!-- 상대방이 보낸 메시지만 읽음 처리한다 (본인이 보낸 메시지는 대상에서 제외) -->
+    <update id="markMessagesAsRead">
+        UPDATE CHAT_MESSAGES
+        SET IS_READ = TRUE
+        WHERE ROOM_ID = #{roomId}
+          AND SENDER_ID != #{readerId}
+          AND IS_READ = FALSE
+    </update>
+
+    <!-- 상대방이 보낸 안 읽은 메시지 수 (읽음 배지에 사용) -->
+    <select id="countUnreadByRoomId" resultType="long">
+        SELECT COUNT(*)
+        FROM CHAT_MESSAGES
+        WHERE ROOM_ID = #{roomId}
+          AND SENDER_ID != #{readerId}
+          AND IS_READ = FALSE
+    </select>
+
+    <!-- 방 삭제 전에 먼저 호출. CHAT_MESSAGES.ROOM_ID가 CHAT_ROOMS를 참조(FK)하므로 순서를 지켜야 한다. -->
+    <delete id="deleteMessagesByRoomId">
+        DELETE FROM CHAT_MESSAGES
+        WHERE ROOM_ID = #{roomId}
+    </delete>
+
+    <!-- 방 삭제. 소프트 삭제 컬럼이 없어 실제로 행을 지운다. -->
+    <delete id="deleteRoomById">
+        DELETE FROM CHAT_ROOMS
+        WHERE ROOM_ID = #{roomId}
+    </delete>
+
+    <!-- 관리자용 상태별 목록. 대기는 오래 기다린 순, 진행중/종료는 최신순으로 보여준다. -->
+    <select id="findRoomsByStatus" resultType="com.kh.back.chat.dto.ChatRoomSummaryDto">
+        SELECT
+            cr.ROOM_ID,
+            cr.USER_ID,
+            u.NICKNAME,
+            cr.ADMIN_ID,
+            cr.STATUS,
+            cr.CREATED_AT,
+            cr.CLOSED_AT,
+            (SELECT m.CONTENT FROM CHAT_MESSAGES m
+                WHERE m.ROOM_ID = cr.ROOM_ID
+                ORDER BY m.CREATED_AT ASC
+                LIMIT 1) AS FIRST_MESSAGE
+        FROM CHAT_ROOMS cr
+        INNER JOIN USERS u ON u.USER_ID = cr.USER_ID
+        WHERE cr.STATUS = #{status}
+        <choose>
+            <when test="status == 'WAITING'">ORDER BY cr.CREATED_AT ASC</when>
+            <otherwise>ORDER BY cr.CREATED_AT DESC</otherwise>
+        </choose>
+    </select>
+
+    <!-- 대기 상담방 수 (관리자 대시보드) -->
+    <select id="countWaitingRooms" resultType="long">
+        SELECT COUNT(*) FROM CHAT_ROOMS WHERE STATUS = 'WAITING'
+    </select>
+
+    <!-- 동시 입장 방지: STATUS가 WAITING일 때만 1행이 바뀐다. 두 관리자가 거의 동시에 호출해도 DB가 행 단위로 직렬화해 한쪽만 성공한다. -->
+    <update id="claimRoom">
+        UPDATE CHAT_ROOMS
+        SET ADMIN_ID = #{adminId}, STATUS = 'IN_PROGRESS'
+        WHERE ROOM_ID = #{roomId}
+          AND STATUS = 'WAITING'
+    </update>
+
+    <!-- 담당 관리자 본인의 IN_PROGRESS 방만 종료할 수 있다. -->
+    <update id="closeRoom">
+        UPDATE CHAT_ROOMS
+        SET STATUS = 'CLOSED', CLOSED_AT = CURRENT_TIMESTAMP
+        WHERE ROOM_ID = #{roomId}
+          AND ADMIN_ID = #{adminId}
+          AND STATUS = 'IN_PROGRESS'
+    </update>
+
+    <!-- 담당 관리자가 진행중으로 맡고 있는 모든 방의 안 읽은 메시지 수 합계 (대시보드) -->
+    <select id="countUnreadForAdmin" resultType="long">
+        SELECT COUNT(*)
+        FROM CHAT_MESSAGES m
+        INNER JOIN CHAT_ROOMS r ON r.ROOM_ID = m.ROOM_ID
+        WHERE r.ADMIN_ID = #{adminId}
+          AND r.STATUS = 'IN_PROGRESS'
+          AND m.SENDER_ID != #{adminId}
+          AND m.IS_READ = FALSE
+    </select>
+
+</mapper>

@@ -12,7 +12,15 @@
 *.keystore
 
 # Python 가상환경, 캐시, 로컬 데이터와 학습 결과
-나중에 건드려야함
+/ml/.venv/
+**/__pycache__/
+*.py[cod]
+**/.ipynb_checkpoints/
+
+/ml/data/*
+!/ml/data/.gitkeep
+/ml/models/*
+!/ml/models/.gitkeep
 
 # IntelliJ IDEA
 **/.idea/

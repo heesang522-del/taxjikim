@@ -26,7 +26,9 @@ public class CommentApiController {
     @PostMapping
     public ApiResponse<Void> create(@PathVariable Long postId, @RequestBody CreateCommentRequest request,
                                    @AuthenticationPrincipal CustomUserDetails principal) {
-        commentService.create(postId, requireUserId(principal), request.content());
+        Long userId = requireUserId(principal);
+        // 알림에 표시할 작성자 닉네임은 인증된 로그인 정보에서 가져온다 (재조회 없이 재사용).
+        commentService.create(postId, userId, principal.getUserDto().getNickname(), request.content());
         return ApiResponse.ok(null);
     }
 

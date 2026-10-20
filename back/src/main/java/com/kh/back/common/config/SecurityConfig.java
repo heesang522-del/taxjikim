@@ -52,6 +52,9 @@ public class SecurityConfig {
                 .securityContext(context -> context.securityContextRepository(new NullSecurityContextRepository()))
                 .requestCache(cache -> cache.requestCache(new NullRequestCache()))
                 .authorizeHttpRequests(auth -> auth
+                        // 관리자 전용 API는 전부 /api/v1/admin/** 아래에 두므로 한 규칙으로 막는다.
+                        // 새 관리자 API를 추가할 때 권한 규칙을 깜빡 빠뜨리는 실수를 막기 위한 것이다.
+                        .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors
