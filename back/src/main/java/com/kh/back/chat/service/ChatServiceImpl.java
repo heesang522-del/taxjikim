@@ -20,6 +20,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatMapper chatMapper;
 
     private static final Set<String> VALID_ROOM_STATUSES = Set.of("WAITING", "IN_PROGRESS", "CLOSED");
+    private static final int MAX_MESSAGE_LENGTH = 1000;
 
     @Override
     @Transactional
@@ -40,6 +41,11 @@ public class ChatServiceImpl implements ChatService {
         if (content == null || content.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "메시지 내용을 입력해 주세요.");
         }
+        String trimmedContent = content.trim();
+        if (trimmedContent.length() > MAX_MESSAGE_LENGTH) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                    "메시지는 최대 " + MAX_MESSAGE_LENGTH + "자까지 보낼 수 있습니다.");
+        }
         ChatRoomDto room = requireRoom(roomId);
         // 방 소유자(상담 요청 회원) 또는 배정된 관리자만 메시지를 보낼 수 있다.
         if (!senderId.equals(room.getUserId()) && !senderId.equals(room.getAdminId())) {
@@ -54,9 +60,10 @@ public class ChatServiceImpl implements ChatService {
         ChatMessageDto message = new ChatMessageDto();
         message.setRoomId(roomId);
         message.setSenderId(senderId);
-        message.setContent(content.trim());
+        message.setContent(trimmedContent);
         chatMapper.insertMessage(message);
-        return message;
+        // CREATED_AT은 DB 기본값(CURRENT_TIMESTAMP)으로 채워져서 insert 직후의 message 객체에는 없다. 다시 조회해서 채운다.
+        return chatMapper.findMessageById(message.getMessageId());
     }
 
     @Override

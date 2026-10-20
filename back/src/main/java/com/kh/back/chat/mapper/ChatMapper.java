@@ -23,6 +23,9 @@ public interface ChatMapper {
     // 채팅 메시지 등록
     int insertMessage(ChatMessageDto message);
 
+    // 메시지 단건 조회. DB가 기본값으로 채우는 CREATED_AT을 insert 후 다시 읽어오는 용도
+    ChatMessageDto findMessageById(@Param("messageId") Long messageId);
+
     // 방의 전체 메시지 조회 (오래된 순)
     List<ChatMessageDto> findMessagesByRoomId(@Param("roomId") Long roomId);
 
