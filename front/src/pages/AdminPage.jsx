@@ -11,7 +11,7 @@ import { useBoard } from '../store/useBoardStore';
 import { useInquiry } from '../store/useInquiryStore';
 import { useReports } from '../utils/useReports';
 import { useFaq } from '../utils/useFaq';
-import { useChat } from '../store/useChatStore';
+import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
 
 const ADMIN_TABS = [['usage', '모델·처리 현황'], ['members', '회원·게시판 관리'], ['support', '고객 지원']];
@@ -118,7 +118,7 @@ export default function AdminPage() {
   const { inquiries } = useInquiry();
   const { reports } = useReports();
   const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
-  const { waitingCount } = useChat();
+  const waitingCount = useWaitingCount();
 
   const reportsPending = reports.filter((r) => r.status === '대기').length;
   const inquiriesPending = inquiries.filter((q) => q.status !== '답변 완료').length;

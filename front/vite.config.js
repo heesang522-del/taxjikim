@@ -18,6 +18,12 @@ export default defineConfig({
         target: API_TARGET,
         changeOrigin: true,
       },
+      // 채팅 WebSocket("/ws/chat/{roomId}")도 같은 Spring Boot 서버로 전달한다.
+      '/ws': {
+        target: API_TARGET,
+        changeOrigin: true,
+        ws: true,
+      },
     },
   },
 });

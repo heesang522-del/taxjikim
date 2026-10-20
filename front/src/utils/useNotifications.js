@@ -6,7 +6,6 @@ import { ROUTES } from './routes';
 import { useAuth } from '../store/useAuthStore';
 import { useBoard } from '../store/useBoardStore';
 import { useInquiry } from '../store/useInquiryStore';
-import { useChat } from '../store/useChatStore';
 
 const KEY = 'taxlab.notif.seen.v1';
 
@@ -24,7 +23,6 @@ export function useNotifications() {
   const { user } = useAuth();
   const { posts } = useBoard();
   const { inquiries } = useInquiry();
-  const { myRooms } = useChat();
   const [seen, setSeen] = useState(readSeen);
 
   const items = useMemo(() => {
@@ -40,21 +38,11 @@ export function useNotifications() {
         createdAt: q.createdAt,
         to: ROUTES.qnaPost(q.id),
       }));
-    // 회원이 접속하지 않은 동안 도착한(메일로 처리된) 상담 답변은 알림에 쌓는다. 접속 중에 받은 답변은 채팅 패널·배지로만 전달한다.
-    const chats = myRooms.flatMap((r) => r.messages
-      .filter((m) => m.from === 'admin' && m.delivery === 'mail')
-      .map((m) => ({
-        id: `chat-${m.id}`,
-        title: '상담 답변이 도착했습니다',
-        desc: m.text.length > 30 ? `${m.text.slice(0, 30)}…` : m.text,
-        createdAt: new Date(m.at).toLocaleDateString('sv-SE'),
-        at: m.at,
-        action: 'chat',
-      })));
-    return [...notices, ...answers, ...chats]
+    // 채팅 상담 답변 알림은 실제 채팅 API 연동 전까지 별도 작업으로 남겨둔다.
+    return [...notices, ...answers]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .map((n) => ({ ...n, read: seen.has(n.id) }));
-  }, [posts, inquiries, myRooms, seen, user]);
+  }, [posts, inquiries, seen, user]);
 
   const unreadCount = items.filter((n) => !n.read).length;
 

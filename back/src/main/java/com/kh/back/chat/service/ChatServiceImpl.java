@@ -36,6 +36,11 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
+    public ChatRoomDto findOpenRoom(Long userId) {
+        return chatMapper.findOpenRoomByUserId(userId);
+    }
+
+    @Override
     @Transactional
     public ChatMessageDto sendMessage(Long roomId, Long senderId, String content) {
         if (content == null || content.isBlank()) {
@@ -99,6 +104,15 @@ public class ChatServiceImpl implements ChatService {
                     "status는 WAITING/IN_PROGRESS/CLOSED 중 하나여야 합니다.");
         }
         return chatMapper.findRoomsByStatus(status);
+    }
+
+    @Override
+    public ChatRoomSummaryDto getRoomSummary(Long roomId) {
+        ChatRoomSummaryDto summary = chatMapper.findRoomSummaryById(roomId);
+        if (summary == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "CHAT_ROOM_NOT_FOUND", "채팅방을 찾을 수 없습니다.");
+        }
+        return summary;
     }
 
     @Override

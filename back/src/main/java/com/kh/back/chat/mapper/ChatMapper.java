@@ -41,8 +41,11 @@ public interface ChatMapper {
     // 방 삭제. CHAT_ROOMS/CHAT_MESSAGES에는 DELETED_AT이 없어 소프트 삭제가 아닌 실제 삭제다.
     int deleteRoomById(@Param("roomId") Long roomId);
 
-    // 관리자용: 상태별 상담방 목록 (닉네임·첫 메시지 포함)
+    // 관리자용: 상태별 상담방 목록 (닉네임·최근 메시지 포함)
     List<ChatRoomSummaryDto> findRoomsByStatus(@Param("status") String status);
+
+    // 관리자용: 방 단건 요약 조회 (상태 무관). 새로고침 후 선택 상태 복원용
+    ChatRoomSummaryDto findRoomSummaryById(@Param("roomId") Long roomId);
 
     // 대기 상담방 수 (관리자 대시보드)
     long countWaitingRooms();
