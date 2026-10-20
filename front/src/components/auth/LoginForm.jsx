@@ -6,8 +6,8 @@ import styled from 'styled-components';
 import { Button, TextField } from '../common/index';
 import { useAuth } from '../../store/useAuthStore';
 
-/** onSuccess()는 로그인에 성공했을 때, onBlocked()는 정지된 계정일 때, onTab(tab)은 회원가입·아이디 찾기·비밀번호 찾기 링크를 눌렀을 때 부른다. 실패하면 이유를 폼 아래에 보여준다. */
-export function LoginForm({ onSuccess, onBlocked, onTab }) {
+// 로그인 성공 처리와 계정 화면 이동을 연결하고, 실패 안내는 폼 아래에 표시
+export function LoginForm({ onSuccess, onTab }) {
   const { login } = useAuth();
   const [id, setId] = useState('');
   const [pw, setPw] = useState('');
@@ -62,10 +62,7 @@ export function LoginForm({ onSuccess, onBlocked, onTab }) {
         onSuccess();
         return;
       }
-      if (result.reason === 'suspended') {
-        onBlocked();
-        return;
-      }
+      // 정지 계정도 별도 화면으로 이동하지 않고 서버의 안내 문구를 표시한다.
       setError(result.message || '로그인하지 못했습니다. 다시 시도해주세요.');
       if (result.details || result.code === 'LOCKED') applyAttempt(loginId, result.details, result.code === 'LOCKED');
     } catch {
@@ -140,11 +137,6 @@ export function LoginForm({ onSuccess, onBlocked, onTab }) {
         <p className="small" role="status">
           다음 실패 시 계정이 잠기며 관리자 해제가 필요합니다.
         </p>
-      )}
-      {locked && (
-        <div className="small" role="status">
-          <p>로그인 실패로 계정이 잠겼습니다. 관리자에게 문의하세요.</p>
-        </div>
       )}
       <Button type="submit" variant="primary" size="lg" disabled={submitting || secondsLeft > 0}>
         {submitting ? '로그인 중...' : secondsLeft > 0 ? '잠시 후 다시 시도해주세요' : '로그인'}

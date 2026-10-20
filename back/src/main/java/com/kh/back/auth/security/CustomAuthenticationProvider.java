@@ -30,26 +30,33 @@ public class CustomAuthenticationProvider implements AuthenticationProvider {
         UserDto user = userSecurityMapper.findForAuthentication(loginId);
         if (user != null) {
             loginId = user.getLoginId();
-            switch (user.getUserStatus()) {
-                case "LOCKED" -> throw new LoginFailureException("LOCKED", loginAttemptService.getAttempt(loginId));
-                case "BANNED" -> throw new LoginFailureException("BANNED");
-                case "DORMANT" -> throw new LoginFailureException("DORMANT");
-                case "ACTIVE" -> { } // 정상 상태이면 다음 검사로 진행한다.
-                // 알 수 없는 회원 상태도 정상 회원으로 간주하지 않고 인증을 거절한다.
-                default -> throw new LoginFailureException("AUTHENTICATION_FAILED");
-            }
         }
         // 회원이 없는 아이디도 Redis 기록을 조회한다. 조회 자체로 실패 횟수가 늘지는 않는다.
         LoginAttemptDto attempt = loginAttemptService.getAttempt(loginId);
-        // locked는 Redis 실패 횟수 기준 잠금 대상, blocked는 아직 일시 차단 시간이 남은 상태다.
-        // 기존 차단이 있으면 실패를 추가하지 않고 현재 상태로 거절한다.
-        if (attempt.locked() || attempt.blocked()) reject(loginId, user, attempt);
+        // 일시 차단 중에는 비밀번호와 무관하게 같은 응답을 보내고 실패를 추가하지 않는다.
+        if (attempt.blocked()) reject(loginId, user, attempt);
 
         // 회원이 없거나 비밀번호가 일치하지 않으면 실패로 기록한다.
         if (user == null || !passwordEncoder.matches(password, user.getPassword())) {
-            // 실패 횟수를 갱신한 결과를 받아, 일반 실패·일시 차단·계정 잠금 중 하나로 거절한다.
-            reject(loginId, user, loginAttemptService.loginFailed(loginId));
+            LoginAttemptDto failedAttempt = loginAttemptService.loginFailed(loginId);
+            if (failedAttempt.locked()) {
+                // 잠금은 저장하되 비밀번호가 틀린 응답에는 회원 상태와 잠금 DTO를 노출하지 않는다.
+                if (user != null) userSecurityMapper.lockAccount(loginId);
+                throw new LoginFailureException("LOGIN_FAILED");
+            }
+            reject(loginId, user, failedAttempt);
         }
+
+        // 아이디·비밀번호가 모두 맞을 때만 DB 회원 상태를 안내한다.
+        switch (user.getUserStatus()) {
+            case "LOCKED" -> throw new LoginFailureException("LOCKED");
+            case "BANNED" -> throw new LoginFailureException("BANNED");
+            case "DORMANT" -> throw new LoginFailureException("DORMANT");
+            case "ACTIVE" -> { }
+            default -> throw new LoginFailureException("AUTHENTICATION_FAILED");
+        }
+        // Redis에 잠금 대상 기록이 남아 있으면 올바른 비밀번호여도 로그인시키지 않는다.
+        if (attempt.locked()) reject(loginId, user, attempt);
 
         // 비밀번호와 회원 상태를 모두 통과한 경우에만 실패 기록을 초기화한다.
         loginAttemptService.loginSucceeded(loginId);

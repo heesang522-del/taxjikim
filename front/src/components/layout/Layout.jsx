@@ -2,8 +2,7 @@
 'use no memo';
 
 import { useEffect, useRef } from 'react';
-import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { ROUTES } from '../../utils/routes';
+import { Outlet, useLocation } from 'react-router-dom';
 import { rememberPath } from '../../utils/returnTo';
 import { useAuth } from '../../store/useAuthStore';
 import { useToastStore } from '../../store/useToastStore';
@@ -16,8 +15,7 @@ import { Button } from '../common/index';
 // 모든 페이지 공통: 헤더 + 본문(Outlet) + 채팅 + 안내 문구(Toast)
 export default function Layout() {
   const { pathname, search } = useLocation();
-  const navigate = useNavigate();
-  const { sessionBlocked, clearSessionBlocked, authStatus, authError, checkAuth, loggedIn, refreshProfile } = useAuth();
+  const { authStatus, authError, checkAuth, loggedIn, refreshProfile } = useAuth();
   const toastMessage = useToastStore((state) => state.message);
   const toast = useToastStore((state) => state.toast);
   const previousUrl = useRef(pathname + search);
@@ -49,13 +47,6 @@ export default function Layout() {
     };
   }, [pathname, search, authStatus, loggedIn, refreshProfile, toast]);
 
-  // 다음 접속 때 이미 정지된 계정이면 차단 안내 페이지로 보낸다
-  useEffect(() => {
-    if (sessionBlocked) {
-      clearSessionBlocked();
-      navigate(ROUTES.blocked, { replace: true });
-    }
-  }, [sessionBlocked, clearSessionBlocked, navigate]);
   useEffect(() => {
     window.scrollTo({ top: 0 });
   }, [pathname]);

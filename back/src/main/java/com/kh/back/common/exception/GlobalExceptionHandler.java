@@ -30,6 +30,8 @@ import java.util.Map;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    // 다음 실패 시 계정이 잠긴다는 경고를 표시할 마지막 일시 차단 횟수
+    private static final int FINAL_BLOCK_FAILED_ATTEMPTS = 9;
 
     // Service 에서 직접 던진 예외 (예: 없는 종목코드 → 404)
     @ExceptionHandler(ApiException.class)
@@ -97,7 +99,7 @@ public class GlobalExceptionHandler {
             case "LOGIN_FAILED" -> "아이디 또는 비밀번호를 확인해주세요."
                     + (details != null ? " 첫 잠금까지 " + details.remainingAttempts() + "회 남았습니다." : "");
             case "LOGIN_TEMPORARILY_BLOCKED" -> "로그인이 일시 제한되었습니다. 남은 시간 후 다시 시도해주세요."
-                    + (details != null && details.failedAttempts() == 9
+                    + (details != null && details.failedAttempts() == FINAL_BLOCK_FAILED_ATTEMPTS
                     ? " 다음 실패 시 계정이 잠기며 관리자 해제가 필요합니다." : "");
             case "SESSION_REPLACED" -> "현재 로그인이 종료되었습니다. 다시 로그인해주세요.";
             default -> "인증 정보가 올바르지 않거나 만료되었습니다.";

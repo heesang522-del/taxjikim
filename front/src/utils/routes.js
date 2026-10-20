@@ -12,7 +12,6 @@ export const ROUTES = {
   boardWrite: '/community/new',
   boardPost: (id) => `/community/${id}`,
   boardEdit: (id) => `/community/${id}/edit`,
-  blocked: '/blocked',
   help: '/support',
   helpQna: '/support?tab=qna',
   qnaPost: (id) => `/support/qna/${id}`,

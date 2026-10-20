@@ -77,7 +77,6 @@ export default function AuthPage() {
         {tab === 'login' && (
           <LoginForm
             onSuccess={enter}
-            onBlocked={() => navigate(ROUTES.blocked, { replace: true })}
             onTab={handleTab}
           />
         )}

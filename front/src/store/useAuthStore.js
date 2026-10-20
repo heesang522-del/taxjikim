@@ -72,8 +72,6 @@ export const useAuthStore = create((set, get) => {
     authStatus: 'checking',
     authError: '',
     apiUser: null,
-    sessionBlocked: false,
-    clearSessionBlocked: () => set({ sessionBlocked: false }),
 
     // 새로고침 시 브라우저가 보내는 HttpOnly 쿠키로 서버에 인증 여부를 확인한다.
     checkAuth: () => {
@@ -107,7 +105,7 @@ export const useAuthStore = create((set, get) => {
         if (revision !== authRevision)
           return { ok: false, message: '로그인 상태가 변경되었습니다. 다시 시도해주세요.' };
         const user = toScreenUser(result.data);
-        set({ userId: user.loginId, apiUser: user, authStatus: 'ready', authError: '', sessionBlocked: false });
+        set({ userId: user.loginId, apiUser: user, authStatus: 'ready', authError: '' });
         return { ok: true };
       } catch (error) {
         return {
