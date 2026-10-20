@@ -40,4 +40,13 @@ public interface ChatService {
 
     // 담당 관리자 본인 방의 메시지 목록 조회
     List<ChatMessageDto> getMessagesForAdmin(Long roomId, Long adminId);
+
+    // 담당 관리자 본인 방에서 회원이 보낸 메시지를 읽음 처리
+    void markAsReadForAdmin(Long roomId, Long adminId);
+
+    // 담당 관리자 본인 방의 안 읽은 메시지 수 조회
+    long getUnreadCountForAdmin(Long roomId, Long adminId);
+
+    // 담당 관리자가 진행중으로 맡고 있는 모든 방의 안 읽은 메시지 수 합계 (대시보드)
+    long getTotalUnreadCountForAdmin(Long adminId);
 }

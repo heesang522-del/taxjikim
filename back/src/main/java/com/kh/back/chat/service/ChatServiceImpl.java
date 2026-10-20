@@ -20,6 +20,7 @@ public class ChatServiceImpl implements ChatService {
     private final ChatMapper chatMapper;
 
     private static final Set<String> VALID_ROOM_STATUSES = Set.of("WAITING", "IN_PROGRESS", "CLOSED");
+    private static final int MAX_MESSAGE_LENGTH = 1000;
 
     @Override
     @Transactional
@@ -40,6 +41,11 @@ public class ChatServiceImpl implements ChatService {
         if (content == null || content.isBlank()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "메시지 내용을 입력해 주세요.");
         }
+        String trimmedContent = content.trim();
+        if (trimmedContent.length() > MAX_MESSAGE_LENGTH) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                    "메시지는 최대 " + MAX_MESSAGE_LENGTH + "자까지 보낼 수 있습니다.");
+        }
         ChatRoomDto room = requireRoom(roomId);
         // 방 소유자(상담 요청 회원) 또는 배정된 관리자만 메시지를 보낼 수 있다.
         if (!senderId.equals(room.getUserId()) && !senderId.equals(room.getAdminId())) {
@@ -54,9 +60,10 @@ public class ChatServiceImpl implements ChatService {
         ChatMessageDto message = new ChatMessageDto();
         message.setRoomId(roomId);
         message.setSenderId(senderId);
-        message.setContent(content.trim());
+        message.setContent(trimmedContent);
         chatMapper.insertMessage(message);
-        return message;
+        // CREATED_AT은 DB 기본값(CURRENT_TIMESTAMP)으로 채워져서 insert 직후의 message 객체에는 없다. 다시 조회해서 채운다.
+        return chatMapper.findMessageById(message.getMessageId());
     }
 
     @Override
@@ -124,11 +131,26 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     public List<ChatMessageDto> getMessagesForAdmin(Long roomId, Long adminId) {
-        ChatRoomDto room = requireRoom(roomId);
-        if (!adminId.equals(room.getAdminId())) {
-            throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "담당 관리자만 조회할 수 있습니다.");
-        }
+        requireAdminRoom(roomId, adminId);
         return chatMapper.findMessagesByRoomId(roomId);
+    }
+
+    @Override
+    @Transactional
+    public void markAsReadForAdmin(Long roomId, Long adminId) {
+        requireAdminRoom(roomId, adminId);
+        chatMapper.markMessagesAsRead(roomId, adminId);
+    }
+
+    @Override
+    public long getUnreadCountForAdmin(Long roomId, Long adminId) {
+        requireAdminRoom(roomId, adminId);
+        return chatMapper.countUnreadByRoomId(roomId, adminId);
+    }
+
+    @Override
+    public long getTotalUnreadCountForAdmin(Long adminId) {
+        return chatMapper.countUnreadForAdmin(adminId);
     }
 
     private ChatRoomDto requireRoom(Long roomId) {
@@ -144,6 +166,15 @@ public class ChatServiceImpl implements ChatService {
         ChatRoomDto room = requireRoom(roomId);
         if (!requesterId.equals(room.getUserId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "본인 상담방만 조회할 수 있습니다.");
+        }
+        return room;
+    }
+
+    // 관리자 전용 API용 소유자 검증. 담당 관리자 본인의 방인지 확인한다.
+    private ChatRoomDto requireAdminRoom(Long roomId, Long adminId) {
+        ChatRoomDto room = requireRoom(roomId);
+        if (!adminId.equals(room.getAdminId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "담당 관리자만 조회할 수 있습니다.");
         }
         return room;
     }
