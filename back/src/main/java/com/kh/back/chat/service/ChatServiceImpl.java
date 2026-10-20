@@ -2,6 +2,7 @@ package com.kh.back.chat.service;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatRoomSummaryDto;
 import com.kh.back.chat.mapper.ChatMapper;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
@@ -10,12 +11,15 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class ChatServiceImpl implements ChatService {
 
     private final ChatMapper chatMapper;
+
+    private static final Set<String> VALID_ROOM_STATUSES = Set.of("WAITING", "IN_PROGRESS", "CLOSED");
 
     @Override
     @Transactional
@@ -40,6 +44,10 @@ public class ChatServiceImpl implements ChatService {
         // 방 소유자(상담 요청 회원) 또는 배정된 관리자만 메시지를 보낼 수 있다.
         if (!senderId.equals(room.getUserId()) && !senderId.equals(room.getAdminId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "본인 상담방에서만 메시지를 보낼 수 있습니다.");
+        }
+        // 종료된 방에는 회원·관리자 모두 메시지를 보낼 수 없다.
+        if ("CLOSED".equals(room.getStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "CHAT_ROOM_CLOSED", "종료된 상담방에는 메시지를 보낼 수 없습니다.");
         }
 
         // 상담 시간과 무관하게 저장하므로 시간대 검증은 하지 않는다.
@@ -75,6 +83,52 @@ public class ChatServiceImpl implements ChatService {
     public long getUnreadCount(Long roomId, Long requesterId) {
         requireOwnRoom(roomId, requesterId);
         return chatMapper.countUnreadByRoomId(roomId, requesterId);
+    }
+
+    @Override
+    public List<ChatRoomSummaryDto> getRoomsByStatus(String status) {
+        if (!VALID_ROOM_STATUSES.contains(status)) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+                    "status는 WAITING/IN_PROGRESS/CLOSED 중 하나여야 합니다.");
+        }
+        return chatMapper.findRoomsByStatus(status);
+    }
+
+    @Override
+    public long getWaitingCount() {
+        return chatMapper.countWaitingRooms();
+    }
+
+    @Override
+    @Transactional
+    public ChatRoomDto enterRoom(Long roomId, Long adminId) {
+        requireRoom(roomId);
+        int updated = chatMapper.claimRoom(roomId, adminId);
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "ROOM_ALREADY_CLAIMED",
+                    "이미 다른 상담으로 처리 중이거나 대기 상태가 아닙니다.");
+        }
+        return chatMapper.findRoomById(roomId);
+    }
+
+    @Override
+    @Transactional
+    public void closeRoom(Long roomId, Long adminId) {
+        requireRoom(roomId);
+        int updated = chatMapper.closeRoom(roomId, adminId);
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "ROOM_NOT_CLOSABLE",
+                    "담당 중인 진행중 상담만 종료할 수 있습니다.");
+        }
+    }
+
+    @Override
+    public List<ChatMessageDto> getMessagesForAdmin(Long roomId, Long adminId) {
+        ChatRoomDto room = requireRoom(roomId);
+        if (!adminId.equals(room.getAdminId())) {
+            throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "담당 관리자만 조회할 수 있습니다.");
+        }
+        return chatMapper.findMessagesByRoomId(roomId);
     }
 
     private ChatRoomDto requireRoom(Long roomId) {
