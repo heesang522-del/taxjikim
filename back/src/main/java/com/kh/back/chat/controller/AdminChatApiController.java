@@ -73,6 +73,30 @@ public class AdminChatApiController {
         return ApiResponse.ok(chatService.getMessagesForAdmin(roomId, adminId));
     }
 
+    // 담당 중인 방에서 회원이 보낸 메시지를 읽음 처리
+    @PatchMapping("/rooms/{roomId}/messages/read")
+    public ApiResponse<Void> markAsRead(@PathVariable Long roomId,
+                                         @AuthenticationPrincipal CustomUserDetails principal) {
+        Long adminId = requireAdminId(principal);
+        chatService.markAsReadForAdmin(roomId, adminId);
+        return ApiResponse.ok(null);
+    }
+
+    // 담당 중인 방의 안 읽은 메시지 수
+    @GetMapping("/rooms/{roomId}/unread-count")
+    public ApiResponse<Long> getUnreadCount(@PathVariable Long roomId,
+                                             @AuthenticationPrincipal CustomUserDetails principal) {
+        Long adminId = requireAdminId(principal);
+        return ApiResponse.ok(chatService.getUnreadCountForAdmin(roomId, adminId));
+    }
+
+    // 담당 중인 모든 진행중 방의 안 읽은 메시지 수 합계 (대시보드)
+    @GetMapping("/unread-count")
+    public ApiResponse<Long> getTotalUnreadCount(@AuthenticationPrincipal CustomUserDetails principal) {
+        Long adminId = requireAdminId(principal);
+        return ApiResponse.ok(chatService.getTotalUnreadCountForAdmin(adminId));
+    }
+
     private Long requireAdminId(CustomUserDetails principal) {
         if (principal == null || principal.getUserId() == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");

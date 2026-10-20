@@ -49,4 +49,7 @@ public interface ChatMapper {
 
     // 상담 종료. 담당 관리자 본인의 IN_PROGRESS 방일 때만 성공
     int closeRoom(@Param("roomId") Long roomId, @Param("adminId") Long adminId);
+
+    // 담당 관리자의 진행중 방 전체에서 안 읽은 메시지 수 합계 (대시보드)
+    long countUnreadForAdmin(@Param("adminId") Long adminId);
 }
