@@ -21,12 +21,18 @@ async function requestAuth(config) {
             : cause.message)
     );
     error.code = detail?.code ?? cause.code;
+    error.details = detail?.details ?? cause.details;
     throw error;
   }
 }
 
-export function loginSession(loginId, password) {
-  return requestAuth({ url: '/auth/sessions', method: 'POST', data: { loginId, password, rememberMe: false } });
+export function loginSession(loginId, password, rememberMe = false) {
+  // 화면의 선택값을 서버에 전달해 기존 쿠키·리프레시 토큰 발급 정책을 적용한다.
+  return requestAuth({
+    url: '/auth/sessions',
+    method: 'POST',
+    data: { loginId, password, rememberMe },
+  });
 }
 
 export function logoutSession() {

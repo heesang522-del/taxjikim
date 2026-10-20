@@ -41,7 +41,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
 
         // 재발급은 컨트롤러에서 한 번만 처리
-        if ("/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
+        if ("/api/v1/auth/account-unlocks".equals(path)
+                || "/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
                 || "/api/v1/auth/sessions/current".equals(path)) {
             return true;
         }

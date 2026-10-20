@@ -12,9 +12,6 @@ import com.kh.back.user.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.Cookie;
-import com.kh.back.auth.mapper.UserSecurityMapper;
-import com.kh.back.auth.security.LoginUnlockTokenService;
-import com.kh.back.auth.security.LoginAttemptService;
 import com.kh.back.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import com.kh.back.common.validation.InputValidator;
@@ -43,9 +40,6 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginSessionRepository loginSessionRepository;
     private final AuthCookieService authCookieService;
-    private final UserSecurityMapper userSecurityMapper;
-    private final LoginUnlockTokenService loginUnlockTokenService;
-    private final LoginAttemptService loginAttemptService;
 
     /**
      * 회원 인증 후 현재 로그인을 교체하고, 선택한 로그인 방식에 맞춰 쿠키를 설정합니다.
@@ -249,13 +243,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional
     @Override
     public void unlockAccount(String token) {
-        // 기존 이메일 링크의 토큰 확인·잠금 해제 순서를 그대로 유지한다.
-        String loginId = loginUnlockTokenService.getLoginIdByToken(token);
-        if (loginId == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "ACCOUNT_UNLOCK_REJECTED", "유효하지 않거나 만료된 해제 요청입니다.");
-        }
-        userSecurityMapper.unlockAccount(loginId);
-        loginAttemptService.loginSucceeded(loginId);
-        loginUnlockTokenService.invalidateToken(token);
+        // 이전에 발급된 이메일 토큰으로 관리자 전용 해제를 우회할 수 없도록 종료한다.
+        throw new ApiException(HttpStatus.GONE, "EMAIL_UNLOCK_DISABLED", "계정 잠금은 관리자만 해제할 수 있습니다.");
     }
 }

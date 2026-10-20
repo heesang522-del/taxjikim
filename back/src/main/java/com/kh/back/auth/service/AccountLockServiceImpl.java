@@ -28,7 +28,7 @@ public class AccountLockServiceImpl implements AccountLockService {
     @Override
     @Transactional
     public void unlockAccount(String loginId) {
-        // 해제 중 동일 회원의 상태 변경을 막기 위해 회원 행을 잠근다.
+        // 로그인 처리와 같은 행 잠금을 얻어 해제 중 실패 기록이 다시 쌓이는 것을 막는다.
         UserDto user = mapper.findForAuthentication(loginId);
         if (user == null) throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "회원을 찾을 수 없습니다.");
         if (!"LOCKED".equals(user.getUserStatus()) && !"BANNED".equals(user.getUserStatus())) {

@@ -20,9 +20,6 @@ public interface UserMapper {
     String findLoginIdByNameAndEmail(@Param("name") String name,
                                       @Param("email") String email);
 
-    // 로그인 아이디(LOGIN_ID)로 회원 고유 번호(USER_ID) 조회
-    Long findUserIdByLoginId(@Param("loginId") String loginId);
-
     // 회원 정보 단건 조회 (PK가 필요한 경우에도 이 메서드로 조회 후 getLoginId() 사용)
     UserDto findByLoginId(@Param("loginId") String loginId);
 
@@ -41,16 +38,11 @@ public interface UserMapper {
 
     void updateProfileImageUrl(@Param("loginId") String loginId, @Param("profileImageUrl") String profileImageUrl);
 
-    // 회원 삭제 (상태 변경)
+    // 회원 즉시 삭제
     void deleteUser(@Param("loginId") String loginId);
-
-    // 만료된 탈퇴 회원 삭제
-    int deleteExpiredUsers(@Param("cutoffDate") LocalDateTime cutoffDate);
 
     // 로그인 시간 및 휴면/복구 관련
     int updateLastLoginAt(@Param("loginId") String loginId);
     int convertToDormantAccounts(@Param("cutoffDate") LocalDateTime cutoffDate);
     int activateDormantAccount(@Param("loginId") String loginId, @Param("email") String email);
-    int cancelDeleteUser(@Param("loginId") String loginId, @Param("email") String email,
-                         @Param("cutoffDate") LocalDateTime cutoffDate);
 }

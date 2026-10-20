@@ -62,13 +62,6 @@
         WHERE USER_ID = #{userId}
     </select>
 
-    <!-- 로그인 아이디로 실제 회원 PK 조회 -->
-    <select id="findUserIdByLoginId" parameterType="string" resultType="long">
-        SELECT USER_ID
-        FROM `users`
-        WHERE LOGIN_ID = #{loginId}
-    </select>
-
     <select id="findLoginIdByNameAndEmail" resultType="string">
         SELECT LOGIN_ID
         FROM `users`
@@ -119,12 +112,6 @@
         WHERE LOGIN_ID = #{loginId}
     </delete>
 
-    <delete id="deleteExpiredUsers">
-        DELETE FROM `users`
-        WHERE USER_STATUS = 'DELETED'
-          AND DELETED_AT &lt;= #{cutoffDate}
-    </delete>
-
     <update id="updateLastLoginAt">
         UPDATE `users`
         SET LAST_LOGIN_AT = NOW()
@@ -156,14 +143,4 @@
           AND USER_STATUS = 'DORMANT'
     </update>
 
-    <update id="cancelDeleteUser">
-        UPDATE `users`
-        SET USER_STATUS = 'ACTIVE',
-            DELETED_AT = NULL,
-            LAST_LOGIN_AT = NOW()
-        WHERE LOGIN_ID = #{loginId}
-          AND EMAIL = #{email}
-          AND USER_STATUS = 'DELETED'
-          AND DELETED_AT &gt; #{cutoffDate}
-    </update>
 </mapper>

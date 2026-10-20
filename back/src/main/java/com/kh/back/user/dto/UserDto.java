@@ -37,7 +37,6 @@ public class UserDto {
     private String userStatus;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-    private LocalDateTime deletedAt;
     private LocalDateTime lastLoginAt;
 
     @JsonGetter("createdAt")
@@ -48,11 +47,6 @@ public class UserDto {
     @JsonGetter("updatedAt")
     public String getUpdatedAtJson() {
         return DateTimeUtil.toSeoulString(updatedAt);
-    }
-
-    @JsonGetter("deletedAt")
-    public String getDeletedAtJson() {
-        return DateTimeUtil.toSeoulString(deletedAt);
     }
 
     @JsonGetter("lastLoginAt")

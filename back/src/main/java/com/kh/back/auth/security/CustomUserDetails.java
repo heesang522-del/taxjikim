@@ -59,11 +59,11 @@ public class CustomUserDetails implements UserDetails {
         return true;
     }
 
-    // 계정 잠금 여부 (DORMANT, DELETED 상태면 잠김 처리 -> LockedException 발생)
+    // 계정 잠금 여부 (LOCKED, DORMANT 상태면 잠김 처리 -> LockedException 발생)
     @Override
     public boolean isAccountNonLocked() {
         String status = userDto.getUserStatus();
-        return !"LOCKED".equals(status) && !"DORMANT".equals(status) && !"DELETED".equals(status);
+        return !"LOCKED".equals(status) && !"DORMANT".equals(status);
     }
 
     // 비밀번호 만료 여부 (true: 만료 안 됨) - [에러 원인 / 추가된 필수 메서드]

@@ -23,15 +23,10 @@ public interface UserService {
 
     void deleteUser(String loginId);
 
-    void updateLastLoginAt(String loginId);
-
-    void restoreAccountStatus(String loginId, String email, AccountRestoreType type);
-
-    UserDto getUserByLoginId(String loginId);
+    void restoreDormantAccount(String loginId, String email);
 
     UserDto getUserById(Long userId);
 
     boolean checkPassword(String loginId, String rawPassword);
 
-    enum AccountRestoreType { DORMANT, DELETE }
 }
