@@ -35,6 +35,13 @@
         VALUES (#{roomId}, #{senderId}, #{content})
     </insert>
 
+    <!-- 메시지 단건 조회. insertMessage 후 DB가 채운 CREATED_AT을 다시 읽어올 때 쓴다 -->
+    <select id="findMessageById" resultType="com.kh.back.chat.dto.ChatMessageDto">
+        SELECT MESSAGE_ID, ROOM_ID, SENDER_ID, CONTENT, IS_READ, CREATED_AT
+        FROM CHAT_MESSAGES
+        WHERE MESSAGE_ID = #{messageId}
+    </select>
+
     <!-- 방의 전체 메시지를 오래된 순으로 조회 -->
     <select id="findMessagesByRoomId" resultType="com.kh.back.chat.dto.ChatMessageDto">
         SELECT MESSAGE_ID, ROOM_ID, SENDER_ID, CONTENT, IS_READ, CREATED_AT
