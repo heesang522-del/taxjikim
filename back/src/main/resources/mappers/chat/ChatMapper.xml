@@ -35,6 +35,13 @@
         VALUES (#{roomId}, #{senderId}, #{content})
     </insert>
 
+    <!-- 메시지 단건 조회. insertMessage 후 DB가 채운 CREATED_AT을 다시 읽어올 때 쓴다 -->
+    <select id="findMessageById" resultType="com.kh.back.chat.dto.ChatMessageDto">
+        SELECT MESSAGE_ID, ROOM_ID, SENDER_ID, CONTENT, IS_READ, CREATED_AT
+        FROM CHAT_MESSAGES
+        WHERE MESSAGE_ID = #{messageId}
+    </select>
+
     <!-- 방의 전체 메시지를 오래된 순으로 조회 -->
     <select id="findMessagesByRoomId" resultType="com.kh.back.chat.dto.ChatMessageDto">
         SELECT MESSAGE_ID, ROOM_ID, SENDER_ID, CONTENT, IS_READ, CREATED_AT
@@ -117,5 +124,16 @@
           AND ADMIN_ID = #{adminId}
           AND STATUS = 'IN_PROGRESS'
     </update>
+
+    <!-- 담당 관리자가 진행중으로 맡고 있는 모든 방의 안 읽은 메시지 수 합계 (대시보드) -->
+    <select id="countUnreadForAdmin" resultType="long">
+        SELECT COUNT(*)
+        FROM CHAT_MESSAGES m
+        INNER JOIN CHAT_ROOMS r ON r.ROOM_ID = m.ROOM_ID
+        WHERE r.ADMIN_ID = #{adminId}
+          AND r.STATUS = 'IN_PROGRESS'
+          AND m.SENDER_ID != #{adminId}
+          AND m.IS_READ = FALSE
+    </select>
 
 </mapper>

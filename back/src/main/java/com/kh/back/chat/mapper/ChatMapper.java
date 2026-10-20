@@ -23,6 +23,9 @@ public interface ChatMapper {
     // 채팅 메시지 등록
     int insertMessage(ChatMessageDto message);
 
+    // 메시지 단건 조회. DB가 기본값으로 채우는 CREATED_AT을 insert 후 다시 읽어오는 용도
+    ChatMessageDto findMessageById(@Param("messageId") Long messageId);
+
     // 방의 전체 메시지 조회 (오래된 순)
     List<ChatMessageDto> findMessagesByRoomId(@Param("roomId") Long roomId);
 
@@ -49,4 +52,7 @@ public interface ChatMapper {
 
     // 상담 종료. 담당 관리자 본인의 IN_PROGRESS 방일 때만 성공
     int closeRoom(@Param("roomId") Long roomId, @Param("adminId") Long adminId);
+
+    // 담당 관리자의 진행중 방 전체에서 안 읽은 메시지 수 합계 (대시보드)
+    long countUnreadForAdmin(@Param("adminId") Long adminId);
 }
