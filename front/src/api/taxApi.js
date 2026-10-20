@@ -1,77 +1,154 @@
-import { client } from './client.js';
+import axios from 'axios';
 
-export const EVIDENCE_TYPES = {
-  CREDIT_CARD: '신용카드',
-  DEBIT_CARD: '직불·체크카드',
-  MEDICAL: '의료비',
-  UNKNOWN: '종류 확인 필요',
-};
+const api = axios.create({
+  baseURL: '/api/v1/tax',
+  timeout: 120000,
+});
+
+/**
+ * 기존 JWT 인증 토큰 첨부
+ *
+ * 실제 로그인 시스템이 accessToken을
+ * localStorage에 저장하는 경우에만 유효하다.
+ */
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('accessToken');
+
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+
+  return config;
+});
+
+/**
+ * 증빙 분석 상태 표시
+ *
+ * 백엔드 상태 코드와 일치해야 한다.
+ */
 export const EVIDENCE_STATUSES = {
-  NEEDS_REVIEW: '원본 확인 필요',
-  UNSUPPORTED_FORMAT: '추출 가능한 금액 없음',
-  YEAR_MISMATCH: '귀속연도 불일치',
+  PENDING: '검토 대기',
+  REVIEW_REQUIRED: '검토 필요',
+  CONFIRMED: '확인 완료',
+  REJECTED: '제외',
 };
 
-export function normalizeTaxPdfResult(result) {
-  if (!Array.isArray(result?.transactions) || (result.evidence && !Array.isArray(result.evidence.items))) {
-    throw new Error('PDF 분석 응답을 확인할 수 없습니다.');
+/**
+ * 공통 응답 처리
+ */
+async function request(config) {
+  try {
+    const response = await api.request(config);
+
+    const body = response.data;
+
+    if (body && typeof body === 'object' && 'success' in body) {
+      if (body.success === false) {
+        const error = new Error(body.error?.message ?? '요청 처리에 실패했습니다.');
+
+        error.code = body.error?.code;
+
+        throw error;
+      }
+
+      return body.data ?? body;
+    }
+
+    return body;
+  } catch (cause) {
+    if (cause.code === 'ERR_CANCELED' || cause.name === 'CanceledError') {
+      throw cause;
+    }
+
+    const detail = cause.response?.data?.error;
+
+    const error = new Error(detail?.message ?? cause.message ?? '서버 요청에 실패했습니다.');
+
+    error.status = cause.response?.status ?? cause.status;
+
+    error.code = detail?.code ?? cause.code;
+
+    throw error;
   }
-  return { ...result, evidence: result.evidence || null };
 }
 
-export async function uploadTaxPdfApi(file, { taxYear, signal } = {}) {
+/**
+ * PDF 자동 분석
+ */
+export async function parsePdf(file, { taxYear, signal } = {}) {
   const formData = new FormData();
+
   formData.append('file', file);
-  formData.append('taxYear', String(taxYear));
-  try {
-    const response = await client.post('/tax/upload-pdf', formData, {
-      // PDF 분석은 일반 API보다 오래 걸릴 수 있어 요청 대기 시간을 별도로 설정한다.
-      timeout: 120000,
-      signal,
-    });
-    const result = response.data;
-    if (!result?.success) {
-      throw new Error(result?.error?.message || 'PDF 분석 응답을 확인할 수 없습니다.');
-    }
-    return normalizeTaxPdfResult(result.data);
-  } catch (error) {
-    if (signal?.aborted) throw new Error('요청 대기를 중단했습니다.');
-    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-      throw new Error(
-        'PDF 분석 응답을 2분 안에 받지 못했습니다. 서버가 실행 중인지 확인하고 파일을 나누어 다시 시도해 주세요.'
-      );
-    }
-    throw new Error(
-      error.response?.data?.error?.message ||
-        (error.response?.status === 413 ? '서버가 허용하는 업로드 크기를 초과했습니다.' : error.message) ||
-        'PDF 업로드에 실패했습니다.'
-    );
+
+  if (taxYear != null) {
+    formData.append('taxYear', String(taxYear));
   }
+
+  return request({
+    url: '/parse',
+    method: 'POST',
+    data: formData,
+    signal,
+  });
 }
 
-// 저장 성공 응답을 받은 뒤에만 계산 내역에 반영한다.
-export async function saveReviewedTransactionApi(payload) {
-  try {
-    // 본문만 전송하고 회원 인증은 HttpOnly 쿠키로 처리한다.
-    const response = await client.post('/tax/reviewed-transactions', payload);
-    if (!response.data?.success || !response.data.data?.transactionId)
-      throw new Error('거래 저장 응답을 확인할 수 없습니다.');
-    return response.data.data;
-  } catch (error) {
-    throw new Error(
-      error.response?.data?.error?.message || error.message || '거래 저장에 실패했습니다. 다시 시도해 주세요.'
-    );
+/**
+ * FileUploader 전용 API
+ *
+ * 백엔드 응답을 기존 컴포넌트가
+ * 사용하는 형태로 정규화한다.
+ */
+export async function uploadTaxPdfApi(file, { taxYear, signal } = {}) {
+  const result = await parsePdf(file, {
+    taxYear,
+    signal,
+  });
+
+  if (!result || typeof result !== 'object') {
+    throw new Error('PDF 분석 결과가 올바르지 않습니다.');
   }
+
+  const transactions = Array.isArray(result.transactions) ? result.transactions : [];
+
+  const skippedCount = Number(result.skippedCount ?? 0);
+
+  return {
+    ...result,
+
+    originalFileName: result.originalFileName ?? result.fileName ?? file.name,
+
+    fileId: result.fileId ?? null,
+
+    persisted: result.persisted === true,
+
+    transactions,
+
+    skippedCount: Number.isFinite(skippedCount) ? skippedCount : 0,
+
+    evidence: result.evidence ?? null,
+  };
 }
 
-// 기존 거래 수정은 POST 재시도와 구분해 같은 거래 ID를 유지한다.
-export async function updateReviewedTransactionApi(payload) {
-  try {
-    const response = await client.put('/tax/reviewed-transactions', payload);
-    if (!response.data?.success || !response.data.data?.transactionId)
-      throw new Error('거래 수정 응답을 확인할 수 없습니다.');
-    return response.data.data;
-  } catch (error) {
-    throw new Error(error.response?.data?.error?.message || error.message || '거래 수정에 실패했습니다.');
-  }
+/**
+ * 선택한 거래를 DB에 저장
+ *
+ * 사용자 ID는 프론트에서 보내지 않고
+ * 백엔드 인증 정보로 결정한다.
+ */
+export async function saveTransactions(rows) {
+  return request({
+    url: '/transactions',
+    method: 'POST',
+    data: rows,
+  });
+}
+
+/**
+ * 로그인 사용자 거래 조회
+ */
+export async function getTransactions() {
+  return request({
+    url: '/transactions',
+    method: 'GET',
+  });
 }
