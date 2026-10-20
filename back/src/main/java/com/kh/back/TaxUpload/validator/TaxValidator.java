@@ -1,53 +1,81 @@
-package com.kh.back.TaxUpload.service;
 
-import org.apache.pdfbox.Loader;
-import org.apache.pdfbox.pdmodel.PDDocument;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+package com.kh.back.TaxUpload.validator;
+
+import com.kh.back.TaxUpload.dto.TaxTransactionDto;
+
+import org.springframework.stereotype.Component;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
+import java.math.BigDecimal;
+import java.util.List;
 
-@Service
+@Component
 public class TaxValidator {
 
-    private static final int MAX_BYTES = 10 * 1024 * 1024;
+    public byte[] validatePdf(
+            MultipartFile file
+    ) throws IOException {
 
-    @Value("${tax.ocr.max-pages:50}")
-    private int maxPages;
-
-    public void validatePdf(byte[] bytes) throws IOException {
-
-        if (bytes == null || bytes.length == 0) {
-            throw new IllegalArgumentException("파일이 비어 있습니다.");
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "PDF 파일이 비어 있습니다."
+            );
         }
 
-        if (bytes.length > MAX_BYTES) {
-            throw new IllegalArgumentException("PDF는 10MB 이하여야 합니다.");
+        byte[] bytes = file.getBytes();
+
+        if (
+                bytes.length < 5
+                        || bytes[0] != '%'
+                        || bytes[1] != 'P'
+                        || bytes[2] != 'D'
+                        || bytes[3] != 'F'
+                        || bytes[4] != '-'
+        ) {
+            throw new IllegalArgumentException(
+                    "PDF 형식이 아닙니다."
+            );
         }
 
-        if (bytes.length < 5 ||
-                !Arrays.equals(
-                        Arrays.copyOfRange(bytes, 0, 5),
-                        "%PDF-".getBytes(StandardCharsets.US_ASCII)
-                )) {
-            throw new IllegalArgumentException("PDF 형식이 아닙니다.");
+        return bytes;
+    }
+
+    public void validateUserId(Long id) {
+
+        if (id == null || id <= 0) {
+            throw new IllegalArgumentException(
+                    "유효하지 않은 사용자 ID입니다."
+            );
+        }
+    }
+
+    public void validateTransactions(
+            List<TaxTransactionDto> rows
+    ) {
+
+        if (rows == null || rows.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "저장할 거래가 없습니다."
+            );
         }
 
-        try (PDDocument document = Loader.loadPDF(bytes)) {
+        for (TaxTransactionDto t : rows) {
 
-            if (document.isEncrypted()) {
+            if (
+                    t == null
+                            || t.getTransactionDate() == null
+                            || t.getAmount() == null
+                            || t.getAmount().compareTo(BigDecimal.ZERO) < 0
+                            || !(
+                            "INCOME".equals(t.getTransactionType())
+                                    || "EXPENSE".equals(t.getTransactionType())
+                    )
+                            || t.getDescription() == null
+                            || t.getDescription().isBlank()
+            ) {
                 throw new IllegalArgumentException(
-                        "암호화된 PDF는 지원하지 않습니다."
-                );
-            }
-
-            int count = document.getNumberOfPages();
-
-            if (count == 0 || count > maxPages) {
-                throw new IllegalArgumentException(
-                        "PDF 페이지 수가 허용 범위를 벗어났습니다."
+                        "거래 날짜, 구분, 금액, 설명을 확인하세요."
                 );
             }
         }
