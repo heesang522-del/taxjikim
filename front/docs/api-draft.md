@@ -1,5 +1,15 @@
 # API 초안
 
+## 1:1 채팅 상담 연동 (2026-10-20)
+
+- 회원 채팅 위젯(`ChatWidget`)과 관리자 상담 관리 화면(`AdminChatsPage`), 대시보드 대기 수를 `localStorage` mock(`useChatStore`)에서 실제 REST·WebSocket API로 교체했다.
+- `src/api/chat.js`: 회원용(`getMyRoom`, `sendMemberMessage`, `getMemberMessages`, `markMemberRead`, `getMemberUnreadCount`)과 관리자용(`getAdminRooms`, `getAdminWaitingCount`, `enterAdminRoom`, `closeAdminRoom`, `sendAdminMessage`, `getAdminMessages`, `markAdminRead`) 함수. 전체 경로는 루트 `docs/api-draft.md`의 "채팅" 절을 따른다.
+- `GET /api/v1/chat/rooms/me`는 기존에 없던 API로, 이번 작업에서 백엔드에 추가했다(회원이 가진 열린 방을 새로 만들지 않고 조회).
+- `src/utils/useChatSocket.js`: `/ws/chat/{roomId}`에 연결하는 공통 WebSocket 훅. 보낸 메시지는 서버가 본인에게 되돌려주지 않아 화면에서 직접 붙인다(낙관적 갱신).
+- 실시간 연결은 실제로 그 화면을 보고 있는 동안만 연다(회원: 패널 열림, 관리자: 담당 중인 방을 열어본 동안). 닫혀 있을 때는 REST로 안읽은 수만 주기적으로 확인한다.
+- `vite.config.js`에 `/ws` 프록시(`ws: true`)를 추가해 개발 서버에서 WebSocket이 백엔드로 전달되게 했다.
+- 범위 제한: 마이페이지의 "지난 상담" 목록과 헤더의 "관리자 답변" 알림은 이번 작업에서 제외했다(백엔드에 회원별 전체 상담방 목록 API가 없음). 마이페이지에는 준비 중 안내만 남겼다.
+
 ## 관리자 제한 계정 시각 (2026-10-16)
 
 - GET /admin/account-locks 응답에 updatedAt을 추가한다. users.UPDATED_AT을 한국 시간대가 포함된 ISO 8601 문자열로 전달한다.

@@ -11,6 +11,9 @@ public interface ChatService {
     // 회원의 열린 방(WAITING/IN_PROGRESS)이 있으면 그 방을, 없거나 종료된 방뿐이면 새 대기 방을 반환
     ChatRoomDto openOrCreateRoom(Long userId);
 
+    // 회원의 열린 방(WAITING/IN_PROGRESS) 조회. 새로 만들지 않으며 없으면 null
+    ChatRoomDto findOpenRoom(Long userId);
+
     // 방에 메시지를 저장. 빈 내용 검증과 방 소유자(회원 또는 배정 관리자) 검증을 거친다
     ChatMessageDto sendMessage(Long roomId, Long senderId, String content);
 
@@ -28,6 +31,9 @@ public interface ChatService {
 
     // 관리자용: 상태별(WAITING/IN_PROGRESS/CLOSED) 상담방 목록
     List<ChatRoomSummaryDto> getRoomsByStatus(String status);
+
+    // 관리자용: 방 단건 요약 조회. 새로고침 후 선택 상태 복원에 쓰며 없으면 404
+    ChatRoomSummaryDto getRoomSummary(Long roomId);
 
     // 관리자용: 대기 상담방 수 (대시보드)
     long getWaitingCount();

@@ -12,7 +12,6 @@ import { useTaxResult } from '../utils/useTaxResult';
 import { useHistory } from '../utils/useHistory';
 import ScenarioTable from '../components/calculator/ScenarioTable';
 import { useChat } from '../store/useChatStore';
-import { formatClockTime, formatDateTime } from '../utils/chat';
 
 const CHART_W = 640,
   CHART_H = 220,
@@ -119,7 +118,7 @@ export default function MyPage() {
   const navigate = useNavigate();
   const c = useTaxResult();
   const { records } = useHistory();
-  const { myRooms, setOpen: openChat } = useChat();
+  const { setOpen: openChat } = useChat();
 
   if (!loggedIn) {
     return (
@@ -207,31 +206,8 @@ export default function MyPage() {
         </Card>
         <ScenarioTable />
         <Card title="상담 내역" icon="messageSquare">
-          {myRooms.length ? (
-            myRooms.map((r) => (
-              <details key={r.id}>
-                <summary>
-                  {formatDateTime(r.createdAt)} 시작{' '}
-                  <Pill tone={r.status === '종료' ? 'neutral' : r.status === '진행 중' ? 'primary' : 'warn'}>
-                    {r.status}
-                  </Pill>
-                </summary>
-                {r.messages.map((m) => (
-                  <p key={m.id} className="small" style={{ marginTop: 4 }}>
-                    <b>{m.from === 'admin' ? '상담사' : '나'}</b> {m.text}{' '}
-                    <span className="muted">{formatClockTime(m.at)}</span>
-                  </p>
-                ))}
-                {r.status === '종료' && (
-                  <p className="small muted" style={{ marginTop: 6 }}>
-                    종료 후 30일이 지나면 삭제됩니다.
-                  </p>
-                )}
-              </details>
-            ))
-          ) : (
-            <p className="state-msg">진행한 상담이 없습니다</p>
-          )}
+          {/* 지난 상담 목록 조회는 별도 작업으로 남겨두고, 현재 진행 중인 상담은 채팅 패널에서 바로 이어서 할 수 있다. */}
+          <p className="state-msg">지난 상담 내역 보기는 준비 중입니다. 진행 중인 상담은 채팅 상담에서 이어서 볼 수 있어요.</p>
           <div style={{ marginTop: 12 }}>
             <Button onClick={() => openChat(true)}>상담하기</Button>
           </div>

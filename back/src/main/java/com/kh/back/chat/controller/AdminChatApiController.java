@@ -39,6 +39,14 @@ public class AdminChatApiController {
         return ApiResponse.ok(chatService.getWaitingCount());
     }
 
+    // 방 단건 요약 조회. 새로고침 후 화면에서 선택했던 방을 복원할 때 쓴다.
+    @GetMapping("/rooms/{roomId}")
+    public ApiResponse<ChatRoomSummaryDto> getRoom(@PathVariable Long roomId,
+                                                    @AuthenticationPrincipal CustomUserDetails principal) {
+        requireAdminId(principal);
+        return ApiResponse.ok(chatService.getRoomSummary(roomId));
+    }
+
     // 입장: 대기 -> 진행중, 담당 관리자로 기록. 이미 처리 중이면 409
     @PostMapping("/rooms/{roomId}/enter")
     public ApiResponse<ChatRoomDto> enterRoom(@PathVariable Long roomId,
