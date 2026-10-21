@@ -2,6 +2,7 @@ package com.kh.back.chat.controller;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chat.dto.ChatMessageDto;
+import com.kh.back.chat.dto.ChatRoomDto;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.common.exception.ApiException;
@@ -20,6 +21,14 @@ public class ChatApiController {
     private final ChatService chatService;
 
     public record SendMessageRequest(String content) {}
+
+    // 내 열린 방(WAITING/IN_PROGRESS) 조회. 새로 만들지 않으며 없으면 data가 null이다.
+    // 회원 화면이 접속·새로고침 시 이 응답으로 기존 방 번호를 얻어 메시지 목록을 불러오고 WebSocket에 연결한다.
+    @GetMapping("/rooms/me")
+    public ApiResponse<ChatRoomDto> getMyRoom(@AuthenticationPrincipal CustomUserDetails principal) {
+        Long userId = requireUserId(principal);
+        return ApiResponse.ok(chatService.findOpenRoom(userId));
+    }
 
     // 메시지 전송. 열린 방이 없으면 대기 방을 새로 만들고 그 방에 저장한다.
     @PostMapping("/messages")
