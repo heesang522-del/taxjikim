@@ -228,6 +228,7 @@ public class AuthServiceImpl implements AuthService {
                     String token = cookie.getValue();
                     endSessionForToken(token, "accessToken".equals(cookie.getName()) ? "access" : "refresh");
                 }
+                request.getSession().invalidate();
             }
         }
         authCookieService.clearAuthenticationCookies(response);

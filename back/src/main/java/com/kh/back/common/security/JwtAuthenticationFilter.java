@@ -23,6 +23,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.regex.Matcher;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -37,25 +38,27 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     // � [추가] 정적 파일(.css, .js, .png 등) 및 파비콘 요청은 JWT 필터 검사를 생략함
     @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+    protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
 
         // 재발급은 컨트롤러에서 한 번만 처리
-        if ("/api/v1/auth/account-unlocks".equals(path)
-                || "/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
-                || "/api/v1/auth/sessions/current".equals(path)) {
-            return true;
+            if ("/api/v1/auth/account-unlocks".equals(path)
+                    || "/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
+                    || "/api/v1/auth/sessions/current".equals(path)) {
+                return true;
+            }
+            // 공개 인증 절차는 이전 세션 쿠키가 남아 있어도 진행할 수 있어야 한다.
+            if ("/api/v1/users".equals(path) || "/api/v1/users/check-id".equals(path)
+                    || "/api/v1/users/check-nickname".equals(path) || "/api/v1/users/check-email".equals(path)
+                    || "/api/v1/email-verifications".equals(path)
+                    || "/api/v1/auth/account-lookups".equals(path)
+                    || "/api/v1/auth/account-lookups/email-verifications".equals(path)
+                    || "/api/v1/auth/password-resets".equals(path)
+                    || "/api/v1/auth/password-resets/email-verifications".equals(path)) {
+                return true;
         }
-        // 공개 인증 절차는 이전 세션 쿠키가 남아 있어도 진행할 수 있어야 한다.
-        if ("/api/v1/users".equals(path) || "/api/v1/users/check-id".equals(path)
-                || "/api/v1/users/check-nickname".equals(path) || "/api/v1/users/check-email".equals(path)
-                || "/api/v1/email-verifications".equals(path)
-                || "/api/v1/auth/account-lookups".equals(path)
-                || "/api/v1/auth/account-lookups/email-verifications".equals(path)
-                || "/api/v1/auth/password-resets".equals(path)
-                || "/api/v1/auth/password-resets/email-verifications".equals(path)) {
-            return true;
-        }
+        // Matcher matcher = ();
+
         return path.endsWith(".css") ||
                 path.endsWith(".js") ||
                 path.endsWith(".png") ||
@@ -98,6 +101,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         "SESSION_REPLACED".equals(e.getMessage()) ? "SESSION_REPLACED" : "SESSION_EXPIRED");
                 return;
             }
+        } else {
+            // refresh token 만료시
+            // 만료
         }
 
         filterChain.doFilter(request, response);
