@@ -69,45 +69,46 @@ export async function uploadFileWithChunkAndMerge(file) {
 
     try {
         for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-            const start = chunkIndex * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, file.size);
-            const chunk = file.slice(start, end);
+          const start = chunkIndex * CHUNK_SIZE;
+          const end = Math.min(start + CHUNK_SIZE, file.size);
+          const chunk = file.slice(start, end);
 
-            const formData = new FormData();
-            formData.append("file", chunk);
-            formData.append("uploadId", uploadId);
-            formData.append("chunkIndex", chunkIndex);
-            formData.append("totalChunks", totalChunks);
-            formData.append("originalName", fileName);
+          const formData = new FormData();
+          formData.append('file', chunk);
+          formData.append('uploadId', uploadId);
+          formData.append('chunkIndex', chunkIndex);
+          formData.append('totalChunks', totalChunks);
+          formData.append('originalName', fileName);
 
-            const response = await fetch('/api/posts/upload-chunk', {
-                method: 'POST',
-                body: formData
-            });
+          // 변경
+          const response = await fetch('/api/v1/posts/community/upload-chunk', {
+            method: 'POST',
+            body: formData,
+          });
 
-            if (!response.ok) {
-                throw new Error(`${chunkIndex + 1}번째 청크 업로드 중 오류가 발생했습니다.`);
+          if (!response.ok) {
+            throw new Error(`${chunkIndex + 1}번째 청크 업로드 중 오류가 발생했습니다.`);
+          }
+
+          const result = await response.json();
+
+          if (!result.success) {
+            throw new Error(result.message || '청크 업로드 실패');
+          }
+
+          const targetData = result.data !== undefined ? result.data : result;
+
+          if (targetData) {
+            if (typeof targetData === 'string') {
+              finalSavedFileName = targetData;
+            } else if (targetData.savedFileName) {
+              finalSavedFileName = targetData.savedFileName;
             }
+          }
 
-            const result = await response.json();
-
-            if (!result.success) {
-                throw new Error(result.message || "청크 업로드 실패");
-            }
-
-            const targetData = result.data !== undefined ? result.data : result;
-
-            if (targetData) {
-                if (typeof targetData === 'string') {
-                    finalSavedFileName = targetData;
-                } else if (targetData.savedFileName) {
-                    finalSavedFileName = targetData.savedFileName;
-                }
-            }
-
-            if (!finalSavedFileName && result.savedFileName) {
-                finalSavedFileName = result.savedFileName;
-            }
+          if (!finalSavedFileName && result.savedFileName) {
+            finalSavedFileName = result.savedFileName;
+          }
         }
 
         if (!finalSavedFileName) {

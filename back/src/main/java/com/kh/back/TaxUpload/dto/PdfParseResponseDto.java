@@ -35,12 +35,12 @@ public class PdfParseResponseDto {
     @AllArgsConstructor
     public static class PageResult {
 
-        private int pageNumber;
+        private int pageNumber;   // 페이지숫자
 
-        private String method;
+        private String method;    // 메소드
 
-        private int extractedCount;
+        private int extractedCount;   // 추출된 횟수
 
-        private int parsedCount;
+        private int parsedCount;   // 파싱된 횟수
     }
 }

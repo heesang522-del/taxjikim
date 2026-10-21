@@ -3,13 +3,22 @@ package com.kh.back.TaxUpload.controller;
 import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
 import com.kh.back.TaxUpload.dto.TaxTransactionDto;
 import com.kh.back.TaxUpload.service.YearEndTaxService;
+import com.kh.back.auth.security.CustomUserDetails;
 
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-
-import org.springframework.web.bind.annotation.*;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -23,8 +32,8 @@ public class TaxUploadController {
     private final YearEndTaxService service;
 
     /**
-     * 기존 비회원 PDF 분석 기능을 유지한다.
-     * 거래 DB 저장은 이 API에서 수행하지 않는다.
+     * 비회원도 PDF를 분석할 수 있다.
+     * 분석 결과를 DB에 저장하지 않는다.
      */
     @PostMapping(
             value = "/parse",
@@ -33,27 +42,23 @@ public class TaxUploadController {
     public PdfParseResponseDto parse(
             @RequestParam("file") MultipartFile file
     ) throws IOException {
-
         return service.parsePdf(file);
     }
 
     /**
-     * 일반 사용자: 본인 거래 저장
-     * 관리자: userId를 지정해 대상 사용자 거래 저장 가능
+     * 본인 거래를 저장한다.
+     * 다른 사용자 지정은 TaxValidator에서 관리자 권한을 검사한다.
      */
     @PostMapping("/transactions")
     public ResponseEntity<Void> save(
-            @RequestParam(
-                    value = "userId",
-                    required = false
-            )
-            Long userId,
-
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @RequestParam(value = "userId", required = false)
+            Long requestedUserId,
             @RequestBody List<TaxTransactionDto> rows
     ) {
-
         service.saveConfirmedTransactions(
-                userId,
+                principal,
+                requestedUserId,
                 rows
         );
 
@@ -61,42 +66,45 @@ public class TaxUploadController {
     }
 
     /**
-     * userId를 생략하면 본인 거래를 조회한다.
-     * 다른 사용자 지정은 관리자만 허용한다.
+     * userId를 생략하면 로그인 사용자의 거래를 조회한다.
      */
     @GetMapping("/transactions")
     public List<TaxTransactionDto> getTransactions(
-            @RequestParam(
-                    value = "userId",
-                    required = false
-            )
-            Long userId
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @RequestParam(value = "userId", required = false)
+            Long requestedUserId
     ) {
-
-        return service.getTransactions(userId);
+        return service.getTransactions(
+                principal,
+                requestedUserId
+        );
     }
 
     /**
-     * 관리자 또는 거래 소유자만 단건 조회 가능
+     * 거래 소유자 또는 관리자만 조회할 수 있다.
      */
     @GetMapping("/transactions/{transactionId}")
     public TaxTransactionDto getTransaction(
-            @PathVariable Long transactionId
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @PathVariable("transactionId") Long transactionId
     ) {
-
-        return service.getTransaction(transactionId);
+        return service.getTransaction(
+                principal,
+                transactionId
+        );
     }
 
     /**
-     * 관리자 또는 거래 소유자만 수정 가능
+     * 거래 소유자 또는 관리자만 수정할 수 있다.
      */
     @PutMapping("/transactions/{transactionId}")
     public ResponseEntity<Void> updateTransaction(
-            @PathVariable Long transactionId,
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @PathVariable("transactionId") Long transactionId,
             @RequestBody TaxTransactionDto request
     ) {
-
         service.updateTransaction(
+                principal,
                 transactionId,
                 request
         );
@@ -105,14 +113,17 @@ public class TaxUploadController {
     }
 
     /**
-     * 관리자 또는 거래 소유자만 삭제 가능
+     * 거래 소유자 또는 관리자만 삭제할 수 있다.
      */
     @DeleteMapping("/transactions/{transactionId}")
     public ResponseEntity<Void> deleteTransaction(
-            @PathVariable Long transactionId
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @PathVariable("transactionId") Long transactionId
     ) {
-
-        service.deleteTransaction(transactionId);
+        service.deleteTransaction(
+                principal,
+                transactionId
+        );
 
         return ResponseEntity.noContent().build();
     }

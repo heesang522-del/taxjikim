@@ -36,21 +36,21 @@ public class TaxTransactionDto {
 
     private BigDecimal taxDeducted;
 
-    private BigDecimal actualAmount;
+    private BigDecimal actualAmount;  // 실제금액
 
-    private Integer taxYear;
+    private Integer taxYear;   // 귀속연도
 
-    private Boolean edited;
+    private Boolean edited;    // 수정됬는지 여부
 
-    private String status;
+    private String status;     // 상태
 
-    private Integer pageNumber;
+    private Integer pageNumber;  // 페이지 숫자
 
-    private String rawText;
+    private String rawText;     // 원본텍스트
 
-    private Boolean parseSuccess;
+    private Boolean parseSuccess; // 파싱성공 여부
 
-    private Boolean excluded;
+    private Boolean excluded;  // 제외
 
-    private String failureReason;
+    private String failureReason; // 실패 이유
 }

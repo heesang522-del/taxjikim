@@ -1,13 +1,12 @@
 package com.kh.back.TaxUpload.service;
 
-import com.kh.back.common.exception.ApiException;
-
 import com.kh.back.TaxUpload.dto.PageOcrResultDto;
 import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
 import com.kh.back.TaxUpload.dto.TaxTransactionDto;
-
 import com.kh.back.TaxUpload.mapper.TaxMapper;
 import com.kh.back.TaxUpload.validator.TaxValidator;
+import com.kh.back.auth.security.CustomUserDetails;
+import com.kh.back.common.exception.ApiException;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,8 +31,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     public PdfParseResponseDto parsePdf(
             MultipartFile file
     ) throws IOException {
-
-        // 기존 비회원 PDF 분석 기능을 유지한다.
         byte[] bytes = taxValidator.validatePdf(file);
 
         List<PageOcrResultDto> pages =
@@ -49,34 +46,27 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     @Transactional
     public void saveConfirmedTransactions(
+            CustomUserDetails principal,
             Long requestedUserId,
             List<TaxTransactionDto> rows
     ) {
-
-        Long targetUserId =
-                taxValidator.resolveTargetUserId(
-                        requestedUserId
-                );
+        Long targetUserId = taxValidator.resolveTargetUserId(
+                principal,
+                requestedUserId
+        );
 
         requireActiveUser(targetUserId);
-
-        // 모든 거래 입력을 먼저 검증한다.
         taxValidator.validateTransactions(rows);
 
         for (TaxTransactionDto row : rows) {
-
-            int taxYear =
-                    row.getTransactionDate().getYear();
+            int taxYear = row.getTransactionDate().getYear();
 
             Long taxInputId = requireTaxInput(
                     targetUserId,
                     taxYear
             );
 
-            /*
-             * 사용자와 세무 입력 ID는 요청값을 신뢰하지 않는다.
-             * 인증·권한 검사와 DB 조회 결과로 확정한다.
-             */
+            // 요청 본문에 담긴 사용자와 세무 입력 ID는 사용하지 않는다.
             row.setTransactionId(null);
             row.setUserId(targetUserId);
             row.setTaxInputId(taxInputId);
@@ -93,13 +83,13 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     @Transactional(readOnly = true)
     public List<TaxTransactionDto> getTransactions(
+            CustomUserDetails principal,
             Long requestedUserId
     ) {
-
-        Long targetUserId =
-                taxValidator.resolveTargetUserId(
-                        requestedUserId
-                );
+        Long targetUserId = taxValidator.resolveTargetUserId(
+                principal,
+                requestedUserId
+        );
 
         requireActiveUser(targetUserId);
 
@@ -109,16 +99,19 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     @Transactional(readOnly = true)
     public TaxTransactionDto getTransaction(
+            CustomUserDetails principal,
             Long transactionId
     ) {
-
-        taxValidator.requireLogin();
+        taxValidator.requireLogin(principal);
         taxValidator.validateTransactionId(transactionId);
 
         TaxTransactionDto transaction =
                 taxMapper.findById(transactionId);
 
-        taxValidator.requireOwnerOrAdmin(transaction);
+        taxValidator.requireOwnerOrAdmin(
+                principal,
+                transaction
+        );
 
         return transaction;
     }
@@ -126,36 +119,35 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     @Transactional
     public void updateTransaction(
+            CustomUserDetails principal,
             Long transactionId,
             TaxTransactionDto request
     ) {
-
-        taxValidator.requireLogin();
+        taxValidator.requireLogin(principal);
         taxValidator.validateTransactionId(transactionId);
 
         TaxTransactionDto existing =
                 taxMapper.lockById(transactionId);
 
-        // 요청의 userId가 아닌 기존 거래의 실제 소유자로 검사한다.
-        taxValidator.requireOwnerOrAdmin(existing);
+        taxValidator.requireOwnerOrAdmin(
+                principal,
+                existing
+        );
 
         taxValidator.validateTransaction(request);
 
-        int taxYear =
-                request.getTransactionDate().getYear();
+        int taxYear = request.getTransactionDate().getYear();
 
         Long taxInputId = requireTaxInput(
                 existing.getUserId(),
                 taxYear
         );
 
-        // 관리자가 수정하더라도 원래 거래 소유자를 유지한다.
+        // 관리자가 수정해도 거래 소유자는 변경하지 않는다.
         request.setTransactionId(existing.getTransactionId());
         request.setUserId(existing.getUserId());
         request.setTaxInputId(taxInputId);
         request.setTaxYear(taxYear);
-
-        // 수정 API로 변경한 내역임을 서버에서 기록한다.
         request.setEdited(true);
 
         taxMapper.updateTransaction(request);
@@ -164,18 +156,20 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     @Transactional
     public void deleteTransaction(
+            CustomUserDetails principal,
             Long transactionId
     ) {
-
-        taxValidator.requireLogin();
+        taxValidator.requireLogin(principal);
         taxValidator.validateTransactionId(transactionId);
 
         TaxTransactionDto existing =
                 taxMapper.lockById(transactionId);
 
-        taxValidator.requireOwnerOrAdmin(existing);
+        taxValidator.requireOwnerOrAdmin(
+                principal,
+                existing
+        );
 
-        // 실제 데이터를 삭제하지 않고 삭제 시각을 기록한다.
         taxMapper.softDeleteTransaction(
                 existing.getTransactionId(),
                 existing.getUserId()
@@ -183,9 +177,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     }
 
     private void requireActiveUser(Long userId) {
-
-        Long existingUserId =
-                taxMapper.findActiveUserId(userId);
+        Long existingUserId = taxMapper.findActiveUserId(userId);
 
         if (existingUserId == null) {
             throw new ApiException(
@@ -200,7 +192,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long userId,
             int taxYear
     ) {
-
         Long taxInputId =
                 taxMapper.findTaxInputIdByUserAndYear(
                         userId,
@@ -208,10 +199,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 );
 
         if (taxInputId == null) {
-            /*
-             * REGION, JOB, INCOME_TYPE을 임의로 채워서
-             * 세무 기본정보를 생성하지 않는다.
-             */
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "TAX_INPUT_REQUIRED",

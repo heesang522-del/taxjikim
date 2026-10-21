@@ -14,9 +14,9 @@ import lombok.Setter;
 @AllArgsConstructor
 public class PageOcrResultDto {
 
-    private int pageNumber;
+    private int pageNumber;  // 페이지숫자
 
-    private String text;
+    private String text;    // 텍스트
 
-    private boolean ocrUsed;
+    private boolean ocrUsed;  // ocr 라이브러리가 사용되는지 여부
 }
