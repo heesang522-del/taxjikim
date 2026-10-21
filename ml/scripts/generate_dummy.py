@@ -221,14 +221,238 @@ AMBIGUOUS = (
     "온라인 구매", "월 사용료", "구입 대금", "카드 결제", "주문 결제",
 )
 
+# 추가 초안은 기존 v3의 생성·분할 규칙을 바꾸지 않고 별도 옵션으로 만든다.
+# 단순 접미사 조합 대신 사람이 입력할 법한 구체적 설명을 작성했다.
+# 같은 품목의 다른 표현도 포함하므로 서로 독립적인 거래 유형 수는 아니다.
+EXTRA_SEEDS = {
+    "SOFTWARE_LICENSE": [
+        "팟캐스트 녹음 편집 앱 유료 구독",
+        "동영상 인코딩 도구 정식 버전 구매",
+        "촬영 사진 보정 앱 프리미엄 이용료",
+        "방송 화면 구성 프로그램 유료 플러그인 구매",
+        "영상 편집용 전환 효과 플러그인 라이선스",
+        "편집 프로그램용 노이즈 제거 플러그인 결제",
+        "녹음 음성 복원 소프트웨어 정품 구매",
+        "화면 녹화 프로그램 유료 버전 이용권",
+        "자막 받아쓰기 서비스 사용 크레딧 충전",
+        "영상 번역 자막 자동 생성 도구 구독",
+        "썸네일 작업용 유료 폰트 사용권 구입",
+        "영상 제목 그래픽 제작용 글꼴 라이선스",
+        "오프닝 제작에 쓸 모션 그래픽 템플릿 사용권",
+        "제품 소개 영상용 스톡 영상 라이선스 구매",
+        "영상에 삽입할 유료 사진 사용권 결제",
+        "브금 음원 사이트 월간 구독 결제",
+        "촬영 콘텐츠에 쓸 사운드 라이브러리 이용권",
+        "게임 리뷰 제작에 사용할 콘솔 게임 디지털판 구입",
+        "게임 공략 촬영용 추가 콘텐츠 DLC 구매",
+        "모바일 게임 리뷰용 유료 게임 앱 구매",
+        "VR 게임 플레이 영상 제작용 게임 사용권 구매",
+        "촬영 파일 온라인 백업 서비스 연간 구독",
+        "팀 편집 파일 공유용 클라우드 스토리지 요금",
+        "사진 일괄 보정 소프트웨어 라이선스 갱신",
+        "썸네일 제작용 벡터 디자인 프로그램 구독",
+    ],
+    "EQUIPMENT": [
+        "촬영 렌즈 새 제품 구입",
+        "제품 접사 촬영용 매크로 렌즈 구매",
+        "야외 촬영용 카메라 배터리 구매",
+        "카메라 충전 거치대 구입",
+        "촬영 영상 저장용 메모리카드 구입",
+        "카메라 메모리카드 리더기 구매",
+        "영상 편집 컴퓨터 그래픽카드 구매",
+        "편집 작업용 데스크톱 본체 구입",
+        "방송용 오디오 인터페이스 구매",
+        "게임 실황 녹음용 헤드셋 구입",
+        "음향 편집 모니터링 헤드폰 구매",
+        "방송 마이크 고정용 마이크 암 구매",
+        "촬영 대본 표시용 프롬프터 장비 구입",
+        "라이브 방송 영상 전환용 스위처 구매",
+        "제품 촬영용 회전 전시대 장비 구매",
+        "촬영용 조명 스탠드 구입",
+        "카메라 장착용 슬라이더 구매",
+        "손에 들고 촬영할 휴대용 짐벌 구매",
+        "영상 편집 파일 보관용 NAS 장비 구매",
+        "작업실 인터넷 연결용 네트워크 허브 구입",
+        "게임 리뷰 촬영 대상 컨트롤러 구매",
+        "전자기기 리뷰 대상 태블릿 구매",
+        "일상 촬영용 스마트폰 기기 구매",
+        "촬영 중 소리 수음용 휴대 녹음기 구입",
+        "영상 편집용 펜 태블릿 기기 구매",
+    ],
+    "TELECOMMUNICATION": [
+        "작업실 광인터넷 회선 기본요금 납부",
+        "업무용 광대역 인터넷 월 청구요금",
+        "대용량 촬영본 전송을 위한 인터넷 회선 증속 이용료",
+        "고정형 인터넷 서비스 사용 대금",
+        "사무실 유선전화 기본요금 납부",
+        "외주 작업자와 연락한 업무용 전화 통화요금",
+        "촬영 섭외용 휴대폰 요금제 청구액",
+        "업무용 알뜰폰 통신서비스 이용료",
+        "촬영 현장 연락용 선불 유심 통신요금 충전",
+        "업무상 국제전화 발신 요금 납부",
+        "촬영팀 연락용 문자메시지 발송 통신료",
+        "야외 중계용 데이터 전용 요금제 이용료",
+        "영상 전송용 테더링 데이터 추가 구매",
+        "외부 촬영 중 데이터 사용량 초과 통신료",
+        "출장 중 사용할 해외 데이터 로밍 패스 결제",
+        "현지 촬영팀 연락용 여행 유심 통화요금",
+        "해외 촬영 인터넷 접속용 eSIM 데이터 충전",
+        "모바일 라우터 데이터 회선 월 통신료",
+        "촬영장 임시 인터넷 회선 사용료",
+        "방송 송출용 유선망 서비스 월정액",
+    ],
+    "TRANSPORT": [
+        "취재 장소까지 이동한 전철 운임",
+        "촬영팀 미팅 장소 방문 광역버스 요금",
+        "지방 인터뷰 출장 SRT 열차표 구매",
+        "방송 행사 취재를 위한 무궁화호 승차권 결제",
+        "공항에서 촬영 숙소로 이동한 공항버스 운임",
+        "해외 촬영 출국 항공권 결제",
+        "촬영 출장 복귀 항공편 운임",
+        "여행 취재 일정의 현지 지하철 승차권",
+        "해외 촬영 장소로 이동한 현지 택시 요금",
+        "야간 촬영 마무리 후 귀가 택시 운임",
+        "촬영 장비를 싣고 이동한 차량 유료도로 통행료",
+        "촬영 장소 방문 중 발생한 터널 통행료",
+        "장비 운반 출장 차량 교량 통행료",
+        "촬영장 공영주차장 이용 대금",
+        "인터뷰 장소 건물 주차요금 정산",
+        "지역 축제 촬영 출장 중 시외버스표 결제",
+        "섬 촬영 현장 방문 도선 승선권 구매",
+        "다큐 취재 일정의 여객선 운임",
+        "촬영 출장 이동용 철도 승차권 변경 수수료",
+        "촬영 현장 이동 버스 환승 교통요금",
+    ],
+    "SUPPLIES_PROPS": [
+        "제품 사진 배경에 사용할 무광 종이 구매",
+        "촬영용 흰색 배경 천 구입",
+        "콘텐츠 연출용 색상 카드지 구매",
+        "촬영 세트 고정용 양면테이프 구입",
+        "조명 케이블 정리용 일회용 케이블타이 구매",
+        "카메라 외관 청소용 일회용 알코올 솜 구매",
+        "렌즈 세척용 클리너 액 구입",
+        "촬영 소품 제작용 접착제 구매",
+        "세트 장식 제작용 색종이와 리본 구입",
+        "생일 콘셉트 영상 연출용 종이 가랜드 구매",
+        "촬영 배경 장식용 인조 나뭇잎 구매",
+        "먹방 콘텐츠 촬영용 도시락 주문",
+        "먹방 촬영에 쓸 라면과 간식 구입",
+        "신제품 음식 리뷰 촬영용 과자 구매",
+        "빵집 리뷰 영상 촬영용 빵 구입",
+        "요리 영상 제작에 쓸 달걀과 우유 구매",
+        "베이킹 콘텐츠 촬영용 밀가루와 버터 구입",
+        "음료 비교 리뷰 촬영용 커피와 주스 구매",
+        "여행 음식 콘텐츠 촬영용 현지 음식 주문",
+        "요리 촬영용 소스와 향신료 구매",
+        "먹방 신메뉴 비교 촬영용 배달 메뉴 결제",
+        "제품 촬영 연출용 포장지 구매",
+        "촬영 소품 제작용 점토 재료 구입",
+        "리뷰 영상 배경 장식용 조화 구입",
+        "게임 방송 세트 꾸미기용 종이 장식 구입",
+    ],
+    "SPACE_RENTAL": [
+        "셀프 촬영 스튜디오 대관 비용",
+        "제품 사진 촬영실 반일 대여료",
+        "영상 촬영용 호리존 스튜디오 대관료",
+        "방음 녹음 공간 예약 이용료",
+        "팟캐스트 녹음실 시간제 사용료",
+        "토크 콘텐츠 촬영 회의 공간 대여 비용",
+        "실시간 방송용 촬영 부스 공간 사용료",
+        "요리 콘텐츠 제작용 키친 스튜디오 대여",
+        "인터뷰 촬영용 실내 공간 대관 대금",
+        "광고 영상 촬영 세트장 이용 비용",
+        "게임 콘텐츠 합동 방송 스튜디오 대관",
+        "리뷰 촬영용 공간 시간 연장 이용료",
+        "여행 촬영 일정의 호텔 객실 숙박료",
+        "지역 취재 출장 중 모텔 숙박비",
+        "촬영팀 지방 출장 숙소 예약 대금",
+        "야간 촬영 후 출장지 숙박 요금",
+        "섬 취재 일정 중 민박 숙박비",
+        "여행 콘텐츠 촬영 출장 호스텔 숙박료",
+        "해외 영상 촬영 출장 숙소 숙박료",
+        "연속 촬영 일정의 게스트하우스 숙박 대금",
+    ],
+    "OUTSOURCING": [
+        "원본 영상 편집자에게 지급한 컷 편집 대금",
+        "쇼츠 영상 편집 프리랜서 작업비",
+        "인터뷰 영상 자막 입력 외부 작업비",
+        "촬영본 장면 선별 편집 대행 비용",
+        "자막 오탈자 교정 외주 용역비",
+        "일본어 영상 자막 번역가 작업료",
+        "외국어 자막 감수 전문가 용역비",
+        "채널 배너 이미지 디자인 외주 제작비",
+        "방송 오버레이 그래픽 외부 제작비",
+        "인트로 모션 그래픽 제작자 작업료",
+        "리뷰 영상 제품 소개 애니메이션 외주비",
+        "영상 음량 균일화 작업 대행료",
+        "음성 녹음 잡음 정리 전문가 작업비",
+        "촬영본 컬러 그레이딩 외주 대금",
+        "제품 소개 내레이션 성우 녹음 용역비",
+        "여행 콘텐츠 지도 그래픽 제작 외주비",
+        "먹방 짧은 영상 재편집 외주 작업료",
+        "게임 공략 영상 자막 제작 대행료",
+        "일상 콘텐츠 썸네일 수정 디자이너 작업료",
+        "리뷰 영상 배경음악 편집 외부 작업비",
+    ],
+    "AD_PROMOTION": [
+        "채널 홍보 검색광고 클릭 비용 결제",
+        "신규 콘텐츠 유료 광고 노출 집행액",
+        "영상 시청자 모집용 SNS 광고 대금",
+        "유튜브 채널 홍보 배너 게재 비용",
+        "새 영상 소개 스폰서 게시물 광고 집행비",
+        "온라인 커뮤니티 채널 홍보 광고 게재료",
+        "뉴스레터에 채널 소개 광고를 싣는 비용",
+        "게임 방송 일정 알림 유료 홍보 광고료",
+        "먹방 영상 시청 유도 광고 캠페인 집행비",
+        "여행 콘텐츠 알리기 위한 검색광고 결제",
+        "리뷰 영상 방문자 유입 광고비 지출",
+        "브이로그 신규 구독자 모집 광고 집행 대금",
+        "영상 공개 알림 배너 광고료 납부",
+        "채널 소개 유료 광고 캠페인 결제",
+        "짧은 영상 홍보를 위한 피드 광고비",
+        "신규 영상 홍보용 스토리 광고 집행료",
+        "채널 홍보용 디스플레이 광고 게재 비용",
+        "외부 매체 채널 소개 광고 지면 구매비",
+        "영상 시청 유도 키워드 광고비 납부",
+        "라이브 방송 홍보용 유료 광고비 결제",
+    ],
+    "OTHER": [
+        "콘텐츠 계약 분쟁 관련 변호사 상담 수수료",
+        "협찬 계약 조항 검토 법률 자문료",
+        "채널 거래 장부 정리 회계 대행료",
+        "사업 운영 세무 기장 월 수수료",
+        "영상 편집 실무 강의 등록비",
+        "촬영 조명 기법 직무 교육 수강료",
+        "온라인 콘텐츠 기획 교육비 납부",
+        "업무 제출용 증명서 발급 대금",
+        "업무 촬영 기기 손상 보장 보험 납입료",
+        "방송 장비 파손 보험 갱신료",
+    ],
+}
 
-def build_rows() -> list[dict[str, str]]:
+# 모호하거나 현재 범주 경계가 확정되지 않은 설명은 학습 정답과 분리한다.
+DRAFT_REVIEW_CASES = [
+    ("촬영용 카메라 대여료", "장비 대여는 공간 대여와 다르며 적용 범주 미확정"),
+    ("게임 아이템 구매", "게임 이용권인지 게임 내 소비성 아이템인지 불명확"),
+    ("리뷰용 화장품 구매", "리뷰용 비전자 제품의 범주 기준 미확정"),
+    ("촬영용 의상 구입", "의류를 소품에 포함하는 기준 미확정"),
+    ("장비 수리 비용", "구매가 아닌 수리 서비스의 범주 미확정"),
+    ("업무용 차량 렌트비", "차량 대여의 범주 기준 미확정"),
+    ("인터넷 비용", "회선 요금인지 온라인 서비스 이용료인지 불명확"),
+    ("광고비 정산", "수입인지 지출인지 및 정산 내용이 불명확"),
+]
+
+
+def build_rows(expanded_draft: bool = False) -> list[dict[str, str]]:
     """정답 검토 전의 생성 샘플을 반환한다. 모델 입력은 description뿐이다."""
     rows = []
-    for category, descriptions in SEEDS.items():
+    for category, original in SEEDS.items():
+        descriptions = original + EXTRA_SEEDS[category] if expanded_draft else original
         for index, description in enumerate(descriptions, start=1):
             group_id = f"{category.lower()}_{index:02d}"
-            for variant, template in enumerate(TEMPLATES, start=1):
+            # 확장 초안은 접미사로 행 수를 늘리지 않고 작성한 설명당 한 행만 만든다.
+            templates = ("{text}",) if expanded_draft else TEMPLATES
+            for variant, template in enumerate(templates, start=1):
                 rows.append({
                     "sample_id": f"{group_id}_{variant:02d}",
                     "description": template.format(text=description),
@@ -250,21 +474,32 @@ def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--expanded-draft", action="store_true",
+        help="추가 설명 초안을 v4에 생성한다. 기존 v3·평가 자료는 유지한다.",
+    )
+    parser.add_argument(
         "--overwrite", action="store_true",
         help="이미 생성된 파일을 덮어쓴다. 수동 검토 결과도 지워지므로 주의한다.",
     )
     args = parser.parse_args()
-    paths = [OUTPUT_DIR / name for name in (
+    output_dir = (BASE_DIR / "data/expense/category_dummy_v4_draft"
+                  if args.expanded_draft else OUTPUT_DIR)
+    paths = [output_dir / name for name in (
         "labeled_candidates.csv", "needs_info.csv", "manifest.json",
     )]
-    if not args.overwrite and any(path.exists() for path in paths):
+    if not args.overwrite and (any(path.exists() for path in paths)
+                              or (args.expanded_draft and (output_dir / "review_cases.csv").exists())):
         parser.error("생성 파일이 이미 있습니다. 재생성하려면 --overwrite를 지정하세요.")
 
-    rows = build_rows()
+    rows = build_rows(args.expanded_draft)
     if len({row["description"] for row in rows}) != len(rows):
         raise ValueError("중복 설명이 있습니다.")
     if any(not row["description"].strip() for row in rows):
         raise ValueError("빈 설명이 있습니다.")
+    # 공백·문장부호 차이만 있는 설명도 겹침으로 보고 생성 단계에서 중단한다.
+    normalized = ["".join(c.lower() for c in row["description"] if c.isalnum()) for row in rows]
+    if len(set(normalized)) != len(normalized):
+        raise ValueError("표기 차이만 있는 중복 설명이 있습니다.")
 
     # 정보 부족 샘플은 특정 카테고리의 정답으로 학습하지 않고 보류 검증에만 쓴다.
     needs_info = [
@@ -272,31 +507,48 @@ def main() -> None:
          "expected_status": "NEEDS_INFO"}
         for index, text in enumerate(AMBIGUOUS, start=1)
     ]
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     write_csv(paths[0], rows)
     write_csv(paths[1], needs_info)
     manifest = {
-        "dataset_version": "expense_category_dummy_v3",
+        "dataset_version": "expense_category_dummy_v4_draft" if args.expanded_draft else "expense_category_dummy_v3",
         "transaction_type": "EXPENSE",
         "source": "synthetic_examples_not_real_transactions",
         "model_input": ["description"],
         "target": "category_code",
         "review_status": "PENDING",
         "labeled_candidate_count": len(rows),
-        "independent_seed_group_count": sum(map(len, SEEDS.values())),
+        "seed_group_count": len({row["group_id"] for row in rows}),
         "needs_info_count": len(needs_info),
         "category_counts": {
-            category: len(seeds) * len(TEMPLATES)
-            for category, seeds in SEEDS.items()
+            category: sum(row["category_code"] == category for row in rows)
+            for category in SEEDS
         },
         "split_status": "NOT_SPLIT_REVIEW_SEEDS_FIRST",
+        "note": "Synthetic wording candidates; semantic independence and correctness are not guaranteed.",
+        "test_data_used_for_generation": False,
+        "training_ready": False,
     }
+    if not args.expanded_draft:
+        # 기존 v3 요약을 읽는 코드와의 호환을 위해 원래 필드도 유지한다.
+        # 이름과 달리 모든 그룹이 의미상 독립적이라는 보장은 아니다.
+        manifest["independent_seed_group_count"] = sum(map(len, SEEDS.values()))
+    if args.expanded_draft:
+        manifest["base_description_count"] = sum(map(len, SEEDS.values()))
+        manifest["new_description_count"] = sum(map(len, EXTRA_SEEDS.values()))
+        manifest["suffix_variants_generated"] = False
+        manifest["split_compatibility"] = "DRAFT_ONLY_NOT_COMPATIBLE_WITH_V3_FAMILIES"
+        write_csv(output_dir / "review_cases.csv", [
+            {"description": text, "reason": reason, "review_status": "NEEDS_DECISION"}
+            for text, reason in DRAFT_REVIEW_CASES
+        ])
+        manifest["review_case_count"] = len(DRAFT_REVIEW_CASES)
     paths[2].write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
     )
-    group_count = sum(map(len, SEEDS.values()))
+    group_count = len({row["group_id"] for row in rows})
     print(f"지출 분류 후보 {len(rows)}건 / 대표 그룹 {group_count}개 / 정보 부족 {len(needs_info)}건")
-    print(f"저장 위치: {OUTPUT_DIR}")
+    print(f"저장 위치: {output_dir}")
     print("대표 샘플과 OTHER 범위를 검토한 뒤 그룹 기준으로 분할하세요. 아직 학습하지 않았습니다.")
 
 

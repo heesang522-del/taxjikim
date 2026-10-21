@@ -1,5 +1,7 @@
 # ML 폴더·파일 안내
 
+집에서 이어갈 때는 [작업 인계서](home-handoff.md)를 먼저 읽는다.
+
 설치·실행 방법은 [최상위 README](../../README.md), 전체 설계는 [상세 명세](../../docs/creator-tax-dummy-format.md)를 참고한다. Python 코드 내부 설명은 각 `.py` 파일의 주석에 작성한다.
 
 ## 폴더 역할
@@ -10,6 +12,7 @@
 | `scripts/` | 데이터 생성 등 준비 작업 코드 |
 | `data/` | 생성한 데이터와 검토 자료 |
 | `data/expense/` | 지출 분류용 데이터. v1·v2는 기존 보존본, v3는 추가 설명을 반영해 생성할 자료 |
+| `data/expense/category_dummy_v4_draft/` | 자체 점검한 확장 초안. 기존 설명 180개와 새 설명 185개를 모은 후보이며 아직 학습용으로 분할하지 않음 |
 | `models/expense_baseline_v2/` | 추가 설명으로 다시 학습할 지출 모델 비교 결과 |
 | `docs/` | ML 작업 안내 문서 |
 | `.venv/` | 프로젝트용 Python과 설치 라이브러리 |
@@ -22,6 +25,10 @@
 | `app/main.py` | 서버 시작점. 현재 `/health`로 서버 상태 확인 |
 | `app/__init__.py` | `app`을 Python 패키지로 구성 |
 | `scripts/generate_dummy.py` | 설명·정답 카테고리로 검토용 더미데이터 생성 |
+| `data/expense/category_dummy_v4_draft/labeled_candidates.csv` | 접미사 변형 없이 설명 365개와 정답 후보를 담은 확장 자료 |
+| `data/expense/category_dummy_v4_draft/review_cases.csv` | 정답을 확정하지 않은 범주 경계·정보 부족 사례와 보류 이유 |
+| `data/expense/category_dummy_v4_draft/needs_info.csv` | 명확히 정보가 부족한 설명 10개 |
+| `data/expense/category_dummy_v4_draft/manifest.json` | 확장 자료의 출처·건수·상태 요약 |
 | `scripts/split_expense_data.py` | 비슷한 거래 의미를 묶어 지출 데이터를 학습·검증·시험용으로 분할 |
 | `scripts/train_expense.py` | TF-IDF와 두 분류 모델을 학습하고 검증 자료로 비교 |
 | `data/expense/category_dummy_v3/labeled_candidates.csv` | 기존 지출과 여행·먹방·게임·일상·리뷰 설명의 정답 검토 자료 |
@@ -39,6 +46,7 @@
 | `models/expense_baseline_v2/validation_report.json` | 두 모델의 검증 점수·카테고리별 성능·실험 조건 |
 | `requirements.txt` | 라이브러리 설치 목록과 버전 |
 | `docs/file-guide.md` | 폴더·파일 역할과 읽는 순서 |
+| `docs/home-handoff.md` | 집에서 이어갈 현재 상태·실행 방법·다음 작업·유지할 합의 |
 
 ## 정답 코드와 카테고리
 
@@ -71,3 +79,5 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 5. `app/main.py`: API 서버 코드 확인
 
 기존 v2 자료로 첫 실험을 마쳤다. 현재 코드는 대표 설명 180개로 v3 자료와 새 분할·모델 결과를 생성하도록 준비했으며, 아직 재생성·재학습하지 않았다. 최종 시험·미분류 처리·예측 API 연결은 아직 하지 않았다. 현재 모델은 실험용이다. 파일이 추가되거나 역할이 바뀌면 이 안내서도 갱신한다.
+
+확장 초안 v4는 별도로 생성·자체 점검했다. 현재 학습·분할 코드는 계속 v3를 사용하며 v4를 자동으로 학습하지 않는다. v4도 모델 입력은 description 하나이고 카테고리는 생성 정답 후보다.
