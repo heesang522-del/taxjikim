@@ -61,11 +61,12 @@ public class ChatHandshakeInterceptor implements HandshakeInterceptor {
         }
 
         // 2. 로그인 여부 확인 (REST의 JwtAuthenticationFilter와 동일한 기준)
-        Long userId = authenticate(servletRequest.getServletRequest());
-        if (userId == null) {
+        AuthenticatedUser authenticated = authenticate(servletRequest.getServletRequest());
+        if (authenticated == null) {
             response.setStatusCode(HttpStatus.UNAUTHORIZED);
             return false;
         }
+        Long userId = authenticated.userId();
 
         // 3. 그 방이 실제로 존재하는지 확인
         ChatRoomDto room = chatMapper.findRoomById(roomId);
@@ -80,10 +81,18 @@ public class ChatHandshakeInterceptor implements HandshakeInterceptor {
         }
 
         // 여기 담아두는 값은 그대로 WebSocketSession.getAttributes()로 넘어가서 ChatWebSocketHandler가 그대로 쓴다.
+        // sessionId(sid)도 함께 넘겨서, 연결된 이후에도 로그아웃·다른 기기 로그인으로 이 로그인 세션이
+        // 끊겼는지 핸들러가 다시 확인할 수 있게 한다.
         attributes.put("userId", userId);
+        attributes.put("sessionId", authenticated.sessionId());
         attributes.put("role", userId.equals(room.getUserId()) ? "MEMBER" : "ADMIN");
         return true;
     }
+
+
+
+    // 인증된 사용자 번호와, 그 인증이 어느 로그인 세션(sid)에서 비롯됐는지를 함께 담는다.
+    private record AuthenticatedUser(Long userId, String sessionId) {}
 
     @Override
     public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
@@ -91,8 +100,8 @@ public class ChatHandshakeInterceptor implements HandshakeInterceptor {
         // 연결 이후 처리할 것이 없다.
     }
 
-    // REST의 JwtAuthenticationFilter와 같은 기준으로 검증한다. 통과하면 userId, 아니면 null.
-    private Long authenticate(HttpServletRequest request) {
+    // REST의 JwtAuthenticationFilter와 같은 기준으로 검증한다. 통과하면 userId·sessionId, 아니면 null.
+    private AuthenticatedUser authenticate(HttpServletRequest request) {
         // 토큰이 없거나 서명·만료가 잘못됐으면 즉시 실패
         String accessToken = resolveAccessToken(request);
         if (accessToken == null || !jwtTokenProvider.validateToken(accessToken)) {
@@ -102,8 +111,9 @@ public class ChatHandshakeInterceptor implements HandshakeInterceptor {
         // access 타입 토큰이어야 하고, Redis에 기록된 "현재 로그인 세션"과 일치해야 한다.
         // (다른 기기에서 로그인해서 이전 세션이 끊긴 경우 여기서 걸러진다.)
         Long userId = jwtTokenProvider.getUserId(accessToken);
+        String sessionId = jwtTokenProvider.getSessionId(accessToken);
         if (!jwtTokenProvider.isTokenType(accessToken, "access")
-                || !loginSessionRepository.isCurrentSession(userId, jwtTokenProvider.getSessionId(accessToken))) {
+                || !loginSessionRepository.isCurrentSession(userId, sessionId)) {
             return null;
         }
 
@@ -112,7 +122,7 @@ public class ChatHandshakeInterceptor implements HandshakeInterceptor {
         if (userDto == null || !"ACTIVE".equals(userDto.getUserStatus())) {
             return null;
         }
-        return userId;
+        return new AuthenticatedUser(userId, sessionId);
     }
 
     private Long extractRoomId(String path) {
