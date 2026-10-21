@@ -4,62 +4,185 @@
 
 <mapper namespace="com.kh.back.TaxUpload.mapper.TaxMapper">
 
-    <insert id="insertPdfFile" useGeneratedKeys="true" keyProperty="fileId">
-        INSERT INTO FILE_META (USER_ID, STORED_FILE_NAME, FILE_PATH, FILE_EXTENSION, FILE_SIZE, FILE_TYPE, ORIGINAL_FILE_NAME)
-        VALUES (#{userId}, #{storedFileName}, #{filePath}, 'pdf', #{fileSize}, #{fileType}, #{originalFileName})
-    </insert>
+    <resultMap id="거래매핑"
+               type="com.kh.back.TaxUpload.dto.TaxTransactionDto">
 
-    <select id="findTaxInputIdByUserAndYear" resultType="java.lang.Long">
+        <id property="transactionId"
+            column="TRANSACTION_ID"/>
+
+        <result property="taxInputId"
+                column="TAX_INPUT_ID"/>
+
+        <result property="userId"
+                column="USER_ID"/>
+
+        <result property="transactionDate"
+                column="TRANSACTION_DATE"/>
+
+        <result property="transactionType"
+                column="TRANSACTION_TYPE"/>
+
+        <result property="description"
+                column="DESCRIPTION"/>
+
+        <result property="category"
+                column="CATEGORY"/>
+
+        <result property="amount"
+                column="AMOUNT"/>
+
+        <result property="taxYear"
+                column="TAX_YEAR"/>
+
+        <result property="edited"
+                column="IS_EDITED"/>
+
+    </resultMap>
+
+    <sql id="거래컬럼">
+
+        TRANSACTION_ID,
+        TAX_INPUT_ID,
+        USER_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        AMOUNT,
+        TAX_YEAR,
+        IS_EDITED
+
+    </sql>
+
+    <select id="findActiveUserId"
+            resultType="java.lang.Long">
+
+        SELECT USER_ID
+        FROM USERS
+        WHERE USER_ID = #{userId}
+        AND DELETED_AT IS NULL
+        AND USER_STATUS != 'DELETED'
+
+    </select>
+
+    <!--
+        사용자·연도에 해당하는 기존 세무 입력 정보를 사용한다.
+        저장·수정 트랜잭션 동안 부모 행을 잠근다.
+    -->
+    <select id="findTaxInputIdByUserAndYear"
+            resultType="java.lang.Long">
+
         SELECT TAX_INPUT_ID
         FROM TAX_INPUTS
-        WHERE USER_ID = #{userId} AND TAX_YEAR = #{taxYear}
-        LIMIT 1
+        WHERE USER_ID = #{userId}
+        AND TAX_YEAR = #{taxYear}
+        AND DELETED_AT IS NULL
+        FOR UPDATE
+
     </select>
 
-    <insert id="insertTaxInput" parameterType="java.util.Map" useGeneratedKeys="true" keyProperty="taxInputId">
-        INSERT INTO TAX_INPUTS (
-        USER_ID, TAX_YEAR, REGION, JOB, INCOME_TYPE, AUTO_WITHHOLDING, TOTAL_INCOME, TOTAL_EXPENSE, EXPECTED_TAX
+    <insert id="insertTransaction"
+            parameterType="com.kh.back.TaxUpload.dto.TaxTransactionDto"
+            useGeneratedKeys="true"
+            keyProperty="transactionId"
+            keyColumn="TRANSACTION_ID">
+
+        INSERT INTO TAX_TRANSACTIONS (
+        TAX_INPUT_ID,
+        USER_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        AMOUNT,
+        TAX_YEAR,
+        IS_EDITED
         )
         VALUES (
-        #{userId}, #{taxYear}, #{region}, #{job}, #{incomeType}, #{autoWithholding}, #{totalIncome}, #{totalExpense}, #{expectedTax}
+        #{taxInputId},
+        #{userId},
+        #{transactionType},
+        #{transactionDate},
+        #{description},
+        #{category},
+        #{amount},
+        #{taxYear},
+        #{edited}
         )
+
     </insert>
 
-    <insert id="insertTaxTransactions" parameterType="java.util.List">
-        INSERT INTO TAX_TRANSACTIONS (
-        TAX_INPUT_ID, USER_ID, TRANSACTION_TYPE, TRANSACTION_DATE, DESCRIPTION, CATEGORY, AMOUNT, TAX_YEAR, IS_EDITED
-        )
-        VALUES
-        <foreach collection="list" item="item" separator=",">
-            (
-            #{item.taxInputId}, #{item.userId}, #{item.transactionType}, #{item.transactionDate}, #{item.description}, #{item.category}, #{item.amount}, #{item.taxYear}, #{item.isEdited}
-            )
-        </foreach>
-    </insert>
+    <select id="findByUserId"
+            resultMap="거래매핑">
 
-    <!-- 파일 행 잠금으로 같은 파일의 동시 승인 요청을 순서대로 처리한다. -->
-    <select id="lockOwnedPdf" resultType="java.lang.Long">
-        SELECT FILE_ID FROM FILE_META WHERE FILE_ID = #{fileId} AND USER_ID = #{userId}
-        AND DELETED_AT IS NULL AND FILE_TYPE IN ('TAX_LEDGER', 'TAX_EVIDENCE') FOR UPDATE
+        SELECT
+        <include refid="거래컬럼"/>
+
+        FROM TAX_TRANSACTIONS
+        WHERE USER_ID = #{userId}
+        AND DELETED_AT IS NULL
+
+        ORDER BY
+        TRANSACTION_DATE DESC,
+        TRANSACTION_ID DESC
+
     </select>
-    <select id="findReviewedTransaction" resultType="com.kh.back.TaxUpload.dto.TaxTransactionDto">
-        SELECT TRANSACTION_ID AS transactionId, TAX_INPUT_ID AS taxInputId, USER_ID AS userId,
-        TRANSACTION_TYPE AS transactionType, TRANSACTION_DATE AS transactionDate,
-        DESCRIPTION AS description, CATEGORY AS category, AMOUNT AS amount, TAX_YEAR AS taxYear,
-        IS_EDITED AS edited, SOURCE_FILE_ID AS sourceFileId, SOURCE_ITEM_INDEX AS sourceItemIndex
-        FROM TAX_TRANSACTIONS WHERE SOURCE_FILE_ID = #{fileId} AND SOURCE_ITEM_INDEX = #{itemIndex} AND USER_ID = #{userId}
+
+    <select id="findById"
+            resultMap="거래매핑">
+
+        SELECT
+        <include refid="거래컬럼"/>
+
+        FROM TAX_TRANSACTIONS
+        WHERE TRANSACTION_ID = #{transactionId}
+        AND DELETED_AT IS NULL
+
     </select>
-    <insert id="insertReviewedTransaction" useGeneratedKeys="true" keyProperty="transactionId">
-        INSERT INTO TAX_TRANSACTIONS (TAX_INPUT_ID, USER_ID, TRANSACTION_TYPE, TRANSACTION_DATE,
-        DESCRIPTION, CATEGORY, AMOUNT, TAX_YEAR, IS_EDITED, SOURCE_FILE_ID, SOURCE_ITEM_INDEX)
-        VALUES (#{taxInputId}, #{userId}, #{transactionType}, #{transactionDate}, #{description},
-        #{category}, #{amount}, #{taxYear}, TRUE, #{sourceFileId}, #{sourceItemIndex})
-    </insert>
-    <update id="updateReviewedTransaction">
-        UPDATE TAX_TRANSACTIONS SET TAX_INPUT_ID = #{taxInputId}, TAX_YEAR = #{taxYear},
-            TRANSACTION_TYPE = #{transactionType}, TRANSACTION_DATE = #{transactionDate},
-            DESCRIPTION = #{description}, CATEGORY = #{category}, AMOUNT = #{amount}, IS_EDITED = TRUE
-        WHERE TRANSACTION_ID = #{transactionId} AND USER_ID = #{userId}
-          AND SOURCE_FILE_ID = #{sourceFileId} AND SOURCE_ITEM_INDEX = #{sourceItemIndex}
+
+    <!-- 권한 확인과 변경을 같은 트랜잭션으로 처리한다. -->
+    <select id="lockById"
+            resultMap="거래매핑">
+
+        SELECT
+        <include refid="거래컬럼"/>
+
+        FROM TAX_TRANSACTIONS
+        WHERE TRANSACTION_ID = #{transactionId}
+        AND DELETED_AT IS NULL
+
+        FOR UPDATE
+
+    </select>
+
+    <!-- 원래 거래 소유자의 USER_ID는 변경하지 않는다. -->
+    <update id="updateTransaction">
+
+        UPDATE TAX_TRANSACTIONS
+        SET
+        TAX_INPUT_ID = #{taxInputId},
+        TRANSACTION_TYPE = #{transactionType},
+        TRANSACTION_DATE = #{transactionDate},
+        DESCRIPTION = #{description},
+        CATEGORY = #{category},
+        AMOUNT = #{amount},
+        TAX_YEAR = #{taxYear},
+        IS_EDITED = TRUE
+        WHERE TRANSACTION_ID = #{transactionId}
+        AND USER_ID = #{userId}
+        AND DELETED_AT IS NULL
+
     </update>
+
+    <update id="softDeleteTransaction">
+
+        UPDATE TAX_TRANSACTIONS
+        SET
+        DELETED_AT = CURRENT_TIMESTAMP
+        WHERE TRANSACTION_ID = #{transactionId}
+        AND USER_ID = #{userId}
+        AND DELETED_AT IS NULL
+
+    </update>
+
 </mapper>

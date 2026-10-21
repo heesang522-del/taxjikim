@@ -18,19 +18,39 @@ public class TaxTransactionDto {
 
     private Long transactionId;
 
+    private Long taxInputId;
+
     private Long userId;
 
     private LocalDate transactionDate;
 
-    private BigDecimal amount;
+    private String transactionType;
 
     private String description;
 
-    private String transactionType;
+    private String category;
+
+    private BigDecimal amount;
+
+    private BigDecimal preTaxIncome;
+
+    private BigDecimal taxDeducted;
+
+    private BigDecimal actualAmount;
+
+    private Integer taxYear;
+
+    private Boolean edited;
 
     private String status;
 
     private Integer pageNumber;
 
     private String rawText;
+
+    private Boolean parseSuccess;
+
+    private Boolean excluded;
+
+    private String failureReason;
 }

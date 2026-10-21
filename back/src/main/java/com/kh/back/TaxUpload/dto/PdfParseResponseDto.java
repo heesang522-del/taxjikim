@@ -1,4 +1,3 @@
-
 package com.kh.back.TaxUpload.dto;
 
 import lombok.AllArgsConstructor;
@@ -22,6 +21,26 @@ public class PdfParseResponseDto {
 
     private int extractedCount;
 
+    private int parsedCount;
+
+    private int failedCount;
+
+    private List<PageResult> pageResults;
+
     private List<TaxTransactionDto> transactions;
 
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PageResult {
+
+        private int pageNumber;
+
+        private String method;
+
+        private int extractedCount;
+
+        private int parsedCount;
+    }
 }

@@ -51,7 +51,10 @@ logging:
 
 
 
-# PDFBox + Tess4J OCR 설정
+python:
+  api-url: ${PYTHON_API_URL:http://127.0.0.1:8000}
+
+
 tax:
   ocr:
     tessdata-path: C:/TAXJIKIM/back/tessdata
@@ -59,7 +62,6 @@ tax:
     dpi: 200
     max-pages: 50
     max-rendered-pixels: 12000000
-
 
 # 회원 정리·휴면 처리 주기. 실제 실행에는 @EnableScheduling이 필요하다.
 # 별도 zone 지정이 없으므로 JVM의 시간대를 기준으로 실행한다.

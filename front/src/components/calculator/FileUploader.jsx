@@ -3,83 +3,125 @@
 import { useRef, useState } from 'react';
 
 import { Button, Card, Icon } from '../common/index';
+
 import { useTax, parseTaxAmount, normalizeTaxKind } from '../../store/useTaxStore';
+
 import { useToast } from '../../store/useToastStore';
 import { uploadTaxPdfApi } from '../../api/taxApi';
-import { YEAR } from '../../data/taxConstants';
 
 function fileKey(file) {
   return `${file.name}:${file.size}:${file.lastModified}`;
 }
 
 function normalizeDate(value) {
-  if (!value) return '';
+  if (!value) return null;
+
+  let text;
 
   if (Array.isArray(value)) {
     const [year, month, day] = value;
 
-    if (year && month && day) {
-      return [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].join('-');
+    if (year == null || month == null || day == null) {
+      return null;
     }
 
-    return '';
+    text = [String(year).padStart(4, '0'), String(month).padStart(2, '0'), String(day).padStart(2, '0')].join('-');
+  } else {
+    text = String(value).trim();
   }
 
-  const text = String(value).trim();
+  const match = text.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
 
-  const match = text.match(/^(\d{4})[-./년\s]+(\d{1,2})[-./월\s]+(\d{1,2})/);
+  if (!match) return null;
 
-  return match ? `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}` : '';
+  const normalized = [match[1], match[2].padStart(2, '0'), match[3].padStart(2, '0')].join('-');
+
+  const parsed = new Date(`${normalized}T00:00:00Z`);
+
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== normalized) {
+    return null;
+  }
+
+  return normalized;
 }
 
-function normalizeMonth(value) {
-  if (!value) return null;
+function toFileRow(item, index, fileId) {
+  const date = normalizeDate(item.transactionDate);
 
-  const match = String(value).match(/^(\d{4})[-./년\s]+(0?[1-9]|1[0-2])/);
+  /*
+   * 원본의 거래 구분만 사용한다.
+   * 설명이나 금액을 보고 수입·지출을 추측하지 않는다.
+   */
+  const kind = normalizeTaxKind(item.transactionType);
 
-  return match ? `${match[1]}-${match[2].padStart(2, '0')}` : null;
-}
+  const preTaxIncome = parseTaxAmount(item.preTaxIncome);
 
-function toFileRow(item, index, fileId, source) {
-  const date = normalizeDate(item.transactionDate ?? item.date);
+  const taxDeducted = parseTaxAmount(item.taxDeducted);
 
-  const month = date ? null : normalizeMonth(item.transactionMonth ?? item.month ?? item.period);
+  const actualAmount = parseTaxAmount(item.actualAmount);
 
-  const rawYear = item.documentYear ?? item.year ?? null;
+  const reportedAmount = parseTaxAmount(item.amount);
 
-  const year = !date && !month && rawYear != null ? String(rawYear) : null;
+  let amount;
+  let amountBasis;
 
-  const amount = parseTaxAmount(item.amount ?? item.reportedAmount);
+  if (kind === 'in' && preTaxIncome !== null) {
+    // 수입에 세전 금액이 명시되어 있으면 그대로 보존한다.
+    amount = preTaxIncome;
+    amountBasis = 'GROSS';
+  } else if (actualAmount !== null) {
+    amount = actualAmount;
 
-  const kind = normalizeTaxKind(item.transactionType ?? item.type ?? item.kind);
+    amountBasis = kind === 'in' ? 'NET' : 'CASH';
+  } else {
+    amount = reportedAmount;
+    amountBasis = 'UNSPECIFIED';
+  }
+
+  // 구분이 미확인이어도 금액이 읽히면 자동 체크한다.
+  const available = amount !== null;
 
   return {
     sourceItemIndex: index,
     sourceFileId: fileId,
-    source,
+    source: 'transaction',
 
     kind,
-    date: date || null,
-    month,
-    year,
 
-    m: date || month ? Number((date || month).slice(5, 7)) : null,
+    // 원본 구분도 보존한다.
+    rawTransactionType: item.transactionType ?? null,
 
-    cat: String(item.category ?? ''),
-    memo: String(item.description ?? item.label ?? item.rawText ?? ''),
+    date,
+    month: null,
+    year: null,
+
+    m: date ? Number(date.slice(5, 7)) : null,
+
+    // 원본에 없는 세부 카테고리는 임의로 채우지 않는다.
+    cat: typeof item.category === 'string' ? item.category.trim() : '',
+
+    memo: item.description ?? item.rawText ?? '',
 
     amt: amount ?? '',
-    valueKind: item.valueKind ?? source,
+    amountBasis,
 
-    excluded: item.excluded === true,
+    preTaxIncome,
+    taxDeducted,
+    actualAmount,
+    reportedAmount,
 
-    selected: amount !== null && item.excluded !== true,
+    valueKind: 'transaction',
+
+    selected: available,
+    excluded: !available,
 
     persisted: false,
     autoImported: true,
 
     pageNumber: item.pageNumber ?? null,
     rawText: item.rawText ?? '',
+
+    parseSuccess: item.parseSuccess ?? false,
   };
 }
 
@@ -87,20 +129,26 @@ function formatMoney(value) {
   return `${Number(value ?? 0).toLocaleString('ko-KR')}원`;
 }
 
-function errorMessage(error) {
-  const status = error?.response?.status;
+function getErrorMessage(error) {
+  const status = error?.status ?? error?.response?.status;
 
   if (status === 401) {
     return 'PDF 분석 요청이 인증 단계에서 거부되었습니다.';
   }
 
-  if (status === 500) {
-    return '서버에서 PDF 분석 중 오류가 발생했습니다.';
+  if (status === 413) {
+    return '업로드 가능한 파일 크기를 초과했습니다.';
   }
 
-  return (
-    error?.response?.data?.message ?? error?.response?.data?.detail ?? error?.message ?? 'PDF 분석에 실패했습니다.'
-  );
+  if (status === 503) {
+    return 'PDF 분석 서버 또는 OCR 서비스를 사용할 수 없습니다.';
+  }
+
+  const body = error?.response?.data;
+
+  const detailMessage = typeof body?.detail === 'string' ? body.detail : body?.detail?.message;
+
+  return body?.error?.message ?? detailMessage ?? error?.message ?? 'PDF 분석에 실패했습니다.';
 }
 
 export default function FileUploader({ onUploadSuccess }) {
@@ -110,9 +158,49 @@ export default function FileUploader({ onUploadSuccess }) {
   const [loading, setLoading] = useState(false);
   const [currentFile, setCurrentFile] = useState('');
 
-  const { uploadedFiles, fileRows, selectedTaxTotals, addFileResult, setFileSelected, removeUploadedFile } = useTax();
+  const { uploadedFiles, fileRows, addFileResult, setFileSelected, removeUploadedFile } = useTax();
 
   const toast = useToast();
+
+  const selectedRows = fileRows.filter(
+    (row) => row.selected !== false && row.excluded !== true && parseTaxAmount(row.amt) !== null
+  );
+
+  const totals = selectedRows.reduce(
+    (result, row) => {
+      const amount = parseTaxAmount(row.amt);
+
+      if (amount === null) return result;
+
+      const kind = normalizeTaxKind(row.kind);
+
+      if (kind === 'in') {
+        result.income += amount;
+        result.incomeCount += 1;
+      } else if (kind === 'out') {
+        result.expense += amount;
+        result.expenseCount += 1;
+      } else {
+        result.unknown += amount;
+        result.unknownCount += 1;
+      }
+
+      result.count += 1;
+
+      return result;
+    },
+    {
+      income: 0,
+      expense: 0,
+      unknown: 0,
+
+      incomeCount: 0,
+      expenseCount: 0,
+      unknownCount: 0,
+
+      count: 0,
+    }
+  );
 
   const upload = async (fileList) => {
     if (uploadingRef.current) return;
@@ -143,62 +231,38 @@ export default function FileUploader({ onUploadSuccess }) {
         setCurrentFile(file.name);
 
         try {
-          const response = await uploadTaxPdfApi(file, {
-            taxYear: YEAR,
-          });
+          const response = await uploadTaxPdfApi(file);
 
           if (response?.success === false) {
-            throw new Error(response.message ?? 'PDF 분석 실패');
+            throw new Error(response.error?.message ?? response.message ?? 'PDF 분석에 실패했습니다.');
           }
 
           const data = response?.data ?? response;
 
-          const transactions = Array.isArray(data?.transactions) ? data.transactions : [];
+          if (!data || !Array.isArray(data.transactions)) {
+            throw new Error('PDF 분석 응답 형식이 올바르지 않습니다.');
+          }
 
-          const summaries = Array.isArray(data?.summaryItems) ? data.summaryItems : [];
+          const rows = data.transactions.map((item, index) => toFileRow(item, index, data.fileId ?? null));
 
-          const items = [
-            ...transactions.map((item) => ({
-              item,
-              source: 'transaction',
-            })),
-            ...summaries.map((item) => ({
-              item,
-              source: 'summary',
-            })),
-          ];
+          const availableCount = rows.filter((row) => row.selected).length;
 
-          const rows = items.map(({ item, source }, index) => toFileRow(item, index, data.fileId ?? null, source));
-
-          const fileInfo = {
+          addFileResult(rows, {
             key,
             name: file.name,
             fileId: data.fileId ?? null,
             count: rows.length,
-          };
+          });
 
-          addFileResult(rows, fileInfo);
+          setFileSelected(key, true);
+
           existingKeys.add(key);
 
-          const selectedRows = rows.filter((row) => row.selected && row.amt !== '');
-
-          const incomeRows = selectedRows.filter((row) => row.kind === 'in');
-
-          const expenseRows = selectedRows.filter((row) => row.kind === 'out');
-
-          const unknownRows = selectedRows.filter((row) => row.kind === 'unknown');
-
-          toast(
-            `${file.name}: ${rows.length}건 추출, ` +
-              `${selectedRows.length}건 자동 선택, ` +
-              `수입 ${incomeRows.length}건, ` +
-              `지출 ${expenseRows.length}건, ` +
-              `미분류 ${unknownRows.length}건`
-          );
+          toast(`${file.name}: ${rows.length}건 추출 · ` + `${availableCount}건 자동 반영`);
 
           onUploadSuccess?.(data);
         } catch (error) {
-          toast(errorMessage(error));
+          toast(getErrorMessage(error));
         }
       }
     } finally {
@@ -212,7 +276,9 @@ export default function FileUploader({ onUploadSuccess }) {
     <Card title="파일로 불러오기" icon="uploadCloud">
       <div
         className="drop"
-        onDragOver={(event) => event.preventDefault()}
+        onDragOver={(event) => {
+          event.preventDefault();
+        }}
         onDrop={(event) => {
           event.preventDefault();
           upload(event.dataTransfer.files);
@@ -222,7 +288,7 @@ export default function FileUploader({ onUploadSuccess }) {
 
         <p style={{ fontSize: 17 }}>PDF 거래정보 자동 분석</p>
 
-        <p className="small muted">비회원도 업로드 및 계산 가능 · 미분류 거래는 별도로 합산</p>
+        <p className="small muted">원본의 수입·지출 구분을 유지하고 금액이 읽힌 거래를 자동 체크합니다.</p>
 
         <Button size="sm" disabled={loading} onClick={() => inputRef.current?.click()}>
           {loading ? '분석 중...' : 'PDF 선택'}
@@ -239,6 +305,7 @@ export default function FileUploader({ onUploadSuccess }) {
             const files = Array.from(event.target.files ?? []);
 
             event.target.value = '';
+
             upload(files);
           }}
         />
@@ -250,7 +317,7 @@ export default function FileUploader({ onUploadSuccess }) {
         </p>
       )}
 
-      <div
+      <section
         style={{
           padding: 14,
           marginTop: 16,
@@ -258,34 +325,36 @@ export default function FileUploader({ onUploadSuccess }) {
           borderRadius: 10,
         }}
       >
-        <p style={{ fontWeight: 700 }}>현재 선택된 PDF 거래 합계</p>
+        <p style={{ fontWeight: 700 }}>현재 반영된 PDF 거래</p>
 
-        <p>선택 거래: {selectedTaxTotals.count}건</p>
+        <p>전체: {totals.count}건</p>
 
-        <p>수입: {formatMoney(selectedTaxTotals.income)}</p>
+        <p>
+          수입: {totals.incomeCount}건 · {formatMoney(totals.income)}
+        </p>
 
-        <p>지출: {formatMoney(selectedTaxTotals.expense)}</p>
+        <p>
+          지출: {totals.expenseCount}건 · {formatMoney(totals.expense)}
+        </p>
 
-        <p>미분류: {formatMoney(selectedTaxTotals.unknown)}</p>
+        <p>
+          구분 미확인: {totals.unknownCount}건 · {formatMoney(totals.unknown)}
+        </p>
 
-        {selectedTaxTotals.unknownCount > 0 && (
-          <p className="small muted">
-            미분류 {selectedTaxTotals.unknownCount}건은 별도 집계되며 세액 계산의 수입·경비로 임의 배분되지 않습니다.
-          </p>
-        )}
-      </div>
+        <p className="small muted">세부 카테고리가 없는 경우에는 미기재로 표시합니다.</p>
+      </section>
 
       {uploadedFiles.map((file) => {
         const rows = fileRows.filter((row) => row.sourceFileKey === file.key);
 
-        const selectable = rows.filter((row) => row.amt !== '' && !row.excluded);
+        const availableRows = rows.filter((row) => row.excluded !== true && parseTaxAmount(row.amt) !== null);
 
-        const selectedCount = selectable.filter((row) => row.selected === true).length;
+        const selectedCount = availableRows.filter((row) => row.selected === true).length;
 
-        const allSelected = selectable.length > 0 && selectedCount === selectable.length;
+        const allSelected = availableRows.length > 0 && selectedCount === availableRows.length;
 
         return (
-          <div
+          <section
             key={file.key}
             style={{
               padding: 14,
@@ -297,25 +366,34 @@ export default function FileUploader({ onUploadSuccess }) {
             <p style={{ fontWeight: 600 }}>{file.name}</p>
 
             <p className="small muted">
-              {rows.length}건 추출 · {selectedCount}건 선택
+              {rows.length}건 추출 · {selectedCount}건 반영
             </p>
 
             <label>
               <input
                 type="checkbox"
                 checked={allSelected}
-                disabled={!selectable.length || loading}
-                onChange={(event) => setFileSelected(file.key, event.target.checked)}
+                disabled={loading || !availableRows.length}
+                onChange={(event) => {
+                  setFileSelected(file.key, event.target.checked);
+                }}
               />{' '}
-              파일 거래 전체 선택
+              파일 거래 전체 반영
             </label>
 
             <div style={{ marginTop: 10 }}>
-              <Button size="sm" variant="ghost" disabled={loading} onClick={() => removeUploadedFile(file.key)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={loading}
+                onClick={() => {
+                  removeUploadedFile(file.key);
+                }}
+              >
                 파일 제거
               </Button>
             </div>
-          </div>
+          </section>
         );
       })}
     </Card>
