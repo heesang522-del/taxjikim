@@ -429,6 +429,7 @@ def parse_plain_text(
             continue
 
         description = fields["description"]
+        description = fields["description"]
 
         matches = list(
             NUMBER_PATTERN.finditer(description)

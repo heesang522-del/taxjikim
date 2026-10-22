@@ -95,7 +95,6 @@ def analyze_pdf(
     file: Annotated[UploadFile, File()],
     ocrPages: Annotated[str | None, Form()] = None,
 ) -> dict:
-
     pages = parse_ocr_pages(ocrPages)
 
     data = file.file.read()
@@ -124,6 +123,16 @@ def analyze_pdf(
             result["extractedCount"],
             result["parsedCount"],
             result["failedCount"],
+        )
+
+        # 개발 중 거래 설명·금액·원문·페이지별 결과를 확인한다.
+        logger.info(
+            "PDF 파싱 상세 결과:\n%s",
+            json.dumps(
+                result,
+                ensure_ascii=False,
+                indent=2,
+            ),
         )
 
         return {
