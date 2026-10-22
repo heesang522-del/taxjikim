@@ -1,6 +1,5 @@
 package com.kh.back.chat.handler;
 
-import com.kh.back.auth.security.LoginSessionRepository;
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.exception.ApiException;
@@ -25,8 +24,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   1. {@link #handleTextMessage}: 클라이언트가 보낸 JSON({"content":"..."})을 받는다.
  *      발신자(senderId)는 클라이언트가 알려주는 게 아니라, 연결 시 {@link ChatHandshakeInterceptor}가
  *      확인해서 세션에 넣어둔 인증된 userId를 그대로 쓴다. (클라이언트가 다른 사람인 척 보낼 수 없게)
- *      다만 연결은 핸드셰이크 때 한 번만 인증하므로, 처리 전에 {@link #isSessionStillValid}로
- *      그 로그인 세션이 아직 유효한지(로그아웃·다른 기기 로그인으로 끝나지 않았는지) 매번 다시 확인한다.
+ *      다만 연결은 핸드셰이크 때 한 번만 인증하므로, 그 이후 로그아웃하거나 다른 기기에서 재로그인해도
+ *      이미 연결된 소켓은 재검증 없이 계속 송수신된다 — 당장은 의도적으로 남겨둔 제약이다.
  *   2. 기존 REST API와 똑같은 {@link ChatService#sendMessage}를 호출해 DB에 저장한다.
  *      (종료된 방에 보내면 여기서 예외가 나고, 발신자에게만 에러로 알려준다.)
  *   3. {@link #deliverToCounterpart}: 저장에 성공하면, 같은 방에 연결된 "상대방"에게만 그 메시지를 쏴준다.
@@ -45,7 +44,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private final ChatService chatService;
     private final ObjectMapper objectMapper;
-    private final LoginSessionRepository loginSessionRepository;
 
     // roomId별로 그 방에 지금 연결돼 있는 세션들을 모아둔다. 메시지를 "같은 방의 누구에게" 보낼지 찾는 용도.
     private final Map<String, Set<WebSocketSession>> rooms = new ConcurrentHashMap<>();
@@ -74,15 +72,6 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         String roomId = (String) session.getAttributes().get("roomId");
         Long senderId = (Long) session.getAttributes().get("userId");
         if (roomId == null || senderId == null) {
-            return;
-        }
-
-        // 연결된 이후에 로그아웃했거나 다른 기기에서 로그인해 이 로그인 세션이 끝났을 수 있으니,
-        // 메시지를 처리하기 전에 다시 한번 "현재 세션"인지 확인한다. 핸드셰이크 때 한 번만 확인하고 끝내면
-        // 로그아웃해도 이미 연결된 소켓으로는 계속 송수신이 가능해지기 때문이다.
-        if (!isSessionStillValid(session)) {
-            sendError(session, "SESSION_ENDED", "로그인이 종료되어 더 이상 채팅을 이용할 수 없습니다.");
-            closeQuietly(session);
             return;
         }
 
@@ -119,23 +108,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             if (recipientId == null || recipientId.equals(senderId)) {
                 continue; // 발신자 본인 세션(다른 탭 등)에는 다시 보내지 않는다.
             }
-            // 상대의 로그인 세션이 이미 끝났다면(로그아웃·다른 기기 로그인) 그 연결을 정리하고 넘어간다.
-            if (!isSessionStillValid(recipient)) {
-                closeQuietly(recipient);
-                continue;
-            }
             // 전송에 실패하면(끊기는 중인 연결 등) 그 메시지는 읽음 처리하지 않는다 — 상대가 실제로 받지 못했으므로.
             if (sendMessage(recipient, saved)) {
                 markAsReadQuietly(Long.valueOf(roomId), recipientId, (String) recipient.getAttributes().get("role"));
             }
         }
-    }
-
-    // 세션에 저장해둔 userId·sessionId가 Redis의 "현재 로그인 세션"과 여전히 일치하는지 확인한다.
-    private boolean isSessionStillValid(WebSocketSession session) {
-        Long userId = (Long) session.getAttributes().get("userId");
-        String sessionId = (String) session.getAttributes().get("sessionId");
-        return userId != null && sessionId != null && loginSessionRepository.isCurrentSession(userId, sessionId);
     }
 
     // 회원용/관리자용 읽음 처리 메서드가 따로 있어서 role로 분기한다. 실시간 알림용 부가 처리라 실패해도 메시지 전달 자체는 막지 않는다.
