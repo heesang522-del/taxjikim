@@ -1,4 +1,4 @@
-package com.kh.back.TaxUpload.dto;
+package com.kh.back.taxupload.dto;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -1,10 +1,10 @@
-package com.kh.back.TaxUpload.service;
+package com.kh.back.taxupload.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import com.kh.back.TaxUpload.dto.PageOcrResultDto;
-import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.PageOcrResultDto;
+import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.common.exception.ApiException;
 
 import lombok.extern.slf4j.Slf4j;

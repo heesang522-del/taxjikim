@@ -1,10 +1,10 @@
-package com.kh.back.TaxUpload.service;
+package com.kh.back.taxupload.service;
 
-import com.kh.back.TaxUpload.dto.PageOcrResultDto;
-import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
-import com.kh.back.TaxUpload.dto.TaxTransactionDto;
-import com.kh.back.TaxUpload.mapper.TaxMapper;
-import com.kh.back.TaxUpload.validator.TaxValidator;
+import com.kh.back.taxupload.dto.PageOcrResultDto;
+import com.kh.back.taxupload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.TaxTransactionDto;
+import com.kh.back.taxupload.mapper.TaxMapper;
+import com.kh.back.taxupload.validator.TaxValidator;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
 

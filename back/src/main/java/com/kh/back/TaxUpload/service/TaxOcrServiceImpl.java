@@ -1,6 +1,6 @@
-package com.kh.back.TaxUpload.service;
+package com.kh.back.taxupload.service;
 
-import com.kh.back.TaxUpload.dto.PageOcrResultDto;
+import com.kh.back.taxupload.dto.PageOcrResultDto;
 import com.kh.back.common.exception.ApiException;
 
 import net.sourceforge.tess4j.Tesseract;
@@ -156,27 +156,6 @@ public class TaxOcrServiceImpl implements TaxOcrService {
         return results;
     }
 
-    @Override
-    public String extractText(
-            byte[] pdfBytes
-    ) throws IOException {
-
-        List<PageOcrResultDto> pages =
-                extractPages(pdfBytes);
-
-        StringBuilder result = new StringBuilder();
-
-        for (PageOcrResultDto page : pages) {
-
-            if (result.length() > 0) {
-                result.append(System.lineSeparator());
-            }
-
-            result.append(page.getText());
-        }
-
-        return result.toString();
-    }
 
     private ApiException invalid(String message) {
 

@@ -1,6 +1,6 @@
-package com.kh.back.TaxUpload.mapper;
+package com.kh.back.taxupload.mapper;
 
-import com.kh.back.TaxUpload.dto.TaxTransactionDto;
+import com.kh.back.taxupload.dto.TaxTransactionDto;
 
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;

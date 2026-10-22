@@ -1,6 +1,6 @@
-package com.kh.back.TaxUpload.validator;
+package com.kh.back.taxupload.validator;
 
-import com.kh.back.TaxUpload.dto.TaxTransactionDto;
+import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
 

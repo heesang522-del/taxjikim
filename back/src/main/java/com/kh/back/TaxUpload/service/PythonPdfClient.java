@@ -1,7 +1,7 @@
-package com.kh.back.TaxUpload.service;
+package com.kh.back.taxupload.service;
 
-import com.kh.back.TaxUpload.dto.PageOcrResultDto;
-import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.PageOcrResultDto;
+import com.kh.back.taxupload.dto.PdfParseResponseDto;
 
 import java.util.List;
 

@@ -1,6 +1,6 @@
-package com.kh.back.TaxUpload.service;
+package com.kh.back.taxupload.service;
 
-import com.kh.back.TaxUpload.dto.PageOcrResultDto;
+import com.kh.back.taxupload.dto.PageOcrResultDto;
 
 import java.io.IOException;
 import java.util.List;
@@ -15,10 +15,4 @@ public interface TaxOcrService {
             byte[] pdfBytes
     ) throws IOException;
 
-    /**
-     * PDF 전체 텍스트를 하나의 문자열로 반환한다.
-     */
-    String extractText(
-            byte[] pdfBytes
-    ) throws IOException;
 }

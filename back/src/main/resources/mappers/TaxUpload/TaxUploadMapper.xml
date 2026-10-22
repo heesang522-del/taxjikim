@@ -2,10 +2,10 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.kh.back.TaxUpload.mapper.TaxMapper">
+<mapper namespace="com.kh.back.taxupload.mapper.TaxMapper">
 
     <resultMap id="거래매핑"
-               type="com.kh.back.TaxUpload.dto.TaxTransactionDto">
+               type="com.kh.back.taxupload.dto.TaxTransactionDto">
 
         <id property="transactionId"
             column="TRANSACTION_ID"/>
@@ -82,7 +82,7 @@
     </select>
 
     <insert id="insertTransaction"
-            parameterType="com.kh.back.TaxUpload.dto.TaxTransactionDto"
+            parameterType="com.kh.back.taxupload.dto.TaxTransactionDto"
             useGeneratedKeys="true"
             keyProperty="transactionId"
             keyColumn="TRANSACTION_ID">

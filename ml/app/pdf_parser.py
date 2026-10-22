@@ -3,6 +3,7 @@ import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
+from typing import Any
 
 import pdfplumber
 
@@ -24,21 +25,20 @@ TRANSACTION_TYPES = {
     "수입": "INCOME",
     "INCOME": "INCOME",
     "IN": "INCOME",
-
     "지출": "EXPENSE",
     "EXPENSE": "EXPENSE",
     "OUT": "EXPENSE",
 }
 
 
-def clean(value):
+def clean(value: object) -> str:
     if value is None:
         return ""
 
     return re.sub(r"\s+", " ", str(value)).strip()
 
 
-def parse_amount(value):
+def parse_amount(value: object) -> str | None:
     """빈칸과 0원을 구분한다."""
 
     text = clean(value)
@@ -68,7 +68,9 @@ def parse_amount(value):
     return format(amount, "f")
 
 
-def parse_leading_fields(text):
+def parse_leading_fields(
+    text: str,
+) -> dict[str, Any] | None:
     """행 앞의 날짜와 거래 구분을 분리한다."""
 
     original = clean(text)
@@ -77,6 +79,8 @@ def parse_leading_fields(text):
 
     if not match:
         return None
+
+    transaction_date: str | None
 
     try:
         year, month, day = map(int, match.groups())
@@ -115,14 +119,14 @@ def parse_leading_fields(text):
 
 def make_transaction(
     *,
-    page_number,
-    fields,
-    raw_text,
-    pre_tax_income=None,
-    tax_deducted=None,
-    actual_amount=None,
-    errors=None,
-):
+    page_number: int,
+    fields: dict[str, Any],
+    raw_text: str,
+    pre_tax_income: str | None = None,
+    tax_deducted: str | None = None,
+    actual_amount: str | None = None,
+    errors: list[str] | None = None,
+) -> dict[str, Any]:
     """인식에 실패한 거래 행도 결과에서 삭제하지 않는다."""
 
     errors = list(errors or [])
@@ -147,31 +151,23 @@ def make_transaction(
         "transactionId": None,
         "taxInputId": None,
         "userId": None,
-
         "transactionDate": fields["transactionDate"],
         "transactionType": fields["transactionType"],
-
         "description": fields["description"],
         "category": None,
-
         "amount": actual_amount,
-
         "preTaxIncome": pre_tax_income,
         "taxDeducted": tax_deducted,
         "actualAmount": actual_amount,
-
         "edited": False,
-
         "pageNumber": page_number,
         "rawText": raw_text,
-
         "parseSuccess": success,
 
         # 구분이 미분류여도 금액이 있으면 화면에서 선택할 수 있다.
         "excluded": actual_amount is None,
 
         "status": "PARSED" if success else "PARSE_FAILED",
-
         "failureReason": (
             " / ".join(errors)
             if errors
@@ -180,10 +176,13 @@ def make_transaction(
     }
 
 
-def group_words_into_lines(words, tolerance=3):
+def group_words_into_lines(
+    words: list[dict[str, Any]],
+    tolerance: float = 3,
+) -> list[dict[str, Any]]:
     """PDF 단어의 세로 위치를 기준으로 행을 구성한다."""
 
-    lines = []
+    lines: list[dict[str, Any]] = []
 
     ordered_words = sorted(
         words,
@@ -194,7 +193,7 @@ def group_words_into_lines(words, tolerance=3):
     )
 
     for word in ordered_words:
-        target = None
+        target: dict[str, Any] | None = None
 
         for line in reversed(lines):
             difference = word["top"] - line["top"]
@@ -231,13 +230,15 @@ def group_words_into_lines(words, tolerance=3):
     return lines
 
 
-def find_money_columns(lines):
+def find_money_columns(
+    lines: list[dict[str, Any]],
+) -> dict[str, float] | None:
     """머리글에서 세전·세금·실제 입출금액 열 위치를 찾는다."""
 
     for line in lines:
-        pre_tax_x = None
-        tax_x = None
-        actual_x = None
+        pre_tax_x: float | None = None
+        tax_x: float | None = None
+        actual_x: float | None = None
 
         for word in line["words"]:
             token = clean(word["text"]).casefold()
@@ -277,7 +278,11 @@ def find_money_columns(lines):
     return None
 
 
-def read_money_cell(words, label, errors):
+def read_money_cell(
+    words: list[dict[str, Any]],
+    label: str,
+    errors: list[str],
+) -> str | None:
     text = clean(
         " ".join(word["text"] for word in words)
     )
@@ -293,7 +298,11 @@ def read_money_cell(words, label, errors):
     return amount
 
 
-def parse_positioned_line(line, columns, page_number):
+def parse_positioned_line(
+    line: dict[str, Any],
+    columns: dict[str, float],
+    page_number: int,
+) -> dict[str, Any] | None:
     """숫자 개수가 아닌 열 위치로 거래를 읽는다."""
 
     if line["top"] <= columns["headerTop"]:
@@ -302,10 +311,10 @@ def parse_positioned_line(line, columns, page_number):
     if not DATE_AT_START.match(line["text"]):
         return None
 
-    leading_words = []
-    pre_tax_words = []
-    tax_words = []
-    actual_words = []
+    leading_words: list[dict[str, Any]] = []
+    pre_tax_words: list[dict[str, Any]] = []
+    tax_words: list[dict[str, Any]] = []
+    actual_words: list[dict[str, Any]] = []
 
     for word in line["words"]:
         center = (word["x0"] + word["x1"]) / 2
@@ -344,7 +353,7 @@ def parse_positioned_line(line, columns, page_number):
             errors=["거래 열 분리 실패"],
         )
 
-    errors = []
+    errors: list[str] = []
 
     pre_tax_income = read_money_cell(
         pre_tax_words,
@@ -368,16 +377,14 @@ def parse_positioned_line(line, columns, page_number):
         page_number=page_number,
         fields=fields,
         raw_text=line["text"],
-
         pre_tax_income=pre_tax_income,
         tax_deducted=tax_deducted,
         actual_amount=actual_amount,
-
         errors=errors,
     )
 
 
-def has_multiple_money_headers(text):
+def has_multiple_money_headers(text: str) -> bool:
     normalized = clean(text).casefold()
 
     korean = (
@@ -398,7 +405,10 @@ def has_multiple_money_headers(text):
     return korean or english
 
 
-def parse_plain_text(text, page_number):
+def parse_plain_text(
+    text: str,
+    page_number: int,
+) -> list[dict[str, Any]]:
     """
     좌표가 없는 텍스트를 처리한다.
 
@@ -406,7 +416,7 @@ def parse_plain_text(text, page_number):
     분석하지 못해도 거래 행은 결과에 보존한다.
     """
 
-    transactions = []
+    transactions: list[dict[str, Any]] = []
 
     multiple_columns = has_multiple_money_headers(text)
 
@@ -424,8 +434,8 @@ def parse_plain_text(text, page_number):
             NUMBER_PATTERN.finditer(description)
         )
 
-        amount = None
-        errors = []
+        amount: str | None = None
+        errors: list[str] = []
 
         if multiple_columns:
             errors.append("금액 열 위치를 확인할 수 없음")
@@ -441,10 +451,14 @@ def parse_plain_text(text, page_number):
                 )
 
             else:
-                errors.append("금액과 설명의 경계를 확인할 수 없음")
+                errors.append(
+                    "금액과 설명의 경계를 확인할 수 없음"
+                )
 
         else:
-            errors.append("거래 금액을 하나로 확정할 수 없음")
+            errors.append(
+                "거래 금액을 하나로 확정할 수 없음"
+            )
 
         transactions.append(
             make_transaction(
@@ -459,8 +473,10 @@ def parse_plain_text(text, page_number):
     return transactions
 
 
-def build_ocr_map(ocr_pages):
-    result = {}
+def build_ocr_map(
+    ocr_pages: list[dict[str, Any]] | None,
+) -> dict[int, str]:
+    result: dict[int, str] = {}
 
     for item in ocr_pages or []:
         if not isinstance(item, dict):
@@ -479,7 +495,10 @@ def build_ocr_map(ocr_pages):
     return result
 
 
-def extract_transactions(pdf_bytes, ocr_pages=None):
+def extract_transactions(
+    pdf_bytes: bytes,
+    ocr_pages: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     if not isinstance(pdf_bytes, bytes):
         raise ValueError("PDF 데이터는 bytes여야 합니다.")
 
@@ -488,8 +507,8 @@ def extract_transactions(pdf_bytes, ocr_pages=None):
 
     ocr_by_page = build_ocr_map(ocr_pages)
 
-    transactions = []
-    page_results = []
+    transactions: list[dict[str, Any]] = []
+    page_results: list[dict[str, Any]] = []
 
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         total_pages = len(pdf.pages)
@@ -507,7 +526,7 @@ def extract_transactions(pdf_bytes, ocr_pages=None):
 
             columns = find_money_columns(lines)
 
-            page_transactions = []
+            page_transactions: list[dict[str, Any]] = []
 
             if columns is not None:
                 method = "COLUMN_POSITION"

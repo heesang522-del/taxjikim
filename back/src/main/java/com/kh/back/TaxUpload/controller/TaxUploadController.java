@@ -1,10 +1,11 @@
-package com.kh.back.TaxUpload.controller;
+package com.kh.back.taxupload.controller;
 
-import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
-import com.kh.back.TaxUpload.dto.TaxTransactionDto;
-import com.kh.back.TaxUpload.service.YearEndTaxService;
+import com.kh.back.taxupload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.TaxTransactionDto;
+import com.kh.back.taxupload.service.YearEndTaxService;
 import com.kh.back.auth.security.CustomUserDetails;
 
+import com.kh.back.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.MediaType;
@@ -39,10 +40,10 @@ public class TaxUploadController {
             value = "/parse",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    public PdfParseResponseDto parse(
+    public ApiResponse<PdfParseResponseDto> parse(
             @RequestParam("file") MultipartFile file
     ) throws IOException {
-        return service.parsePdf(file);
+        return ApiResponse.ok(service.parsePdf(file));
     }
 
     /**
@@ -69,14 +70,14 @@ public class TaxUploadController {
      * userId를 생략하면 로그인 사용자의 거래를 조회한다.
      */
     @GetMapping("/transactions")
-    public List<TaxTransactionDto> getTransactions(
+    public ApiResponse<List<TaxTransactionDto>> getTransactions(
             @AuthenticationPrincipal CustomUserDetails principal,
             @RequestParam(value = "userId", required = false)
             Long requestedUserId
     ) {
-        return service.getTransactions(
+        return ApiResponse.ok(service.getTransactions(
                 principal,
-                requestedUserId
+                requestedUserId)
         );
     }
 
@@ -84,13 +85,13 @@ public class TaxUploadController {
      * 거래 소유자 또는 관리자만 조회할 수 있다.
      */
     @GetMapping("/transactions/{transactionId}")
-    public TaxTransactionDto getTransaction(
+    public ApiResponse<TaxTransactionDto>getTransaction(
             @AuthenticationPrincipal CustomUserDetails principal,
             @PathVariable("transactionId") Long transactionId
     ) {
-        return service.getTransaction(
+        return ApiResponse.ok(service.getTransaction(
                 principal,
-                transactionId
+                transactionId)
         );
     }
 

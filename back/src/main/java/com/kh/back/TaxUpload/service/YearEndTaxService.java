@@ -1,7 +1,7 @@
-package com.kh.back.TaxUpload.service;
+package com.kh.back.taxupload.service;
 
-import com.kh.back.TaxUpload.dto.PdfParseResponseDto;
-import com.kh.back.TaxUpload.dto.TaxTransactionDto;
+import com.kh.back.taxupload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.auth.security.CustomUserDetails;
 
 import org.springframework.web.multipart.MultipartFile;
