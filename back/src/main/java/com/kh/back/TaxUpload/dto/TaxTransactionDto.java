@@ -1,5 +1,7 @@
-package com.kh.back.TaxUpload.dto;
+package com.kh.back.taxupload.dto;
+
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -9,38 +11,46 @@ import java.time.LocalDate;
 
 @Getter
 @Setter
+@Builder
 @NoArgsConstructor
 @AllArgsConstructor
-
 public class TaxTransactionDto {
 
     private Long transactionId;
+
     private Long taxInputId;
+
     private Long userId;
-    private String transactionType;
+
     private LocalDate transactionDate;
+
+    private String transactionType;
+
     private String description;
+
     private String category;
+
     private BigDecimal amount;
-    private Integer taxYear;
-    private boolean isEdited;
-    private Long sourceFileId;
-    private Integer sourceItemIndex;
 
-    public record ReviewedTransactionRequest(Long fileId, Integer itemIndex, Integer taxYear,
-            String transactionType, LocalDate transactionDate, String category, String description, BigDecimal amount) {}
+    private BigDecimal preTaxIncome;
 
+    private BigDecimal taxDeducted;
 
-    // PDF 파싱 데이터를 매핑하기 위한 생성자 편의 메서드
-    public TaxTransactionDto(Long taxInputId, Long userId, String category, long amount, int taxYear) {
-        this.taxInputId = taxInputId;
-        this.userId = userId;
-        this.transactionType = "DEDUCTION";
-        this.transactionDate = LocalDate.of(taxYear, 12, 31);
-        this.description = category;
-        this.category = category;
-        this.amount = BigDecimal.valueOf(amount);
-        this.taxYear = taxYear;
-        this.isEdited = false;
-    }
+    private BigDecimal actualAmount;  // 실제금액
+
+    private Integer taxYear;   // 귀속연도
+
+    private Boolean edited;    // 수정됬는지 여부
+
+    private String status;     // 상태
+
+    private Integer pageNumber;  // 페이지 숫자
+
+    private String rawText;     // 원본텍스트
+
+    private Boolean parseSuccess; // 파싱성공 여부
+
+    private Boolean excluded;  // 제외
+
+    private String failureReason; // 실패 이유
 }

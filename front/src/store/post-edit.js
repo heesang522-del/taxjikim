@@ -212,13 +212,13 @@ export async function uploadFileWithChunkAndMerge(file) {
         const chunk = file.slice(start, end);
 
         const formData = new FormData();
-        formData.append("file", chunk);
-        formData.append("fileUid", fileUid);
-        formData.append("originalName", file.name);
+        formData.append('file', chunk);
+        formData.append('fileUid', fileUid);
+        formData.append('originalName', file.name);
         formData.append("chunkIndex", chunkIndex);
         formData.append("totalChunks", totalChunks);
 
-        const response = await fetch('/api/posts/upload-chunk', {
+      const response = await fetch('/api/v1/posts/community/upload-chunk', {
             method: 'POST',
             body: formData
         });
