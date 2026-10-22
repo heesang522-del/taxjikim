@@ -1,286 +1,522 @@
 package com.kh.back.post.service;
 
 import com.kh.back.common.dto.PageMeta;
+import com.kh.back.common.exception.ApiException;
 import com.kh.back.common.validation.PostValidator;
+
 import com.kh.back.notification.service.NotificationService;
+
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.FileMetadataDto;
 import com.kh.back.post.dto.PostDto;
+
 import com.kh.back.post.mapper.PostMapper;
+
+import lombok.RequiredArgsConstructor;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
 import java.io.BufferedOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
 @Service
+@RequiredArgsConstructor
 public class PostServiceImpl implements PostService {
-
-    // 청크 및 최종 파일 저장 경로 상수 선언
-    private final String TEMP_DIR = System.getProperty("user.dir") + "/uploads/temp/";
-    private final String UPLOAD_DIR = System.getProperty("user.dir") + "/uploads/files/";
 
     private final PostMapper postMapper;
     private final PostValidator postValidator;
     private final NotificationService notificationService;
 
-    private static final String WEB_PREFIX = "/uploads/post";
-    private static final String NOTICE_BOARD_TYPE = "NOTICE";
+    private final Path tempRoot = Path.of(
+            System.getProperty("user.dir"),
+            "uploads",
+            "temp"
+    ).toAbsolutePath().normalize();
 
-    public PostServiceImpl(
-            PostMapper postMapper,
-            PostValidator postValidator,
-            NotificationService notificationService
-    ) {
-        this.postMapper = postMapper;
-        this.postValidator = postValidator;
-        this.notificationService = notificationService;
-    }
+    private final Path uploadRoot = Path.of(
+            System.getProperty("user.dir"),
+            "uploads",
+            "files"
+    ).toAbsolutePath().normalize();
 
     /**
-     * 파일 청크 처리, 최종 병합 및 DB 메타데이터 저장 (FILE_META 연동)
+     * 단일 서버에서 청크 병합이 동시에 실행되지 않게 한다.
      */
-    @Transactional
     @Override
-    public String processChunkUpload(ChunkDto dto) throws IOException {
-        // 업로드 경로와 청크 번호를 검증한 뒤 파일 시스템에 기록한다.
-        if (dto.getUploadId() == null || !dto.getUploadId().matches("[A-Za-z0-9_-]+")
-                || dto.getTotalChunks() < 1 || dto.getChunkIndex() < 0
-                || dto.getChunkIndex() >= dto.getTotalChunks()
-                || dto.getFile() == null || dto.getFile().isEmpty()
-                || dto.getOriginalName() == null) {
-            throw new IllegalArgumentException("청크 업로드 입력값을 확인해주세요.");
-        }
-        // 클라이언트 검사를 우회해도 사진·동영상 외 파일은 서버에서 거부한다.
-        if (!dto.getOriginalName().toLowerCase(java.util.Locale.ROOT)
-                .matches(".*\\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$")) {
-            throw new IllegalArgumentException("사진·동영상만 업로드할 수 있습니다. PDF·압축·실행파일은 차단됩니다.");
-        }
-        File tempDirFile = new File(TEMP_DIR + dto.getUploadId());
-        if (!tempDirFile.exists()) {
-            tempDirFile.mkdirs();
+    @Transactional(rollbackFor = Exception.class)
+    public synchronized String processChunkUpload(
+            ChunkDto dto
+    ) throws IOException {
+
+        postValidator.requireLogin();
+
+        PostDto targetPost = null;
+
+        if (dto != null && dto.getPostId() != null) {
+            targetPost = postMapper.lockById(dto.getPostId());
         }
 
-        File chunkFile = new File(tempDirFile, "chunk_" + dto.getChunkIndex());
-        dto.getFile().transferTo(chunkFile);
+        Long userId = postValidator.requireUpload(
+                dto,
+                targetPost
+        );
 
-        File[] chunks = tempDirFile.listFiles((dir, name) -> name.startsWith("chunk_"));
-        if (chunks != null && chunks.length == dto.getTotalChunks()) {
+        // 같은 업로드 ID라도 사용자별로 청크 폴더를 분리한다.
+        Path directory = tempRoot.resolve(
+                userId + "_" + dto.getUploadId()
+        ).normalize();
 
-            int extensionIndex = dto.getOriginalName().lastIndexOf('.');
-            String ext = extensionIndex < 0 ? "" : dto.getOriginalName().substring(extensionIndex);
-            if (!ext.matches("(\\.[A-Za-z0-9]+)?")) {
-                throw new IllegalArgumentException("지원하지 않는 파일 확장자입니다.");
+        Files.createDirectories(directory);
+        Files.createDirectories(uploadRoot);
+
+        Path metadataPath = directory.resolve("upload.txt");
+
+        String requestedMetadata =
+                dto.getTotalChunks()
+                        + "\n"
+                        + dto.getOriginalName()
+                        + "\n"
+                        + String.valueOf(dto.getPostId());
+
+        if (Files.exists(metadataPath)) {
+
+            postValidator.validateUploadMetadata(
+                    Files.readString(
+                            metadataPath,
+                            StandardCharsets.UTF_8
+                    ),
+                    requestedMetadata
+            );
+
+        } else {
+            Files.writeString(
+                    metadataPath,
+                    requestedMetadata,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE_NEW
+            );
+        }
+
+        Path chunkPath = directory.resolve(
+                "chunk_" + dto.getChunkIndex()
+        );
+
+        try (
+                InputStream input = dto.getFile().getInputStream();
+
+                OutputStream output = Files.newOutputStream(
+                        chunkPath,
+                        StandardOpenOption.CREATE,
+                        StandardOpenOption.TRUNCATE_EXISTING
+                )
+        ) {
+            input.transferTo(output);
+        }
+
+        for (int index = 0; index < dto.getTotalChunks(); index++) {
+
+            if (!Files.isRegularFile(
+                    directory.resolve("chunk_" + index)
+            )) {
+                return null;
             }
-            String savedFileName = UUID.randomUUID().toString() + ext;
-            File targetFile = new File(UPLOAD_DIR + savedFileName);
+        }
 
-            if (!targetFile.getParentFile().exists()) {
-                targetFile.getParentFile().mkdirs();
-            }
+        String originalName = dto.getOriginalName();
 
-            try (BufferedOutputStream bout = new BufferedOutputStream(new FileOutputStream(targetFile))) {
-                for (int i = 0; i < dto.getTotalChunks(); i++) {
-                    File cFile = new File(tempDirFile, "chunk_" + i);
-                    Files.copy(cFile.toPath(), bout);
+        String extension = originalName.substring(
+                originalName.lastIndexOf('.')
+        ).toLowerCase(Locale.ROOT);
+
+        String savedName = UUID.randomUUID() + extension;
+
+        Path target = uploadRoot.resolve(savedName);
+
+        boolean completed = false;
+
+        try {
+            try (
+                    OutputStream output =
+                            new BufferedOutputStream(
+                                    Files.newOutputStream(
+                                            target,
+                                            StandardOpenOption.CREATE_NEW
+                                    )
+                            )
+            ) {
+                for (
+                        int index = 0;
+                        index < dto.getTotalChunks();
+                        index++
+                ) {
+                    Files.copy(
+                            directory.resolve("chunk_" + index),
+                            output
+                    );
                 }
             }
 
-            // 확장자만 바꾼 실행파일을 막기 위해 병합 파일의 형식 식별 바이트도 검사한다.
-            byte[] header;
-            try (java.io.InputStream input = Files.newInputStream(targetFile.toPath())) {
-                header = input.readNBytes(16);
-            }
-            String lowerExt = ext.toLowerCase(java.util.Locale.ROOT);
-            String signature = new String(header, java.nio.charset.StandardCharsets.ISO_8859_1);
-            boolean validMedia = switch (lowerExt) {
-                case ".jpg", ".jpeg" -> header.length >= 3 && (header[0] & 255) == 255
-                        && (header[1] & 255) == 216 && (header[2] & 255) == 255;
-                case ".png" -> header.length >= 8 && java.util.Arrays.equals(
-                        java.util.Arrays.copyOf(header, 8), new byte[]{(byte) 137, 80, 78, 71, 13, 10, 26, 10});
-                case ".gif" -> signature.startsWith("GIF87a") || signature.startsWith("GIF89a");
-                case ".webp" -> signature.startsWith("RIFF") && signature.length() >= 12
-                        && signature.substring(8, 12).equals("WEBP");
-                case ".mp4", ".mov" -> signature.length() >= 12 && signature.substring(4, 8).equals("ftyp");
-                case ".webm" -> header.length >= 4 && java.util.Arrays.equals(
-                        java.util.Arrays.copyOf(header, 4), new byte[]{26, 69, (byte) 223, (byte) 163});
-                default -> false;
-            };
-            if (!validMedia) {
-                Files.deleteIfExists(targetFile.toPath());
-                throw new IllegalArgumentException("파일 내용이 허용된 사진·동영상 형식과 일치하지 않습니다.");
+            postValidator.validateMedia(target, extension);
+
+            FileMetadataDto metadata = new FileMetadataDto();
+
+            // 업로더는 요청값이 아닌 인증 정보로 지정한다.
+            metadata.setUserId(userId);
+            metadata.setOriginalFileName(originalName);
+            metadata.setStoredFileName(savedName);
+            metadata.setFilePath(target.toString());
+            metadata.setFileExtension(extension.substring(1));
+            metadata.setFileSize(Files.size(target));
+
+            /*
+             * 게시글에 연결되기 전에는 POST_PENDING으로 저장한다.
+             * 최종 글 저장 시 소유권을 검사한 뒤 POST로 전환한다.
+             */
+            postMapper.savePendingFile(metadata);
+
+            for (
+                    int index = 0;
+                    index < dto.getTotalChunks();
+                    index++
+            ) {
+                Files.deleteIfExists(
+                        directory.resolve("chunk_" + index)
+                );
             }
 
-            for (int i = 0; i < dto.getTotalChunks(); i++) {
-                File cFile = new File(tempDirFile, "chunk_" + i);
-                if (cFile.exists()) {
-                    cFile.delete();
-                }
-            }
-            if (tempDirFile.exists()) {
-                tempDirFile.delete();
-            }
+            Files.deleteIfExists(metadataPath);
+            Files.deleteIfExists(directory);
 
-            // 파일 병합 단계에는 게시글 ID가 없으므로, 인증된 게시글 저장 시 첨부 기록을 연결한다.
-            return savedFileName;
+            completed = true;
+
+            return savedName;
+
+        } finally {
+            if (!completed) {
+                Files.deleteIfExists(target);
+            }
         }
-
-        return null;
     }
 
-    /**
-     * 게시글 단건 조회 (FILE_META 통합 파일 리스트 포함)
-     */
     @Override
     public PostDto findById(Long postId) {
+
         PostDto post = postMapper.findById(postId);
+
         if (post != null) {
-            List<FileMetadataDto> files = postMapper.findFilesByPostId(postId);
-            post.setFiles(files);
+            post.setFiles(
+                    postMapper.findFilesByPostId(postId)
+            );
         }
+
         return post;
     }
 
-    @Transactional
     @Override
-    public void saveWithFiles(PostDto postDto, List<String> savedFileNames) {
-        postMapper.save(postDto);
-        Long postId = postDto.getPostId();
+    @Transactional(rollbackFor = Exception.class)
+    public void saveWithFiles(
+            PostDto post,
+            List<String> savedFileNames
+    ) {
 
-        if (savedFileNames != null && !savedFileNames.isEmpty()) {
-            for (String savedFileName : savedFileNames) {
-                int underscoreIndex = savedFileName.indexOf("_");
-                String originName = (underscoreIndex != -1) ? savedFileName.substring(underscoreIndex + 1) : savedFileName;
-                String ext = savedFileName.substring(savedFileName.lastIndexOf(".") + 1);
+        Long userId = postValidator.requireCreate(post);
 
-                FileMetadataDto fileDto = new FileMetadataDto();
-                fileDto.setPostId(postId);
-                // 첨부파일의 작성자도 서버에서 인증한 게시글 작성자로 연결한다.
-                fileDto.setUserId(postDto.getUserId());
-                fileDto.setOriginalFileName(originName);
-                fileDto.setStoredFileName(savedFileName);
-                fileDto.setFilePath(UPLOAD_DIR + savedFileName);
-                fileDto.setFileExtension(ext);
-                fileDto.setFileSize(0L);
-                fileDto.setFileType("POST");
+        List<String> names =
+                postValidator.validateSavedFileNames(savedFileNames);
 
-                postMapper.saveFileMeta(fileDto);
+        postValidator.validateFileCount(names.size());
+
+        List<FileMetadataDto> files =
+                lockPendingFiles(names);
+
+        // 작성자 ID와 게시글 ID를 클라이언트가 지정하지 못하게 한다.
+        post.setPostId(null);
+        post.setUserId(userId);
+
+        postMapper.save(post);
+
+        attachFiles(post.getPostId(), files);
+
+        if ("NOTICE".equals(post.getBoardType())) {
+            notificationService.broadcastNoticePost(
+                    post.getPostId(),
+                    post.getTitle()
+            );
+        }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateWithFiles(
+            PostDto post,
+            List<Long> deleteFileIds,
+            List<String> savedFileNames
+    ) {
+
+        postValidator.requireLogin();
+        postValidator.validatePost(post);
+
+        PostDto existing =
+                postMapper.lockById(post.getPostId());
+
+        postValidator.validateUpdate(post, existing);
+
+        List<FileMetadataDto> existingFiles =
+                postMapper.findFilesByPostId(
+                        existing.getPostId()
+                );
+
+        List<Long> deleteIds =
+                postValidator.validateDeleteFiles(
+                        existingFiles,
+                        deleteFileIds
+                );
+
+        List<String> names =
+                postValidator.validateSavedFileNames(savedFileNames);
+
+        postValidator.validateFileCount(
+                existingFiles.size()
+                        - deleteIds.size()
+                        + names.size()
+        );
+
+        List<FileMetadataDto> newFiles =
+                lockPendingFiles(names);
+
+        /*
+         * 게시글 작성자는 변경하지 않는다.
+         * 수정 SQL에서도 USER_ID를 갱신하지 않는다.
+         */
+        post.setUserId(existing.getUserId());
+
+        postMapper.update(post);
+
+        for (Long fileId : deleteIds) {
+
+            int changed = postMapper.deleteFileMeta(
+                    fileId,
+                    existing.getPostId()
+            );
+
+            if (changed != 1) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "FILE_UPDATE_CONFLICT",
+                        "첨부파일 상태가 변경되었습니다."
+                );
             }
         }
 
-        // 공지사항 게시글이면 전체 활성 회원에게 알림을 발송한다.
-        if (NOTICE_BOARD_TYPE.equalsIgnoreCase(postDto.getBoardType())) {
-            notificationService.broadcastNoticePost(postId, postDto.getTitle());
-        }
-    }
-
-    @Transactional
-    @Override
-    public void updateWithFiles(PostDto postDto, List<Long> deleteFileIds, List<String> savedFileNames) {
-        Long postId = postDto.getPostId();
-        postMapper.update(postDto);
-
-        if (deleteFileIds != null && !deleteFileIds.isEmpty()) {
-            for (Long fileId : deleteFileIds) {
-                postMapper.deleteFileMeta(fileId);
-            }
-        }
-
-        if (savedFileNames != null && !savedFileNames.isEmpty()) {
-            for (String savedFileName : savedFileNames) {
-                int underscoreIndex = savedFileName.indexOf("_");
-                String originName = (underscoreIndex != -1) ? savedFileName.substring(underscoreIndex + 1) : savedFileName;
-                String ext = savedFileName.substring(savedFileName.lastIndexOf(".") + 1);
-
-                FileMetadataDto fileDto = new FileMetadataDto();
-                fileDto.setPostId(postId);
-                fileDto.setUserId(postDto.getUserId());
-                fileDto.setOriginalFileName(originName);
-                fileDto.setStoredFileName(savedFileName);
-                fileDto.setFilePath(UPLOAD_DIR + savedFileName);
-                fileDto.setFileExtension(ext);
-                fileDto.setFileSize(0L);
-                fileDto.setFileType("POST");
-
-                postMapper.saveFileMeta(fileDto);
-            }
-        }
-    }
-
-    // 프로젝트 표준 PageMeta 및 offset 계산 방식 적용
-    @Override
-    public Map<String, Object> getPostPage(int page, int size, String sort, String keyword) {
-        if (page < 1) page = 1;
-        int totalCount = postMapper.countAll(keyword);
-
-        // PageMeta 객체 생성 (total, size, page 기반)
-        PageMeta pageMeta = PageMeta.of(page, size, totalCount);
-
-        // MySQL LIMIT 오프셋 계산 (0부터 시작하므로 page - 1)
-        int offset = (page - 1) * size;
-        List<PostDto> list = postMapper.findPage(sort, keyword, offset, size);
-
-        for (PostDto post : list) {
-            post.setFiles(postMapper.findFilesByPostId(post.getPostId()));
-        }
-
-        Map<String, Object> result = new java.util.HashMap<>();
-        result.put("content", list);
-        result.put("paging", pageMeta);
-        return result;
+        attachFiles(existing.getPostId(), newFiles);
     }
 
     @Override
-    public List<PostDto> findPage(String sort, String keyword, int offset, int size) {
-        List<PostDto> list = postMapper.findPage(sort, keyword, offset, size);
-        for (PostDto post : list) {
-            post.setFiles(postMapper.findFilesByPostId(post.getPostId()));
-        }
-        return list;
-    }
-
-    @Override
-    public List<PostDto> findAll(String sort, String keyword) {
-        List<PostDto> list = postMapper.findAll(sort);
-        for (PostDto post : list) {
-            post.setFiles(postMapper.findFilesByPostId(post.getPostId()));
-        }
-        return list;
-    }
-
-    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Long postId) {
         deleteById(postId);
     }
 
-    @Transactional
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteById(Long postId) {
-        // 게시글과 첨부파일은 보존하고 삭제 시각만 기록해 일반 조회에서 숨긴다.
+
+        postValidator.requireLogin();
+
+        PostDto post = postMapper.lockById(postId);
+
+        postValidator.requireChange(post);
+
         postMapper.deleteById(postId);
     }
 
     @Override
-    public void requireAuthor(Long postId, Long userId) {
-        // 작성자 권한은 클라이언트 닉네임이 아닌 DB의 회원 번호와 비교한다.
+    public void requireAuthor(
+            Long postId,
+            Long userId
+    ) {
+
+        postValidator.validateAuthenticatedUserId(userId);
+
         PostDto post = postMapper.findById(postId);
-        if (post == null) {
-            throw new com.kh.back.common.exception.ApiException(
-                    org.springframework.http.HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
+
+        // 메서드 이름은 유지하지만 관리자도 통과할 수 있다.
+        postValidator.requireChange(post);
+    }
+
+    @Override
+    public Map<String, Object> getPostPage(
+            int page,
+            int size,
+            String sort,
+            String keyword
+    ) {
+
+        page = Math.max(page, 1);
+
+        long offsetValue = ((long) page - 1) * size;
+
+        if (offsetValue < 0 || offsetValue > Integer.MAX_VALUE) {
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST,
+                    "VALIDATION_ERROR",
+                    "페이지 범위를 초과했습니다."
+            );
         }
-        if (!java.util.Objects.equals(post.getUserId(), userId)) {
-            throw new com.kh.back.common.exception.ApiException(
-                    org.springframework.http.HttpStatus.FORBIDDEN, "ACCESS_DENIED", "본인이 작성한 글만 변경할 수 있습니다.");
-        }
+
+        int offset = (int) offsetValue;
+
+        postValidator.validatePage(offset, size);
+
+        int total = postMapper.countAll(keyword);
+
+        Map<String, Object> result = new HashMap<>();
+
+        result.put(
+                "content",
+                findPage(sort, keyword, offset, size)
+        );
+
+        result.put(
+                "paging",
+                PageMeta.of(page, size, total)
+        );
+
+        return result;
+    }
+
+    @Override
+    public List<PostDto> findPage(
+            String sort,
+            String keyword,
+            int offset,
+            int size
+    ) {
+
+        postValidator.validatePage(offset, size);
+
+        List<PostDto> posts = postMapper.findPage(
+                sort,
+                keyword,
+                offset,
+                size
+        );
+
+        loadFileLists(posts);
+
+        return posts;
+    }
+
+    @Override
+    public List<PostDto> findAll(
+            String sort,
+            String keyword
+    ) {
+
+        List<PostDto> posts =
+                postMapper.findAll(sort, keyword);
+
+        loadFileLists(posts);
+
+        return posts;
     }
 
     @Override
     public int countAll(String keyword) {
         return postMapper.countAll(keyword);
+    }
+
+    private List<FileMetadataDto> lockPendingFiles(
+            List<String> names
+    ) {
+
+        List<String> orderedNames =
+                new ArrayList<>(names);
+
+        // 여러 파일의 잠금 순서를 일정하게 유지한다.
+        orderedNames.sort(String::compareTo);
+
+        List<FileMetadataDto> files =
+                new ArrayList<>();
+
+        for (String name : orderedNames) {
+
+            FileMetadataDto file =
+                    postMapper.lockPendingFile(name);
+
+            // 실제 업로더 또는 관리자인지 Validator에서 검사한다.
+            postValidator.requirePendingFile(file);
+
+            Path target = uploadRoot.resolve(
+                    file.getStoredFileName()
+            ).normalize();
+
+            if (!target.startsWith(uploadRoot)
+                    || !Files.isRegularFile(target)) {
+
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "FILE_NOT_AVAILABLE",
+                        "업로드 파일을 찾을 수 없습니다."
+                );
+            }
+
+            files.add(file);
+        }
+
+        return files;
+    }
+
+    private void attachFiles(
+            Long postId,
+            List<FileMetadataDto> files
+    ) {
+
+        for (FileMetadataDto file : files) {
+
+            /*
+             * 기존 업로드 기록을 게시글에 연결한다.
+             * 원본 파일명·크기·실제 업로더 정보는 그대로 유지한다.
+             */
+            int changed = postMapper.attachPendingFile(
+                    file.getFileId(),
+                    postId
+            );
+
+            if (changed != 1) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "FILE_ALREADY_USED",
+                        "이미 사용되었거나 연결할 수 없는 파일입니다."
+                );
+            }
+        }
+    }
+
+    private void loadFileLists(List<PostDto> posts) {
+
+        for (PostDto post : posts) {
+            post.setFiles(
+                    postMapper.findFilesByPostId(
+                            post.getPostId()
+                    )
+            );
+        }
     }
 }
