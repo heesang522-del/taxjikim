@@ -79,12 +79,15 @@ export function getPdfItemPeriod(item, year) {
   };
 }
 
-export const getAllTaxRows = (state) => (state.inputMethod === 'file' ? state.fileRows : state.manualRows);
+// 입력 경로와 관계없이 직접 입력과 PDF 거래를 한 목록으로 다룬다.
+export const getAllTaxRows = (state) => [
+  ...state.manualRows.map((row) => ({ ...row, selected: true })),
+  // PDF의 검증용 합계와 상세 거래를 함께 표시·합산하지 않는다.
+  ...state.fileRows.filter((row) => row.excluded !== true && (row.selected !== false || !isPdfRowReady(row))),
+];
 
 export const getSelectedTaxRows = (state) =>
-  getAllTaxRows(state).filter(
-    (row) => row.selected !== false && row.excluded !== true && parseTaxAmount(row.amt) !== null
-  );
+  getAllTaxRows(state).filter((row) => row.excluded !== true && parseTaxAmount(row.amt) !== null);
 
 export const getSelectedTaxTotals = (state) =>
   getSelectedTaxRows(state).reduce(
@@ -262,6 +265,13 @@ export const useTaxStore = create((set, get) => ({
   profile: {
     type: null,
     auto33: false,
+    taxYear: new Date().getFullYear(),
+    businessRegistered: null,
+    age: '',
+    dependentCount: 0,
+    donationAmount: 0,
+    startupReliefApplied: null,
+    businessRegion: '',
   },
 
   sim: { ...EMPTY_SIM },
@@ -333,22 +343,14 @@ export const useTaxStore = create((set, get) => ({
     })),
 
   setAllRowsSelected: (selected) =>
-    set((state) => {
-      if (state.inputMethod === 'file') {
-        return {
-          fileRows: selectPreferredRows(state.fileRows, selected),
-          calculated: false,
-        };
-      }
-
-      return {
-        manualRows: state.manualRows.map((row) => ({
-          ...row,
-          selected: Boolean(selected),
-        })),
-        calculated: false,
-      };
-    }),
+    set((state) => ({
+      fileRows: selectPreferredRows(state.fileRows, selected),
+      manualRows: state.manualRows.map((row) => ({
+        ...row,
+        selected: Boolean(selected),
+      })),
+      calculated: false,
+    })),
 
   setFileSelected: (key, selected) =>
     set((state) => ({

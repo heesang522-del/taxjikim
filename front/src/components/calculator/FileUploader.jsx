@@ -151,7 +151,7 @@ function getErrorMessage(error) {
   return body?.error?.message ?? detailMessage ?? error?.message ?? 'PDF 분석에 실패했습니다.';
 }
 
-export default function FileUploader({ onUploadSuccess }) {
+export default function FileUploader({ onUploadSuccess, compact = false }) {
   const inputRef = useRef(null);
   const uploadingRef = useRef(false);
 
@@ -271,6 +271,36 @@ export default function FileUploader({ onUploadSuccess }) {
       setCurrentFile('');
     }
   };
+
+  if (compact) {
+    return (
+      <span>
+        <Button type="button" size="sm" variant="soft" disabled={loading} onClick={() => inputRef.current?.click()}>
+          <Icon name="uploadCloud" size={14} /> {loading ? 'PDF 읽는 중…' : 'PDF 불러오기'}
+        </Button>
+        <input
+          ref={inputRef}
+          hidden
+          multiple
+          type="file"
+          accept=".pdf,application/pdf"
+          disabled={loading}
+          aria-label="PDF 거래 파일 선택"
+          onChange={(event) => {
+            const files = Array.from(event.target.files ?? []);
+            event.target.value = '';
+            upload(files);
+          }}
+        />
+        {loading && (
+          <span className="small muted" role="status">
+            {' '}
+            {currentFile} 분석 중
+          </span>
+        )}
+      </span>
+    );
+  }
 
   return (
     <Card title="파일로 불러오기" icon="uploadCloud">
