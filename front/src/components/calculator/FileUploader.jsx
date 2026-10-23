@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 
 import { Button, Card, Icon } from '../common/index';
 
-import { useTax, parseTaxAmount, normalizeTaxKind } from '../../store/useTaxStore';
+import { useTax, useTaxStore, parseTaxAmount, normalizeTaxKind, getRowTaxYear } from '../../store/useTaxStore';
 
 import { useToast } from '../../store/useToastStore';
 import { uploadTaxPdfApi } from '../../api/taxApi';
@@ -14,7 +14,9 @@ function fileKey(file) {
 }
 
 function normalizeDate(value) {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
 
   let text;
 
@@ -32,7 +34,9 @@ function normalizeDate(value) {
 
   const match = text.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
 
-  if (!match) return null;
+  if (!match) {
+    return null;
+  }
 
   const normalized = [match[1], match[2].padStart(2, '0'), match[3].padStart(2, '0')].join('-');
 
@@ -48,10 +52,7 @@ function normalizeDate(value) {
 function toFileRow(item, index, fileId) {
   const date = normalizeDate(item.transactionDate);
 
-  /*
-   * 원본의 거래 구분만 사용한다.
-   * 설명이나 금액을 보고 수입·지출을 추측하지 않는다.
-   */
+  // 원본의 거래 구분을 사용하고 임의로 분류하지 않는다.
   const kind = normalizeTaxKind(item.transactionType);
 
   const preTaxIncome = parseTaxAmount(item.preTaxIncome);
@@ -66,19 +67,16 @@ function toFileRow(item, index, fileId) {
   let amountBasis;
 
   if (kind === 'in' && preTaxIncome !== null) {
-    // 수입에 세전 금액이 명시되어 있으면 그대로 보존한다.
     amount = preTaxIncome;
     amountBasis = 'GROSS';
   } else if (actualAmount !== null) {
     amount = actualAmount;
-
     amountBasis = kind === 'in' ? 'NET' : 'CASH';
   } else {
     amount = reportedAmount;
     amountBasis = 'UNSPECIFIED';
   }
 
-  // 구분이 미확인이어도 금액이 읽히면 자동 체크한다.
   const available = amount !== null;
 
   return {
@@ -87,17 +85,14 @@ function toFileRow(item, index, fileId) {
     source: 'transaction',
 
     kind,
-
-    // 원본 구분도 보존한다.
     rawTransactionType: item.transactionType ?? null,
 
+    // 원본 날짜를 보존하며 선택 연도로 덮어쓰지 않는다.
     date,
     month: null,
     year: null,
-
     m: date ? Number(date.slice(5, 7)) : null,
 
-    // 원본에 없는 세부 카테고리는 임의로 채우지 않는다.
     cat: typeof item.category === 'string' ? item.category.trim() : '',
 
     memo: item.description ?? item.rawText ?? '',
@@ -112,6 +107,7 @@ function toFileRow(item, index, fileId) {
 
     valueKind: 'transaction',
 
+    // 날짜나 연도와 관계없이 유효 금액이 있으면 선택한다.
     selected: available,
     excluded: !available,
 
@@ -120,9 +116,16 @@ function toFileRow(item, index, fileId) {
 
     pageNumber: item.pageNumber ?? null,
     rawText: item.rawText ?? '',
-
     parseSuccess: item.parseSuccess ?? false,
   };
+}
+
+function canInclude(row) {
+  return row.excluded !== true && parseTaxAmount(row.amt) !== null;
+}
+
+function isIncluded(row) {
+  return canInclude(row) && row.selected !== false;
 }
 
 function formatMoney(value) {
@@ -158,20 +161,16 @@ export default function FileUploader({ onUploadSuccess }) {
   const [loading, setLoading] = useState(false);
   const [currentFile, setCurrentFile] = useState('');
 
-  const { uploadedFiles, fileRows, addFileResult, setFileSelected, removeUploadedFile } = useTax();
+  const { uploadedFiles, fileRows, setFileSelected, removeUploadedFile } = useTax();
 
   const toast = useToast();
 
-  const selectedRows = fileRows.filter(
-    (row) => row.selected !== false && row.excluded !== true && parseTaxAmount(row.amt) !== null
-  );
+  // 모든 연도의 유효한 선택 거래를 합산한다.
+  const selectedRows = fileRows.filter(isIncluded);
 
   const totals = selectedRows.reduce(
     (result, row) => {
       const amount = parseTaxAmount(row.amt);
-
-      if (amount === null) return result;
-
       const kind = normalizeTaxKind(row.kind);
 
       if (kind === 'in') {
@@ -181,6 +180,7 @@ export default function FileUploader({ onUploadSuccess }) {
         result.expense += amount;
         result.expenseCount += 1;
       } else {
+        // 미분류 금액은 별도 합계로 표시한다.
         result.unknown += amount;
         result.unknownCount += 1;
       }
@@ -193,28 +193,28 @@ export default function FileUploader({ onUploadSuccess }) {
       income: 0,
       expense: 0,
       unknown: 0,
-
       incomeCount: 0,
       expenseCount: 0,
       unknownCount: 0,
-
       count: 0,
     }
   );
 
-  const upload = async (fileList) => {
-    if (uploadingRef.current) return;
+  async function handleUpload(fileList) {
+    if (uploadingRef.current) {
+      return;
+    }
 
     const files = Array.from(fileList ?? []);
 
-    if (!files.length) return;
+    if (!files.length) {
+      return;
+    }
 
     uploadingRef.current = true;
     setLoading(true);
 
     try {
-      const existingKeys = new Set(uploadedFiles.map((file) => file.key));
-
       for (const file of files) {
         const key = fileKey(file);
 
@@ -223,7 +223,9 @@ export default function FileUploader({ onUploadSuccess }) {
           continue;
         }
 
-        if (existingKeys.has(key)) {
+        const alreadyUploaded = useTaxStore.getState().uploadedFiles.some((entry) => entry.key === key);
+
+        if (alreadyUploaded) {
           toast('이미 업로드한 파일입니다.');
           continue;
         }
@@ -231,6 +233,7 @@ export default function FileUploader({ onUploadSuccess }) {
         setCurrentFile(file.name);
 
         try {
+          // 업로드와 분석은 귀속 연도 선택 없이 수행한다.
           const response = await uploadTaxPdfApi(file);
 
           if (response?.success === false) {
@@ -245,20 +248,25 @@ export default function FileUploader({ onUploadSuccess }) {
 
           const rows = data.transactions.map((item, index) => toFileRow(item, index, data.fileId ?? null));
 
-          const availableCount = rows.filter((row) => row.selected).length;
-
-          addFileResult(rows, {
+          useTaxStore.getState().addFileResult(rows, {
             key,
             name: file.name,
             fileId: data.fileId ?? null,
             count: rows.length,
           });
 
-          setFileSelected(key, true);
+          // 스토어의 실제 선택 결과로 안내 건수를 계산한다.
+          const savedRows = useTaxStore.getState().fileRows.filter((row) => row.sourceFileKey === key);
 
-          existingKeys.add(key);
+          const includedCount = savedRows.filter(isIncluded).length;
 
-          toast(`${file.name}: ${rows.length}건 추출 · ` + `${availableCount}건 자동 반영`);
+          const unknownYearCount = savedRows.filter((row) => getRowTaxYear(row) === null).length;
+
+          toast(
+            `${file.name}: ${rows.length}건 추출 · ` +
+              `전체 연도 ${includedCount}건 선택 · ` +
+              `날짜 확인 필요 ${unknownYearCount}건`
+          );
 
           onUploadSuccess?.(data);
         } catch (error) {
@@ -270,10 +278,14 @@ export default function FileUploader({ onUploadSuccess }) {
       setLoading(false);
       setCurrentFile('');
     }
-  };
+  }
 
   return (
     <Card title="파일로 불러오기" icon="uploadCloud">
+      <p className="small muted" style={{ marginBottom: 12 }}>
+        연도와 관계없이 선택한 모든 거래를 합계에 반영합니다.
+      </p>
+
       <div
         className="drop"
         onDragOver={(event) => {
@@ -281,16 +293,22 @@ export default function FileUploader({ onUploadSuccess }) {
         }}
         onDrop={(event) => {
           event.preventDefault();
-          upload(event.dataTransfer.files);
+          handleUpload(event.dataTransfer.files);
         }}
       >
         <Icon name="uploadCloud" size={36} />
 
         <p style={{ fontSize: 17 }}>PDF 거래정보 자동 분석</p>
 
-        <p className="small muted">원본의 수입·지출 구분을 유지하고 금액이 읽힌 거래를 자동 체크합니다.</p>
+        <p className="small muted">모든 연도 거래를 보존하고 금액이 있는 거래를 선택합니다.</p>
 
-        <Button size="sm" disabled={loading} onClick={() => inputRef.current?.click()}>
+        <Button
+          size="sm"
+          disabled={loading}
+          onClick={() => {
+            inputRef.current?.click();
+          }}
+        >
           {loading ? '분석 중...' : 'PDF 선택'}
         </Button>
 
@@ -306,7 +324,7 @@ export default function FileUploader({ onUploadSuccess }) {
 
             event.target.value = '';
 
-            upload(files);
+            handleUpload(files);
           }}
         />
       </div>
@@ -321,11 +339,11 @@ export default function FileUploader({ onUploadSuccess }) {
         style={{
           padding: 14,
           marginTop: 16,
-          border: '1px solid #e2e8f0',
+          border: '1px solid var(--border)',
           borderRadius: 10,
         }}
       >
-        <p style={{ fontWeight: 700 }}>현재 반영된 PDF 거래</p>
+        <p style={{ fontWeight: 700 }}>전체 연도 PDF 거래 합계</p>
 
         <p>전체: {totals.count}건</p>
 
@@ -341,15 +359,20 @@ export default function FileUploader({ onUploadSuccess }) {
           구분 미확인: {totals.unknownCount}건 · {formatMoney(totals.unknown)}
         </p>
 
-        <p className="small muted">세부 카테고리가 없는 경우에는 미기재로 표시합니다.</p>
+        <p className="small muted">
+          날짜 미확인 거래도 금액이 있으면 합계에 포함합니다. 이 값은 전체 거래 합계이며 특정 연도의 세액 결과가
+          아닙니다.
+        </p>
       </section>
 
       {uploadedFiles.map((file) => {
         const rows = fileRows.filter((row) => row.sourceFileKey === file.key);
 
-        const availableRows = rows.filter((row) => row.excluded !== true && parseTaxAmount(row.amt) !== null);
+        const availableRows = rows.filter(canInclude);
 
-        const selectedCount = availableRows.filter((row) => row.selected === true).length;
+        const selectedCount = availableRows.filter((row) => row.selected !== false).length;
+
+        const unknownYearCount = rows.filter((row) => getRowTaxYear(row) === null).length;
 
         const allSelected = availableRows.length > 0 && selectedCount === availableRows.length;
 
@@ -359,15 +382,17 @@ export default function FileUploader({ onUploadSuccess }) {
             style={{
               padding: 14,
               marginTop: 12,
-              border: '1px solid #e2e8f0',
+              border: '1px solid var(--border)',
               borderRadius: 10,
             }}
           >
             <p style={{ fontWeight: 600 }}>{file.name}</p>
 
-            <p className="small muted">
-              {rows.length}건 추출 · {selectedCount}건 반영
-            </p>
+            <p className="small muted">전체 {rows.length}건 추출</p>
+
+            <p className="small muted">전체 연도 거래 중 {selectedCount}건 선택</p>
+
+            <p className="small muted">날짜 확인 필요 {unknownYearCount}건</p>
 
             <label>
               <input
@@ -378,8 +403,15 @@ export default function FileUploader({ onUploadSuccess }) {
                   setFileSelected(file.key, event.target.checked);
                 }}
               />{' '}
-              파일 거래 전체 반영
+              전체 연도 거래 선택
             </label>
+
+            {unknownYearCount > 0 && (
+              <p className="small muted">
+                날짜 미확인 거래도 전체 합계에는 포함됩니다. 귀속 연도별 세액 계산이나 서버 저장 전에는 실제 날짜를
+                확인해주세요.
+              </p>
+            )}
 
             <div style={{ marginTop: 10 }}>
               <Button
@@ -390,9 +422,11 @@ export default function FileUploader({ onUploadSuccess }) {
                   removeUploadedFile(file.key);
                 }}
               >
-                파일 제거
+                파일 전체 제거
               </Button>
             </div>
+
+            <p className="small muted">파일을 제거하면 이 파일에서 추출한 모든 연도의 브라우저 내역이 제거됩니다.</p>
           </section>
         );
       })}

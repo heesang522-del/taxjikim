@@ -1,6 +1,7 @@
 'use no memo';
 
 import { create } from 'zustand';
+import { YEAR } from '../data/taxConstants';
 
 export const EMPTY_SIM = {
   extraExp: 0,
@@ -19,7 +20,9 @@ export function parseTaxAmount(value) {
 
   const cleaned = String(value).replace(/,/g, '').replace(/원/g, '').replace(/\s/g, '');
 
-  if (!cleaned) return null;
+  if (!cleaned) {
+    return null;
+  }
 
   const amount = Number(cleaned);
 
@@ -79,8 +82,32 @@ export function getPdfItemPeriod(item, year) {
   };
 }
 
+/**
+ * 원본에 명시된 연도를 확인한다.
+ * 전체 목록을 제한하는 용도가 아니라 자료 구분에 사용한다.
+ */
+export function getRowTaxYear(row) {
+  const value = row?.date || row?.month || row?.year;
+
+  const match = String(value ?? '').match(/^(\d{4})(?:[-./]|$)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+
+  return year >= 1000 && year <= 9999 ? year : null;
+}
+
+/**
+ * 입력 방식에 해당하는 모든 연도 거래를 표시한다.
+ */
 export const getAllTaxRows = (state) => (state.inputMethod === 'file' ? state.fileRows : state.manualRows);
 
+/**
+ * 연도·날짜 유무와 관계없이 선택한 유효 금액 거래를 반영한다.
+ */
 export const getSelectedTaxRows = (state) =>
   getAllTaxRows(state).filter(
     (row) => row.selected !== false && row.excluded !== true && parseTaxAmount(row.amt) !== null
@@ -91,7 +118,9 @@ export const getSelectedTaxTotals = (state) =>
     (totals, row) => {
       const amount = parseTaxAmount(row.amt);
 
-      if (amount === null) return totals;
+      if (amount === null) {
+        return totals;
+      }
 
       const kind = normalizeTaxKind(row.kind);
 
@@ -100,11 +129,13 @@ export const getSelectedTaxTotals = (state) =>
       } else if (kind === 'out') {
         totals.expense += amount;
       } else {
+        // 미분류 금액은 수입이나 지출에 임의 배정하지 않는다.
         totals.unknown += amount;
         totals.unknownCount += 1;
       }
 
       totals.count += 1;
+
       return totals;
     },
     {
@@ -139,9 +170,14 @@ function getLevel(row) {
   if (row.date) return 'detail';
   if (row.month) return 'month';
   if (row.year) return 'year';
+
   return 'unknown';
 }
 
+/**
+ * 모든 연도를 선택하되 같은 파일·연도의 상세와 합계가
+ * 중복 반영되지 않도록 기존 우선순위를 적용한다.
+ */
 function selectPreferredRows(rows, selected, fileKey = null) {
   const keys = new Set(
     rows.filter((row) => fileKey === null || row.sourceFileKey === fileKey).map((row) => row.sourceFileKey)
@@ -150,38 +186,44 @@ function selectPreferredRows(rows, selected, fileKey = null) {
   let result = rows;
 
   for (const key of keys) {
-    const available = result.filter((row) => row.sourceFileKey === key && !row.excluded && isPdfRowReady(row));
+    const years = new Set(result.filter((row) => row.sourceFileKey === key).map(getRowTaxYear));
 
-    const nonTotals = available.filter((row) => row.valueKind !== 'VALIDATION_TOTAL');
+    for (const year of years) {
+      const available = result.filter(
+        (row) => row.sourceFileKey === key && getRowTaxYear(row) === year && !row.excluded && isPdfRowReady(row)
+      );
 
-    const detail = nonTotals.filter((row) => getLevel(row) === 'detail');
+      const nonTotals = available.filter((row) => row.valueKind !== 'VALIDATION_TOTAL');
 
-    const monthly = nonTotals.filter((row) => getLevel(row) === 'month');
+      const detail = nonTotals.filter((row) => getLevel(row) === 'detail');
 
-    const yearly = nonTotals.filter((row) => getLevel(row) === 'year');
+      const monthly = nonTotals.filter((row) => getLevel(row) === 'month');
 
-    const undated = nonTotals.filter((row) => getLevel(row) === 'unknown');
+      const yearly = nonTotals.filter((row) => getLevel(row) === 'year');
 
-    const preferred = detail.length
-      ? [...detail, ...undated]
-      : monthly.length
-        ? [...monthly, ...undated]
-        : yearly.length
-          ? [...yearly, ...undated]
-          : nonTotals.length
-            ? nonTotals
-            : available.slice(0, 1);
+      const undated = nonTotals.filter((row) => getLevel(row) === 'unknown');
 
-    const ids = new Set(preferred.map((row) => row.id));
+      const preferred = detail.length
+        ? [...detail, ...undated]
+        : monthly.length
+          ? [...monthly, ...undated]
+          : yearly.length
+            ? [...yearly, ...undated]
+            : nonTotals.length
+              ? nonTotals
+              : available.slice(0, 1);
 
-    result = result.map((row) =>
-      row.sourceFileKey === key
-        ? {
-            ...row,
-            selected: Boolean(selected) && ids.has(row.id),
-          }
-        : row
-    );
+      const ids = new Set(preferred.map((row) => row.id));
+
+      result = result.map((row) =>
+        row.sourceFileKey === key && getRowTaxYear(row) === year
+          ? {
+              ...row,
+              selected: Boolean(selected) && ids.has(row.id),
+            }
+          : row
+      );
+    }
   }
 
   return result;
@@ -190,7 +232,9 @@ function selectPreferredRows(rows, selected, fileKey = null) {
 function changeFileRowSelection(rows, id, selected) {
   const target = rows.find((row) => row.id === id);
 
-  if (!target) return rows;
+  if (!target) {
+    return rows;
+  }
 
   const enabled = Boolean(selected) && !target.excluded && isPdfRowReady(target);
 
@@ -202,7 +246,8 @@ function changeFileRowSelection(rows, id, selected) {
       };
     }
 
-    if (!enabled || row.sourceFileKey !== target.sourceFileKey) {
+    // 중복 합산 검사는 같은 파일·연도의 자료끼리 수행한다.
+    if (!enabled || row.sourceFileKey !== target.sourceFileKey || getRowTaxYear(row) !== getRowTaxYear(target)) {
       return row;
     }
 
@@ -231,16 +276,24 @@ export function getPdfCalculationIssue(state) {
   const rows = getSelectedTaxRows(state);
 
   for (const file of state.uploadedFiles ?? []) {
-    const selected = rows.filter((row) => row.sourceFileKey === file.key);
+    const fileRows = rows.filter((row) => row.sourceFileKey === file.key);
 
-    if (selected.length > 1 && selected.some((row) => row.valueKind === 'VALIDATION_TOTAL')) {
-      return `${file.name}: 전체 합계와 개별 거래가 중복 선택되었습니다.`;
-    }
+    const years = new Set(fileRows.map(getRowTaxYear));
 
-    const levels = new Set(selected.map(getLevel).filter((level) => level !== 'unknown'));
+    for (const year of years) {
+      const selected = fileRows.filter((row) => getRowTaxYear(row) === year);
 
-    if (levels.size > 1) {
-      return `${file.name}: 상세·월별·연간 거래를 동시에 합산할 수 없습니다.`;
+      const label = year === null ? '연도 미확인' : `${year}년`;
+
+      if (selected.length > 1 && selected.some((row) => row.valueKind === 'VALIDATION_TOTAL')) {
+        return `${file.name} (${label}): 전체 합계와 개별 거래가 중복 선택되었습니다.`;
+      }
+
+      const levels = new Set(selected.map(getLevel).filter((level) => level !== 'unknown'));
+
+      if (levels.size > 1) {
+        return `${file.name} (${label}): 상세·월별·연간 거래를 동시에 합산할 수 없습니다.`;
+      }
     }
   }
 
@@ -248,15 +301,17 @@ export function getPdfCalculationIssue(state) {
 }
 
 export const useTaxStore = create((set, get) => ({
+  // 계산·서버 저장 등 기존 연도별 기능과의 호환을 유지한다.
+  // 이 값으로 전체 거래 목록이나 합계를 제한하지 않는다.
+  taxYear: YEAR,
+
   inputMethod: 'manual',
 
   manualRows: [],
   fileRows: [],
   uploadedFiles: [],
 
-  // 기존 SummaryRail.jsx 호환용
   evidenceDocuments: [],
-
   pendingRows: [],
 
   profile: {
@@ -266,6 +321,25 @@ export const useTaxStore = create((set, get) => ({
 
   sim: { ...EMPTY_SIM },
   calculated: false,
+
+  setTaxYear: (taxYear) => {
+    if (!Number.isInteger(taxYear) || taxYear < 1000 || taxYear > 9999) {
+      return;
+    }
+
+    set((state) => {
+      if (state.taxYear === taxYear) {
+        return state;
+      }
+
+      // 연도 변경은 원본 데이터나 거래 선택 상태를 삭제하지 않는다.
+      return {
+        taxYear,
+        calculated: false,
+        sim: { ...EMPTY_SIM },
+      };
+    });
+  },
 
   addRow: (row) =>
     set((state) => ({
@@ -307,8 +381,7 @@ export const useTaxStore = create((set, get) => ({
       };
     }),
 
-  // 기존 컴포넌트 호환용.
-  // 사용자 직접 검토 기능은 수행하지 않는다.
+  // 기존 컴포넌트 호환용 메서드를 유지한다.
   setPdfDocumentReviewed: () => {},
 
   removeRow: (id) =>
@@ -371,7 +444,9 @@ export const useTaxStore = create((set, get) => ({
   resolvePendingRow: (id, patch) => {
     const row = get().pendingRows.find((item) => item.id === id);
 
-    if (!row) return;
+    if (!row) {
+      return;
+    }
 
     const merged = {
       ...row,
