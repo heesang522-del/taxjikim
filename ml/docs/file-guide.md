@@ -1,52 +1,40 @@
 # ML 폴더·파일 안내
 
-현재 진행 상태와 다음 단계는 [ML 작업 안내](home-handoff.md)에서 확인한다. 이 파일은 폴더·파일 역할을 설명한다.
-
-설치·실행 방법은 [최상위 README](../../README.md), 전체 설계는 [상세 명세](../../docs/creator-tax-dummy-format.md)를 참고한다. Python 코드 내부 설명은 각 `.py` 파일의 주석에 작성한다.
+실행 방법과 현재 상태는 [ML 작업 안내](home-handoff.md)를 확인한다.
 
 ## 폴더 역할
 
 | 폴더 | 역할 |
 | --- | --- |
-| `app/` | FastAPI 서버 코드 |
-| `scripts/` | 데이터 생성 등 준비 작업 코드 |
-| `data/` | 생성한 데이터와 검토 자료 |
-| `data/expense/` | 지출 분류용 데이터. v1·v2는 기존 보존본, v3는 추가 설명을 반영해 생성할 자료 |
-| `data/expense/category_dummy_v4_draft/` | 자체 점검한 확장 초안. 기존 설명 180개와 새 설명 185개를 모은 후보이며 아직 학습용으로 분할하지 않음 |
-| `models/expense_baseline_v2/` | 추가 설명으로 다시 학습할 지출 모델 비교 결과 |
-| `docs/` | ML 작업 안내 문서 |
-| `.venv/` | 프로젝트용 Python과 설치 라이브러리 |
-| `__pycache__/` | Python 실행 시 생성되는 캐시 |
+| `app/` | PDF 거래 추출과 지출 카테고리 분류 API |
+| `scripts/` | 더미데이터 생성·train/test 분할·모델 학습 코드 |
+| `data/expense/category_dummy_v4_draft/` | 현재 사용하는 지출 설명·정답 후보 365건과 별도 보류 자료 |
+| `data/expense/category_dummy_v4_draft/train_test/` | 학습·시험 자료와 분할 요약 |
+| `models/expense_classifier/` | 두 모델·시험 결과·서버에서 선택해 사용할 모델 정보 |
+| `models/expense_baseline_v1/` | 이전 실험 결과 보존본 |
+| `docs/` | 파일 역할과 실행 안내 |
 
 ## 파일 역할
 
 | 파일 | 역할 |
 | --- | --- |
-| `app/main.py` | 서버 시작점. 현재 `/health`로 서버 상태 확인 |
-| `app/__init__.py` | `app`을 Python 패키지로 구성 |
-| `scripts/generate_dummy.py` | 설명·정답 카테고리로 검토용 더미데이터 생성 |
-| `data/expense/category_dummy_v4_draft/labeled_candidates.csv` | 접미사 변형 없이 설명 365개와 정답 후보를 담은 확장 자료 |
-| `data/expense/category_dummy_v4_draft/review_cases.csv` | 정답을 확정하지 않은 범주 경계·정보 부족 사례와 보류 이유 |
-| `data/expense/category_dummy_v4_draft/needs_info.csv` | 명확히 정보가 부족한 설명 10개 |
-| `data/expense/category_dummy_v4_draft/manifest.json` | 확장 자료의 출처·건수·상태 요약 |
-| `scripts/split_expense_data.py` | 비슷한 거래 의미를 묶어 지출 데이터를 학습·검증·시험용으로 분할 |
-| `scripts/train_expense.py` | TF-IDF와 두 분류 모델을 학습하고 검증 자료로 비교 |
-| `data/expense/category_dummy_v3/labeled_candidates.csv` | 기존 지출과 여행·먹방·게임·일상·리뷰 설명의 정답 검토 자료 |
-| `data/expense/category_dummy_v3/needs_info.csv` | 정보가 부족한 설명의 미분류 검증 자료 |
-| `data/expense/category_dummy_v3/manifest.json` | 데이터 생성 시점의 버전·출처·건수·상태 요약 |
-| `data/expense/category_dummy_v3/splits/train.csv` | 모델이 학습할 설명과 정답 |
-| `data/expense/category_dummy_v3/splits/validation.csv` | 모델 비교·미분류 기준 조정용 자료 |
-| `data/expense/category_dummy_v3/splits/test.csv` | 기준 결정 후 최종 평가용 자료 |
-| `data/expense/category_dummy_v3/splits/needs_info_validation.csv` | 정보 부족 설명의 미분류 기준 조정용 자료 |
-| `data/expense/category_dummy_v3/splits/needs_info_test.csv` | 정보 부족 설명의 최종 미분류 평가용 자료 |
-| `data/expense/category_dummy_v3/splits/split_manifest.json` | 분할 건수·기준·원본 식별 기록 |
-| `models/expense_baseline_v2/logistic_regression_bundle.pkl` | TF-IDF와 로지스틱 회귀 모델을 함께 저장한 실험 파일 |
-| `models/expense_baseline_v2/linear_svc_bundle.pkl` | TF-IDF와 선형 SVM 모델을 함께 저장한 실험 파일 |
-| `models/expense_baseline_v2/*_validation.csv` | 검증 자료의 설명·정답·예측·정답 일치 여부 |
-| `models/expense_baseline_v2/validation_report.json` | 두 모델의 검증 점수·카테고리별 성능·실험 조건 |
-| `requirements.txt` | 라이브러리 설치 목록과 버전 |
-| `docs/file-guide.md` | 폴더·파일 역할과 읽는 순서 |
-| `docs/home-handoff.md` | 집에서 이어갈 현재 상태·실행 방법·다음 작업·유지할 합의 |
+| `app/main.py` | 서버 시작 시 모델을 읽고 기존 PDF 응답의 지출 거래에 예측 카테고리를 추가 |
+| `app/pdf_parser.py` | PDF·OCR에서 날짜·구분·설명·금액 등 거래 정보를 추출 |
+| `app/__init__.py` | app을 Python 패키지로 구성 |
+| `scripts/generate_dummy.py` | 설명·정답 카테고리 후보 생성 |
+| `scripts/split_expense_data.py` | 같은 그룹을 함께 유지하며 train/test 분할 |
+| `scripts/train_expense.py` | 설명 전처리 Pipeline과 두 분류 모델을 학습·시험·저장 |
+| `data/expense/category_dummy_v4_draft/labeled_candidates.csv` | 학습·시험에 사용할 설명·정답 후보 |
+| `data/expense/category_dummy_v4_draft/review_cases.csv` | 카테고리 기준이 미확정인 경계 사례. 이번 학습에서 제외 |
+| `data/expense/category_dummy_v4_draft/needs_info.csv` | 설명이 부족한 사례. 이번 학습에서 제외 |
+| `data/expense/category_dummy_v4_draft/manifest.json` | 원본 데이터의 출처·건수·검토 상태 |
+| `data/expense/category_dummy_v4_draft/train_test/train.csv` | 전처리와 모델을 학습할 설명·정답 |
+| `data/expense/category_dummy_v4_draft/train_test/test.csv` | 학습에 넣지 않고 두 모델을 비교할 설명·정답 |
+| `data/expense/category_dummy_v4_draft/train_test/split_manifest.json` | 분할 비율·시드·원본 식별값·분할 건수 |
+| `models/expense_classifier/logistic_regression_bundle.pkl` | TF-IDF와 로지스틱 회귀 모델을 함께 저장 |
+| `models/expense_classifier/linear_svc_bundle.pkl` | TF-IDF와 선형 SVM 모델을 함께 저장 |
+| `models/expense_classifier/test_report.json` | 정확도·macro F1·카테고리별 결과와 API 선택 모델 |
+| `models/expense_classifier/test_predictions.csv` | 시험 자료의 설명·정답·두 모델 예측을 한 행씩 비교 |
 
 ## 정답 코드와 카테고리
 
@@ -72,10 +60,10 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 
 ## 읽는 순서
 
-1. `data/expense/category_dummy_v3/labeled_candidates.csv`: 설명과 정답 카테고리 확인
-2. `needs_info.csv`: 분류하기 어려운 설명 확인
-3. `manifest.json`: 생성 데이터의 전체 구성 확인
-4. `scripts/generate_dummy.py`: 데이터 생성 방식 확인
-5. `app/main.py`: API 서버 코드 확인
+1. `data/expense/category_dummy_v4_draft/labeled_candidates.csv`: 설명과 정답 후보 확인
+2. `scripts/split_expense_data.py`: 학습·시험 분할 방식 확인
+3. `scripts/train_expense.py`: 전처리·두 모델 학습·시험 방식 확인
+4. `models/expense_classifier/test_predictions.csv`: 시험 설명과 두 모델의 예측 비교
+5. `app/main.py`: 선택한 모델을 PDF 거래에 연결하는 코드 확인
 
-표에는 생성 후 생길 파일도 포함한다. 현재 로컬에 모든 버전·모델이 존재한다는 뜻은 아니다. 버전별 생성·학습 상태와 다음 검토 대상은 [ML 작업 안내](home-handoff.md)를 따른다.
+기존 버전과 이번 결과는 데이터·분할이 다르므로 점수를 단순 비교하지 않는다. 별도 validation 자료는 사용하지 않는다.

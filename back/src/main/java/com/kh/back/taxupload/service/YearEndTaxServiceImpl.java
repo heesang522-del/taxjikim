@@ -27,6 +27,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     private final PythonPdfClient pythonPdfClient;
     private final TaxMapper taxMapper;
 
+    // 저장하는 Mapper / repo
+
     @Override
     public PdfParseResponseDto parsePdf(
             MultipartFile file
@@ -36,11 +38,16 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         List<PageOcrResultDto> pages =
                 taxOcrService.extractPages(bytes);
 
-        return pythonPdfClient.analyze(
+        PdfParseResponseDto parsedDTO = pythonPdfClient.analyze(
                 bytes,
                 file.getOriginalFilename(),
                 pages
         );
+
+        // 저장 로직
+
+
+        return parsedDTO;
     }
 
     @Override

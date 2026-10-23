@@ -46,6 +46,39 @@ public class TaxUploadController {
         return ApiResponse.ok(service.parsePdf(file));
     }
 
+    // TODO : /calculator/input -> 분석결과 버튼 누르면 넘어오는곳
+
+    /*
+    *     @GetMapping(
+            value = "/parse"
+    )
+    public ApiResponse<PdfParseResponseDto> updateCategory(
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+    *   // 항목중에 카테고리 업데이트된거나 미분류된거 입력된게 있다면, update
+    *   // 업데이트된거 -> select 데이터 불러와서 -> 계산된 페이지에 알맞게 Map
+    *
+        return ApiResponse.ok(service.parsePdf(file));
+    }
+    *
+    * */
+
+    // TODO : /calculator/sim -> 시뮬레이션 저장 버튼 (내가 화면에서 테스트한 시뮬레이션 저장시 호출되는 controller)
+        /*
+    *     @GetMapping(
+            value = "/parse"
+    )
+    public ApiResponse<PdfParseResponseDto> updateCategory(
+            @RequestParam("file") MultipartFile file
+    ) throws IOException {
+    *   // 항목중에 카테고리 업데이트된거나 미분류된거 입력된게 있다면, update
+    *   // 업데이트된거 -> select 데이터 불러와서 -> 계산된 페이지에 알맞게 Map
+    *
+        return ApiResponse.ok(service.parsePdf(file));
+    }
+    *
+    * */
+
     /**
      * 본인 거래를 저장한다.
      * 다른 사용자 지정은 TaxValidator에서 관리자 권한을 검사한다.
