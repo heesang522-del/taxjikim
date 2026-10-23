@@ -162,50 +162,35 @@ PDF 열은 차감 **금액**에서 차감 **세율**로 변경했다. `deductedT
 
 ## 4. DB 저장 형식
 
-### 기존 테이블 확장 제안
+### 테이블 구성 — 2026-10-23 합의
 
-현재 Mapper에서 아래 3개 테이블 사용을 확인했다. 실물 DDL은 미확인이므로 기존 스키마와 대조해 확장하고 같은 테이블을 중복 생성하지 않는다.
+SQL은 Git 제외 경로인 `back/local/rebuild-tax-tables.sql`에서 로컬로 관리한다. 아래는 저장 구조 설계이며 실제 저장·수정·조회 API 연결과 DB 적용 확인은 별도 작업이다.
 
-| 테이블 | 저장 필드 |
-| --- | --- |
-| FILE_META | 기존 파일 정보·소유자 + 파일 해시·분석 입력 연결·처리 상태 |
-| TAX_INPUTS | taxInputId, userId, taxYear, periodStart, asOfDate, businessType, businessRegistered, basicDeductionAmount, basicDeductionReason, startupReliefAssumedEligible |
-| TAX_TRANSACTIONS | transactionId, taxInputId, userId, sourceFileId, sourceItemIndex, transactionDate, transactionType, description, amount, preTaxIncome, deductedTaxRate, predictedCategoryCode, categoryCode, categorySource, extractionStatus, classificationStatus, modelVersion, isEdited |
+- `tax_inputs`: 분석 한 건의 기본정보. `TAX_INPUT_ID`, `USER_ID`(비회원 NULL), `TAX_YEAR`, `BUSINESS_REGISTERED`, `AGE`, `STARTUP_RELIEF_APPLIED`, `BUSINESS_REGION`, `DEPENDENT_COUNT`, `DONATION_AMOUNT`, `SAVE_STATUS`, `CREATED_AT`, `UPDATED_AT`을 저장한다.
+- `tax_transactions`: PDF·직접 입력 거래. `TRANSACTION_ID`, `TAX_INPUT_ID`, `TRANSACTION_TYPE`, `TRANSACTION_DATE`, `DESCRIPTION`, `CATEGORY`, `PRE_TAX_INCOME`, `DEDUCTED_TAX_RATE`, `AMOUNT`를 저장한다. `AMOUNT`는 실제 입출금액이다.
+- `tax_results`: 분석당 최대 한 건의 결과. `TAX_INPUT_ID`를 기본키로 사용하며 `RESULT_DETAIL` JSON과 `CALCULATED_AT`을 저장한다. JSON에는 예상세액·산출 근거·월별 및 카테고리별 집계를 담고 구체 구조는 후속 확정한다. 마이페이지 항목에 따라 일부 결과를 별도 컬럼으로 분리할 수 있다.
+- `tax_process_logs`: 업로드·계산 성공·실패 이력. `LOG_ID`, `TAX_INPUT_ID`, `USER_ID`, `PROCESS_TYPE`, `STATUS`, `FAIL_REASON`, `CREATED_AT`을 유지한다. 관리자 기능 담당 범위다.
 
-학습 후보는 거래와 별도인 DB 테이블에 저장한다. 원본 거래 ID, 설명, 사용자 지정 카테고리, 학습 반영 상태를 관리하며 실제 테이블명·컬럼명은 구현 시 정한다. 모델 입력은 설명만 사용하고 ID·상태는 제외한다.
+`tax_inputs`에 총수입·총지출·예상세액·결과 상세·창업일·별도 만료 시각·비회원 토큰 해시·공제액·공제 설명은 두지 않는다. 공제 대상 가족 수는 본인 제외 인원이며 금액은 로직에서 계산한다.
 
-기본공제는 TAX_INPUTS에 저장하고 일반 지출로 저장하지 않는다. 금액은 원 단위 정수(BIGINT 또는 DECIMAL 소수점 0), 날짜는 DATE, ID는 기존 자동 증가 숫자 형식과 맞춘다. SQL 열 이름은 기존 규칙에 맞춰 매핑하고 API는 camelCase·JSON 숫자를 사용한다. null과 0을 구분한다.
+사업장 지역은 `CAPITAL_CONGESTION`(수도권 과밀억제권역), `CAPITAL_OTHER`(수도권 중 과밀억제권역 외), `NON_CAPITAL`(비수도권) 중 하나다. 상세 주소는 받지 않는다.
 
-### 6건 저장 예시
+거래 테이블에는 원본 순번·반영 여부·수정 여부·카테고리 지정 주체·이전 모델 추천·모델 버전·추출 성공/실패 정보·생성/수정/삭제 시각을 두지 않는다. 이 결정은 이전의 출처·분류 상태 확장 제안보다 우선한다.
 
-공통 가상 ID: taxInputId=501, sourceFileId=301, userId=42. 사용자 ID는 인증 정보로 정한다.
+### 저장·변경·삭제 흐름
 
-| 원본 순번 | type | amount | preTaxIncome | deductedTaxRate (%) | categoryCode | categorySource |
-| ---: | --- | ---: | ---: | ---: | --- | --- |
-| 1 | INCOME | 959000 | 1000000 | 4.1 | YOUTUBE_SETTLEMENT | MODEL |
-| 2 | INCOME | 967000 | 1000000 | 3.3 | AD_SPONSORSHIP | MODEL |
-| 3 | EXPENSE | 35000 | null | null | SOFTWARE_LICENSE | MODEL |
-| 4 | EXPENSE | 300000 | null | null | EQUIPMENT | MODEL |
-| 5 | EXPENSE | 24000 | null | null | TRANSPORT | MODEL |
-| 6 | EXPENSE | 50000 | null | null | UNCLASSIFIED | UNCLASSIFIED |
+1. PDF 업로드 시 분석 한 건과 거래들을 저장한다. 미분류는 `UNCLASSIFIED`로 보관한다. 직접 입력 거래도 같은 분석에 추가한다.
+2. 서버가 반환한 거래번호로 화면의 거래를 식별한다. 프론트는 변경된 거래번호와 최종 카테고리만 모은다.
+3. 결과 버튼에서 변경된 거래의 `CATEGORY`만 갱신한다. 기존 거래 전체를 다시 INSERT하지 않는다. 휴지통은 해당 거래를 삭제한다.
+4. 거래 추가·수정·삭제 시 서버에서 연결된 `tax_inputs.UPDATED_AT`도 갱신한다. 입력 조건이나 거래가 바뀌면 기존 결과를 무효화하고 다음 분석에서 재계산한다.
+5. 계산 결과는 `tax_results`에 저장하고 재조회 시 재계산 없이 사용한다. 재계산할 때 결과와 계산 시각을 갱신한다.
+6. 회원이 저장하면 `USER_ID`를 연결하고 `SAVE_STATUS`를 `SAVED`로 바꾼다. 저장 안 함 선택 시 분석을 삭제하고 거래·결과는 `ON DELETE CASCADE`로 함께 삭제한다. 처리 로그는 남기고 분석번호만 NULL로 바뀐다.
 
-- predictedCategoryCode는 ML 추천을 보존한다. modelVersion은 해당 수입·지출 모델의 버전을 기록한다.
-- 날짜·금액이 정상인 6건의 extractionStatus는 VALID다. 6번만 classificationStatus=NEEDS_REVIEW, 나머지는 CLASSIFIED다.
-- 6번을 사용자가 소모품·소품으로 변경하면 categoryCode=SUPPLIES_PROPS, categorySource=USER, isEdited=true, classificationStatus=USER_CONFIRMED로 갱신한다. 원문·금액·원래 ML 추천 UNCLASSIFIED는 보존한다. 재추론으로 사용자 값을 덮어쓰지 않는다.
-- 차감 세금을 실제 세액공제 계산에 활용한다면 국내 소득세·지방세·외국세 등을 상세 구분해야 한다. 이번 추가 납부·환급 계산에는 사용하지 않는다.
+비회원은 쿠키로 임시 분석 한 건을 이어간다. 쿠키 발급·소유권 검증·저장 후 계정 연결은 아직 구현하지 않았다. 분석번호만으로 접근 권한이 검증되지는 않는다. 미선택 임시 기록은 추후 `SAVE_STATUS`와 `CREATED_AT`을 기준으로 SQL 스케줄러에서 정리하는 방안을 검토하며 주기·보관시간은 미정이다.
 
-### 저장 순서·실패·중복 (2026-10-22 갱신)
+사용자 지정 학습 후보는 거래와 별도 테이블로 관리할 계획이다. 수정 요청에서 확정된 거래를 식별하며 구체 테이블과 저장 로직은 후속 구현한다. 모델 자동 추천을 사용자 정답으로 취급하지 않는다.
 
-1. PDF 업로드 처리에서 추출·분류한 거래와 출처를 DB에 최초 저장한다. 카테고리가 미분류여도 거래를 보존한다. 추출 실패 상태와 정상 거래는 구분한다.
-2. 저장된 거래를 기존 목록에 표시한다. 사용자는 미분류 카테고리를 지정하거나 건너뛴다. 결과 버튼 전의 카테고리 선택은 화면에서 유지한다. ML 실패 시 원본과 실패 상태를 보존한다.
-3. 결과 버튼을 누르면 지정한 거래의 카테고리와 관련 수정 상태만 DB에서 갱신한다. 전체 거래를 다시 INSERT하거나 날짜·금액을 함께 덮어쓰지 않는다. 사용자 지정 학습 후보 저장은 이 갱신과 함께 처리하고, 자동 추천 유지·미분류 건너뛰기는 후보에서 제외한다. 버튼에서 즉시 재학습하지 않는다.
-4. sourceFileId+sourceItemIndex로 같은 행의 재시도 중복을 막는다. 현재 일반 INSERT에도 출처 연결을 추가해야 한다.
-5. 불필요한 재집계 통합·중복 검사 최적화를 먼저 강제하지 않는다. 실제 지연을 측정하고 문제없으면 단순한 구현을 유지한다. 재시도에 의한 중복 저장 방지와 소유권 검사는 별개로 유지한다. 다른 파일의 거래를 금액·날짜가 같다는 이유만으로 삭제하지 않는다.
-6. 수정 요청은 분석 입력의 소유권을 검증한다. 동일 연도라도 분석 입력 ID로 구분하고 기존 결과를 무조건 덮어쓰지 않는다.
-
-7. 카테고리 갱신이 완료된 뒤 해당 분석의 계산 포함 거래를 DB에서 조회해 계산·집계하고 결과를 반환한다. 수정 실패 시 변경된 것처럼 결과로 이동하지 않는다. 이전 업로드를 회원·연도만으로 모두 합산하지 않는다.
-
-파일은 공개 업로드 경로에 두지 않는다. 비로그인 결과 조회 요구와 업로드 시 DB 저장을 연결할 임시 소유권·계정 귀속 방식은 아직 연결 설계가 필요하다. 이를 해결하려고 결과 버튼에 새 로그인 요구를 임의로 추가하지 않는다.
+금액은 원 단위 정수로 사용하되 현재 SQL의 `DECIMAL(15,2)` 형식은 유지한다. API 금액·ID는 JSON 숫자, 필드는 camelCase로 전달하고 NULL과 0은 구분한다. PDF 재시도·여러 파일 중복 방지 방식은 별도 확정하며 제거한 원본 순번 컬럼에 의존하지 않는다.
 
 ### 사용자 지정 데이터와 재학습
 
