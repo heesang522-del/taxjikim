@@ -1,4 +1,6 @@
-# API 초안
+# 프론트 API 연결 안내
+
+세금·ML 목표 요청·응답과 저장 시점은 [전체 명세](../../docs/creator-tax-dummy-format.md)를 따른다. 아래 건별 저장 등은 기존 연결 기록이다. 인증은 뒤의 쿠키 인증 통일 기록을 우선하며 오래된 Bearer·accessToken 인자를 현재 계약으로 간주하지 않는다.
 
 ## 알림 화면 연동 (2026-10-23)
 
@@ -37,7 +39,7 @@
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
 - 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
 
-모든 함수는 `src/api/*.js`의 async 함수이며, 현재는 `src/mocks/*.json`을 300~800ms 지연 후 반환한다. 화면은 `useApi(함수)` 훅으로만 호출한다.
+아래는 초기 mock 함수 목록이다. 인증·회원·PDF·채팅 등 실제 연결도 있으므로 전체를 mock으로 간주하지 않는다. 현재 호출은 기능 코드로 확인한다.
 
 | 함수 | 파일 | 사용 화면 | 응답 mock |
 | --- | --- | --- | --- |
@@ -72,7 +74,7 @@
 
 ## 로컬 상태 (API 아님)
 - 거래 내역: `store/useTransactionStore.js` (zustand). 세액은 이 내역과 `utils/tax.js`로 화면에서 계산한다.
-- 로그인 여부: `store/useAuthStore.js` (zustand persist). 실제 인증 없음.
+- 로그인 여부: 실제 쿠키 인증 결과를 메모리 상태에 반영한다. 새로고침 시 /api/v1/users/me로 확인한다.
 
 
 ## 로그인·로그아웃 실제 API 연결 (2026-10-14)

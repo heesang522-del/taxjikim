@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
+import joblib
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pdfminer.pdfdocument import PDFPasswordIncorrect
 from pdfminer.pdfparser import PDFSyntaxError
@@ -15,14 +16,33 @@ from . import pdf_parser
 
 
 logger = logging.getLogger("uvicorn.error")
+MODEL_DIR = Path(__file__).resolve().parents[1] / "models/expense_classifier"
+
+
+def load_expense_model() -> dict:
+    """학습·시험 비교에서 선택한 지출 모델과 전처리 파이프라인을 읽는다."""
+    try:
+        report = json.loads((MODEL_DIR / "test_report.json").read_text(encoding="utf-8"))
+        selected = report["selected_model"]
+        if selected not in ("logistic_regression", "linear_svc"):
+            raise ValueError("선택한 모델 이름이 올바르지 않습니다.")
+        # 학습 코드가 로컬에 생성한 파일만 읽는다. 서버에서 다시 학습하지 않는다.
+        return joblib.load(MODEL_DIR / f"{selected}_bundle.pkl")
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        raise RuntimeError(
+            "지출 모델을 먼저 준비해주세요: python scripts/split_expense_data.py → python scripts/train_expense.py"
+        ) from exc
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """서버 시작 시 선택된 지출 모델을 한 번 불러온다."""
     logger.info(
         "사용 중인 PDF 파서: %s",
         Path(pdf_parser.__file__).resolve(),
     )
+    app.state.expense_model = load_expense_model()
+    logger.info("지출 분류 모델: %s", app.state.expense_model["model_name"])
 
     yield
 
@@ -34,6 +54,7 @@ app = FastAPI(
 
 
 def validation_error(message: str) -> HTTPException:
+    """기존 PDF 입력 오류의 응답 형식을 만든다."""
     return HTTPException(
         status_code=400,
         detail={
@@ -52,6 +73,7 @@ def valid_coordinate(value: object) -> bool:
 
 
 def parse_ocr_pages(value: str | None) -> list[dict]:
+    """Spring에서 전달한 페이지별 OCR 텍스트를 읽는다."""
     if value is None:
         return []
 
@@ -122,8 +144,45 @@ def parse_ocr_pages(value: str | None) -> list[dict]:
     return pages
 
 
+def classify_expense_transactions(transactions: list[dict]) -> None:
+    """거래 설명만 모델에 전달하고 같은 지출 거래에 예측 카테고리를 채운다."""
+    targets = []
+    descriptions = []
+    for transaction in transactions:
+        if transaction.get("transactionType") != "EXPENSE":
+            continue
+        description = str(transaction.get("description") or "").strip()
+        if not description:
+            transaction["category"] = "UNCLASSIFIED"
+            continue
+        targets.append(transaction)
+        descriptions.append(description)
+
+    if not targets:
+        return
+    model = getattr(app.state, "expense_model", None)
+    if model is None:
+        raise HTTPException(status_code=503, detail={
+            "code": "EXPENSE_MODEL_UNAVAILABLE",
+            "message": "지출 분류 모델이 준비되지 않았습니다.",
+        })
+
+    try:
+        # 설명 배열과 원래 거래 참조를 같은 순서로 보관하므로 날짜·금액을 다시 조합하지 않는다.
+        predictions = model["pipeline"].predict(descriptions)
+        for transaction, category in zip(targets, predictions):
+            transaction["category"] = str(category)
+    except Exception as exc:
+        logger.exception("지출 카테고리 예측 실패")
+        raise HTTPException(status_code=503, detail={
+            "code": "EXPENSE_CLASSIFICATION_FAILED",
+            "message": "지출 카테고리를 분류하지 못했습니다.",
+        }) from exc
+
+
 @app.get("/health")
 def health() -> dict:
+    """서버 상태 확인 요청에 응답한다."""
     return {"status": "ok"}
 
 
@@ -132,6 +191,7 @@ def analyze_pdf(
     file: Annotated[UploadFile, File()],
     ocrPages: Annotated[str | None, Form()] = None,
 ) -> dict:
+    """기존 PDF 거래 추출 결과에 지출 카테고리를 추가해 반환한다."""
     pages = parse_ocr_pages(ocrPages)
     data = file.file.read()
 
@@ -153,6 +213,9 @@ def analyze_pdf(
             raise validation_error(
                 "OCR 페이지 번호가 PDF 페이지 수를 초과했습니다."
             )
+
+        # 수입·거래 구분·원문·금액은 유지하고 지출 거래의 category만 추가한다.
+        classify_expense_transactions(result["transactions"])
 
         # 처리 건수를 먼저 출력한다.
         logger.info(

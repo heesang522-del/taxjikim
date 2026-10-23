@@ -5,6 +5,8 @@ import { Button, Card, DataTable, Icon, Pill } from '../common/index';
 import { won } from '../../utils/format';
 
 import { useTax, parseTaxAmount, normalizeTaxKind } from '../../store/useTaxStore';
+import { getTaxInputSummary, getTransactionCashAmount } from '../../utils/taxInputSummary';
+import { getTransactionCategoryLabel } from '../../data/transactionCategories';
 
 function formatAmount(value) {
   const amount = parseTaxAmount(value);
@@ -20,30 +22,6 @@ function formatDate(row) {
   return '미기재';
 }
 
-function canSelect(row) {
-  return row.excluded !== true && parseTaxAmount(row.amt) !== null;
-}
-
-function isSelected(row) {
-  return canSelect(row) && row.selected === true;
-}
-
-function getStatus(row) {
-  if (!canSelect(row)) {
-    return '금액 미인식';
-  }
-
-  if (row.selected !== true) {
-    return '선택 해제';
-  }
-
-  if (normalizeTaxKind(row.kind) === 'unknown') {
-    return '별도 합계 반영';
-  }
-
-  return '계산 포함';
-}
-
 function sortRows(rows) {
   return [...rows].sort((a, b) => {
     const dateA = a.date ?? a.month ?? a.year ?? '';
@@ -54,35 +32,15 @@ function sortRows(rows) {
   });
 }
 
-export default function EntryTable() {
-  const { allRows, inputMethod, removeRow, setRowSelected, setAllRowsSelected, selectedTaxTotals } = useTax();
+export function EntryTable() {
+  const { allRows, rows, removeRow } = useTax();
+  const selectedTaxTotals = getTaxInputSummary(rows);
 
-  const fileMode = inputMethod === 'file';
+  const fileMode = allRows.some((row) => row.autoImported);
 
   const sortedRows = sortRows(allRows);
 
-  const selectedCount = allRows.filter(isSelected).length;
-
-  const availableCount = allRows.filter(canSelect).length;
-
   const columns = [
-    {
-      key: 'selected',
-      header: '반영',
-
-      render: (row) => (
-        <input
-          type="checkbox"
-          checked={isSelected(row)}
-          disabled={!canSelect(row)}
-          aria-label={`${row.memo || '거래'} 반영`}
-          onChange={(event) => {
-            setRowSelected(row.id, event.target.checked);
-          }}
-        />
-      ),
-    },
-
     {
       key: 'kind',
       header: '수입·지출 구분',
@@ -113,11 +71,7 @@ export default function EntryTable() {
       key: 'cat',
       header: '세부 카테고리',
 
-      render: (row) => {
-        const category = typeof row.cat === 'string' ? row.cat.trim() : '';
-
-        return category || '미기재';
-      },
+      render: (row) => getTransactionCategoryLabel(row.cat),
     },
 
     {
@@ -129,17 +83,11 @@ export default function EntryTable() {
 
     {
       key: 'amt',
-      header: '금액',
+      header: '실제 입출금액',
       align: 'right',
       num: true,
 
-      render: (row) => formatAmount(row.amt),
-    },
-
-    {
-      key: 'status',
-      header: '반영 상태',
-      render: getStatus,
+      render: (row) => formatAmount(getTransactionCashAmount(row)),
     },
 
     {
@@ -155,42 +103,11 @@ export default function EntryTable() {
   ];
 
   return (
-    <Card
-      title={fileMode ? 'PDF 자동 파싱 거래 내역' : '직접 입력한 거래 내역'}
-      aside={
-        <span className="muted small">
-          {selectedCount}/{allRows.length}건 반영
-        </span>
-      }
-    >
+    <Card title="입력한 거래 내역" aside={<span className="muted small">총 {allRows.length}건</span>}>
       {fileMode && (
         <p className="small muted" style={{ marginBottom: 12 }}>
-          수입·지출은 원본의 구분을 사용합니다. 카테고리가 없으면 미기재로 표시합니다.
+          직접 입력한 거래와 PDF에서 불러온 거래를 함께 표시합니다. 카테고리가 없으면 미분류로 표시합니다.
         </p>
-      )}
-
-      {allRows.length > 0 && (
-        <div className="row" style={{ marginBottom: 12 }}>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setAllRowsSelected(true);
-            }}
-          >
-            전체 선택
-          </Button>
-
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              setAllRowsSelected(false);
-            }}
-          >
-            전체 해제
-          </Button>
-        </div>
       )}
 
       {allRows.length === 0 ? (
@@ -201,7 +118,7 @@ export default function EntryTable() {
 
       {allRows.length > 0 && (
         <p className="small muted" style={{ marginTop: 12 }}>
-          금액이 있는 거래 {availableCount}건 중 {selectedCount}건 반영
+          목록의 거래는 자동으로 계산에 포함됩니다. 금액 미인식 거래는 계산에서 제외됩니다.
         </p>
       )}
 

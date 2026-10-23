@@ -1,7 +1,6 @@
 'use no memo';
 
 import { create } from 'zustand';
-import { YEAR } from '../data/taxConstants';
 
 export const EMPTY_SIM = {
   extraExp: 0,
@@ -20,9 +19,7 @@ export function parseTaxAmount(value) {
 
   const cleaned = String(value).replace(/,/g, '').replace(/원/g, '').replace(/\s/g, '');
 
-  if (!cleaned) {
-    return null;
-  }
+  if (!cleaned) return null;
 
   const amount = Number(cleaned);
 
@@ -82,10 +79,6 @@ export function getPdfItemPeriod(item, year) {
   };
 }
 
-/**
- * 원본에 명시된 연도를 확인한다.
- * 전체 목록을 제한하는 용도가 아니라 자료 구분에 사용한다.
- */
 export function getRowTaxYear(row) {
   const value = row?.date || row?.month || row?.year;
 
@@ -100,27 +93,22 @@ export function getRowTaxYear(row) {
   return year >= 1000 && year <= 9999 ? year : null;
 }
 
-/**
- * 입력 방식에 해당하는 모든 연도 거래를 표시한다.
- */
-export const getAllTaxRows = (state) => (state.inputMethod === 'file' ? state.fileRows : state.manualRows);
+// 입력 경로와 관계없이 직접 입력과 PDF 거래를 한 목록으로 다룬다.
+export const getAllTaxRows = (state) => [
+  ...state.manualRows.map((row) => ({ ...row, selected: true })),
+  // PDF의 검증용 합계와 상세 거래를 함께 표시·합산하지 않는다.
+  ...state.fileRows.filter((row) => row.excluded !== true && (row.selected !== false || !isPdfRowReady(row))),
+];
 
-/**
- * 연도·날짜 유무와 관계없이 선택한 유효 금액 거래를 반영한다.
- */
 export const getSelectedTaxRows = (state) =>
-  getAllTaxRows(state).filter(
-    (row) => row.selected !== false && row.excluded !== true && parseTaxAmount(row.amt) !== null
-  );
+  getAllTaxRows(state).filter((row) => row.excluded !== true && parseTaxAmount(row.amt) !== null);
 
 export const getSelectedTaxTotals = (state) =>
   getSelectedTaxRows(state).reduce(
     (totals, row) => {
       const amount = parseTaxAmount(row.amt);
 
-      if (amount === null) {
-        return totals;
-      }
+      if (amount === null) return totals;
 
       const kind = normalizeTaxKind(row.kind);
 
@@ -129,13 +117,11 @@ export const getSelectedTaxTotals = (state) =>
       } else if (kind === 'out') {
         totals.expense += amount;
       } else {
-        // 미분류 금액은 수입이나 지출에 임의 배정하지 않는다.
         totals.unknown += amount;
         totals.unknownCount += 1;
       }
 
       totals.count += 1;
-
       return totals;
     },
     {
@@ -301,45 +287,31 @@ export function getPdfCalculationIssue(state) {
 }
 
 export const useTaxStore = create((set, get) => ({
-  // 계산·서버 저장 등 기존 연도별 기능과의 호환을 유지한다.
-  // 이 값으로 전체 거래 목록이나 합계를 제한하지 않는다.
-  taxYear: YEAR,
-
   inputMethod: 'manual',
 
   manualRows: [],
   fileRows: [],
   uploadedFiles: [],
 
+  // 기존 SummaryRail.jsx 호환용
   evidenceDocuments: [],
+
   pendingRows: [],
 
   profile: {
     type: null,
     auto33: false,
+    taxYear: new Date().getFullYear(),
+    businessRegistered: null,
+    age: '',
+    dependentCount: 0,
+    donationAmount: 0,
+    startupReliefApplied: null,
+    businessRegion: '',
   },
 
   sim: { ...EMPTY_SIM },
   calculated: false,
-
-  setTaxYear: (taxYear) => {
-    if (!Number.isInteger(taxYear) || taxYear < 1000 || taxYear > 9999) {
-      return;
-    }
-
-    set((state) => {
-      if (state.taxYear === taxYear) {
-        return state;
-      }
-
-      // 연도 변경은 원본 데이터나 거래 선택 상태를 삭제하지 않는다.
-      return {
-        taxYear,
-        calculated: false,
-        sim: { ...EMPTY_SIM },
-      };
-    });
-  },
 
   addRow: (row) =>
     set((state) => ({
@@ -381,7 +353,8 @@ export const useTaxStore = create((set, get) => ({
       };
     }),
 
-  // 기존 컴포넌트 호환용 메서드를 유지한다.
+  // 기존 컴포넌트 호환용.
+  // 사용자 직접 검토 기능은 수행하지 않는다.
   setPdfDocumentReviewed: () => {},
 
   removeRow: (id) =>
@@ -406,22 +379,14 @@ export const useTaxStore = create((set, get) => ({
     })),
 
   setAllRowsSelected: (selected) =>
-    set((state) => {
-      if (state.inputMethod === 'file') {
-        return {
-          fileRows: selectPreferredRows(state.fileRows, selected),
-          calculated: false,
-        };
-      }
-
-      return {
-        manualRows: state.manualRows.map((row) => ({
-          ...row,
-          selected: Boolean(selected),
-        })),
-        calculated: false,
-      };
-    }),
+    set((state) => ({
+      fileRows: selectPreferredRows(state.fileRows, selected),
+      manualRows: state.manualRows.map((row) => ({
+        ...row,
+        selected: Boolean(selected),
+      })),
+      calculated: false,
+    })),
 
   setFileSelected: (key, selected) =>
     set((state) => ({
@@ -444,9 +409,7 @@ export const useTaxStore = create((set, get) => ({
   resolvePendingRow: (id, patch) => {
     const row = get().pendingRows.find((item) => item.id === id);
 
-    if (!row) {
-      return;
-    }
+    if (!row) return;
 
     const merged = {
       ...row,

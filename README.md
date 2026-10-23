@@ -12,7 +12,7 @@ ml/     # Python + FastAPI 작업 공간
 docs/   # 공통 규칙과 API 문서
 ```
 
-현재 ML 서버는 상태 확인 API만 제공하며 Spring Boot와 연결되지 않았습니다. 프론트에는 mock 화면과 실제 API 호출이 함께 있습니다.
+현재 작업 폴더의 ML API는 상태 확인을 제공하며 실험용 지출 학습 코드가 있습니다. PDF용 Spring·FastAPI 연결은 feature/TJK-5 작업과 대조하며 분류 모델 추론 연결은 아직입니다. 프론트에는 mock 화면과 실제 API 호출이 함께 있습니다.
 
 ## 개발 환경
 
@@ -68,7 +68,7 @@ cd back
 ## ML 개발 환경 설정 (Windows PowerShell)
 
 현재 로컬에서 확인한 Python 버전은 3.14.7입니다. `ml/requirements.txt`에는 설치한 라이브러리 버전을 기록합니다.
-현재 ML 서버는 실행 상태 확인 API만 제공하며, 모델 학습·예측과 Spring Boot 연결은 아직 구현하지 않았습니다.
+실험용 학습 코드는 있으며 현재 작업 폴더의 예측 API 연결은 아직입니다. [ML 작업 상태](ml/docs/home-handoff.md)를 확인합니다.
 
 ### 처음 한 번 설정
 
@@ -153,6 +153,10 @@ git ls-files -ci --exclude-standard
 이번 제외 설정은 과거 커밋의 비밀값을 지우지 않습니다. 이미 공유한 비밀번호나 키가 실제 사용 중이라면 폐기·재발급하고 이전 기록 정리는 별도로 진행해야 합니다.
 
 ## 협업 문서
+
+- [문서 읽는 순서](docs/README.md)
+- [전체 연결 명세](docs/creator-tax-dummy-format.md)
+- [예상세액 계산 기준](docs/creator-tax-notes.md)
 
 - [코드 컨벤션](docs/code-convention.md)
 - [Git 규칙](docs/git-rule.md)

@@ -41,6 +41,11 @@ public class AuthApiController {
     @DeleteMapping("/sessions/current")
     public ApiResponse<Void> logout(HttpServletRequest request, HttpServletResponse response) {
         authService.logout(request, response);
+
+        // 로그아웃시 행해져야하는 작업
+        // 1) 세션정리
+        // 희상님이 작업
+
         return ApiResponse.ok(null);
     }
 
