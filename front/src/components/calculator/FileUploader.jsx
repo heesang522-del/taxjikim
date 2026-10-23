@@ -297,7 +297,7 @@ export default function FileUploader({ onUploadSuccess, compact = false }) {
           onChange={(event) => {
             const files = Array.from(event.target.files ?? []);
             event.target.value = '';
-            upload(files);
+            handleUpload(files);
           }}
         />
         {loading && (
