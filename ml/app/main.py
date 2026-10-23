@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -42,6 +43,14 @@ def validation_error(message: str) -> HTTPException:
     )
 
 
+def valid_coordinate(value: object) -> bool:
+    return (
+        type(value) in (int, float)
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
 def parse_ocr_pages(value: str | None) -> list[dict]:
     if value is None:
         return []
@@ -49,10 +58,10 @@ def parse_ocr_pages(value: str | None) -> list[dict]:
     try:
         pages = json.loads(value)
 
-    except (json.JSONDecodeError, TypeError) as exc:
+    except (json.JSONDecodeError, TypeError) as exception:
         raise validation_error(
             "ocrPages는 JSON 배열이어야 합니다."
-        ) from exc
+        ) from exception
 
     if not isinstance(pages, list):
         raise validation_error(
@@ -77,8 +86,36 @@ def parse_ocr_pages(value: str | None) -> list[dict]:
             or type(page.get("ocrUsed")) is not bool
         ):
             raise validation_error(
-                "OCR 페이지 번호와 텍스트 형식을 확인해주세요."
+                "OCR 페이지 번호와 텍스트를 확인해주세요."
             )
+
+        words = page.get("words")
+
+        if words is None:
+            page["words"] = []
+            words = []
+
+        if not isinstance(words, list):
+            raise validation_error(
+                "OCR 단어 목록은 배열이어야 합니다."
+            )
+
+        for word in words:
+            if not isinstance(word, dict):
+                raise validation_error(
+                    "OCR 단어 형식이 올바르지 않습니다."
+                )
+
+            if (
+                not isinstance(word.get("text"), str)
+                or not valid_coordinate(word.get("x0"))
+                or not valid_coordinate(word.get("x1"))
+                or not valid_coordinate(word.get("top"))
+                or word["x1"] < word["x0"]
+            ):
+                raise validation_error(
+                    "OCR 단어와 좌표를 확인해주세요."
+                )
 
         seen.add(number)
 
@@ -96,7 +133,6 @@ def analyze_pdf(
     ocrPages: Annotated[str | None, Form()] = None,
 ) -> dict:
     pages = parse_ocr_pages(ocrPages)
-
     data = file.file.read()
 
     if not data.startswith(b"%PDF-"):
@@ -118,6 +154,7 @@ def analyze_pdf(
                 "OCR 페이지 번호가 PDF 페이지 수를 초과했습니다."
             )
 
+        # 처리 건수를 먼저 출력한다.
         logger.info(
             "PDF 분석 결과: 추출 %s건, 성공 %s건, 실패 %s건",
             result["extractedCount"],
@@ -125,15 +162,16 @@ def analyze_pdf(
             result["failedCount"],
         )
 
-        # 개발 중 거래 설명·금액·원문·페이지별 결과를 확인한다.
-        logger.info(
-            "PDF 파싱 상세 결과:\n%s",
-            json.dumps(
-                result,
-                ensure_ascii=False,
-                indent=2,
-            ),
-        )
+        # 거래별 금액·날짜·설명·원문을 포함한 분석 결과를 출력한다.
+        if logger.isEnabledFor(logging.INFO):
+            logger.info(
+                "PDF 파싱 상세 결과:\n%s",
+                json.dumps(
+                    result,
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+            )
 
         return {
             "fileName": file.filename,
@@ -145,15 +183,15 @@ def analyze_pdf(
         PDFSyntaxError,
         PDFPasswordIncorrect,
         PdfminerException,
-    ) as exc:
+    ) as exception:
         raise validation_error(
             "손상되었거나 분석할 수 없는 PDF 파일입니다."
-        ) from exc
+        ) from exception
 
     except HTTPException:
         raise
 
-    except Exception as exc:
+    except Exception as exception:
         logger.exception(
             "PDF 분석 중 오류가 발생했습니다."
         )
@@ -164,4 +202,4 @@ def analyze_pdf(
                 "code": "PDF_ANALYSIS_FAILED",
                 "message": "PDF 분석에 실패했습니다.",
             },
-        ) from exc
+        ) from exception

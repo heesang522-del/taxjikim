@@ -113,17 +113,10 @@ public class PostApiController {
             }
     )
     public ApiResponse<Void> createPost(
-            @RequestParam("title")
-            String title,
-
-            @RequestParam("content")
-            String content,
-
-            @RequestParam(
-                    value = "boardType",
-                    defaultValue = "INFO"
-            )
-            String boardType,
+            @RequestParam("title") String title,
+            @RequestParam("content") String content,
+            @RequestParam(value = "boardType", defaultValue = "INFO"
+            ) String boardType,
 
             @RequestParam(
                     value = "isPublic",

@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.taxupload.mapper.TaxMapper">
+
+    <resultMap id="inputMap"
+               type="com.kh.back.taxupload.dto.TaxTransactionDto$TaxInputRequest">
+
+        <id property="taxInputId" column="TAX_INPUT_ID"/>
+
+        <result property="userId" column="USER_ID"/>
+        <result property="taxYear" column="TAX_YEAR"/>
+        <result property="businessRegistered" column="BUSINESS_REGISTERED"/>
+        <result property="age" column="AGE"/>
+        <result property="startupReliefApplied" column="STARTUP_RELIEF_APPLIED"/>
+        <result property="businessRegion" column="BUSINESS_REGION"/>
+        <result property="dependentCount" column="DEPENDENT_COUNT"/>
+        <result property="donationAmount" column="DONATION_AMOUNT"/>
+        <result property="saveStatus" column="SAVE_STATUS"/>
+    </resultMap>
+
+    <resultMap id="transactionMap"
+               type="com.kh.back.taxupload.dto.TaxTransactionDto">
+
+        <id property="transactionId" column="TRANSACTION_ID"/>
+
+        <result property="taxInputId" column="TAX_INPUT_ID"/>
+        <result property="transactionType" column="TRANSACTION_TYPE"/>
+        <result property="transactionDate" column="TRANSACTION_DATE"/>
+        <result property="description" column="DESCRIPTION"/>
+        <result property="category" column="CATEGORY"/>
+        <result property="preTaxIncome" column="PRE_TAX_INCOME"/>
+        <result property="deductedTaxRate" column="DEDUCTED_TAX_RATE"/>
+        <result property="amount" column="AMOUNT"/>
+    </resultMap>
+
+    <resultMap id="resultMap"
+               type="com.kh.back.taxupload.dto.TaxTransactionDto$TaxResultRow">
+
+        <id property="taxInputId" column="TAX_INPUT_ID"/>
+
+        <result property="resultDetail" column="RESULT_DETAIL"/>
+        <result property="calculatedAt" column="CALCULATED_AT"/>
+    </resultMap>
+
+    <insert id="insertInput"
+            useGeneratedKeys="true"
+            keyProperty="taxInputId"
+            keyColumn="TAX_INPUT_ID">
+
+        INSERT INTO tax_inputs (
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        AGE,
+        STARTUP_RELIEF_APPLIED,
+        BUSINESS_REGION,
+        DEPENDENT_COUNT,
+        DONATION_AMOUNT,
+        SAVE_STATUS
+        )
+        VALUES (
+        #{userId},
+        #{taxYear},
+        #{businessRegistered},
+        #{age},
+        #{startupReliefApplied},
+        #{businessRegion},
+        #{dependentCount},
+        #{donationAmount},
+        #{saveStatus}
+        )
+    </insert>
+
+    <select id="findInput" resultMap="inputMap">
+        SELECT
+        TAX_INPUT_ID,
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        AGE,
+        STARTUP_RELIEF_APPLIED,
+        BUSINESS_REGION,
+        DEPENDENT_COUNT,
+        DONATION_AMOUNT,
+        SAVE_STATUS
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <!-- 거래 변경과 계산은 같은 부모 분석을 먼저 잠근다. -->
+    <select id="lockInput" resultMap="inputMap">
+        SELECT
+        TAX_INPUT_ID,
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        AGE,
+        STARTUP_RELIEF_APPLIED,
+        BUSINESS_REGION,
+        DEPENDENT_COUNT,
+        DONATION_AMOUNT,
+        SAVE_STATUS
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        FOR UPDATE
+    </select>
+
+    <select id="findSavedInputs" resultMap="inputMap">
+        SELECT
+        TAX_INPUT_ID,
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        AGE,
+        STARTUP_RELIEF_APPLIED,
+        BUSINESS_REGION,
+        DEPENDENT_COUNT,
+        DONATION_AMOUNT,
+        SAVE_STATUS
+        FROM tax_inputs
+        WHERE USER_ID = #{userId}
+        AND SAVE_STATUS = 'SAVED'
+
+        <if test="taxYear != null">
+            AND TAX_YEAR = #{taxYear}
+        </if>
+
+        ORDER BY UPDATED_AT DESC, TAX_INPUT_ID DESC
+    </select>
+
+    <update id="updateInput">
+        UPDATE tax_inputs
+        SET USER_ID = #{userId},
+        TAX_YEAR = #{taxYear},
+        BUSINESS_REGISTERED = #{businessRegistered},
+        AGE = #{age},
+        STARTUP_RELIEF_APPLIED = #{startupReliefApplied},
+        BUSINESS_REGION = #{businessRegion},
+        DEPENDENT_COUNT = #{dependentCount},
+        DONATION_AMOUNT = #{donationAmount},
+        SAVE_STATUS = #{saveStatus},
+        UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </update>
+
+    <delete id="deleteInput">
+        DELETE FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </delete>
+
+    <update id="touchInput">
+        UPDATE tax_inputs
+        SET UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </update>
+
+    <insert id="insertTransaction"
+            useGeneratedKeys="true"
+            keyProperty="transactionId"
+            keyColumn="TRANSACTION_ID">
+
+        INSERT INTO tax_transactions (
+        TAX_INPUT_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        PRE_TAX_INCOME,
+        DEDUCTED_TAX_RATE,
+        AMOUNT
+        )
+        VALUES (
+        #{taxInputId},
+        #{transactionType},
+        #{transactionDate},
+        #{description},
+        #{category},
+        #{preTaxIncome},
+        #{deductedTaxRate},
+        #{amount}
+        )
+    </insert>
+
+    <select id="findTransactions" resultMap="transactionMap">
+        SELECT
+        TRANSACTION_ID,
+        TAX_INPUT_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        PRE_TAX_INCOME,
+        DEDUCTED_TAX_RATE,
+        AMOUNT
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        ORDER BY TRANSACTION_ID
+    </select>
+
+    <select id="findTransaction" resultMap="transactionMap">
+        SELECT
+        TRANSACTION_ID,
+        TAX_INPUT_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        PRE_TAX_INCOME,
+        DEDUCTED_TAX_RATE,
+        AMOUNT
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        AND TRANSACTION_ID = #{transactionId}
+    </select>
+
+    <!-- 전체 목록 교체 저장에 사용한다. -->
+    <delete id="deleteTransactions">
+        DELETE FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </delete>
+
+    <update id="updateCategory">
+        UPDATE tax_transactions
+        SET CATEGORY = #{category}
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        AND TRANSACTION_ID = #{transactionId}
+    </update>
+
+    <delete id="deleteTransaction">
+        DELETE FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        AND TRANSACTION_ID = #{transactionId}
+    </delete>
+
+    <select id="findResult" resultMap="resultMap">
+        SELECT
+        TAX_INPUT_ID,
+        RESULT_DETAIL,
+        CALCULATED_AT
+        FROM tax_results
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <delete id="deleteResult">
+        DELETE FROM tax_results
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </delete>
+
+    <insert id="insertProcessLog">
+        INSERT INTO tax_process_logs (
+        TAX_INPUT_ID,
+        USER_ID,
+        PROCESS_TYPE,
+        STATUS,
+        FAIL_REASON
+        )
+        VALUES (
+        #{taxInputId},
+        #{userId},
+        #{processType},
+        #{status},
+        #{failReason}
+        )
+    </insert>
+
+</mapper>
