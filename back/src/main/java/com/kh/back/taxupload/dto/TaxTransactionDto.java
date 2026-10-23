@@ -8,6 +8,9 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.Map;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -17,40 +20,100 @@ import java.time.LocalDate;
 public class TaxTransactionDto {
 
     private Long transactionId;
-
     private Long taxInputId;
 
-    private Long userId;
-
-    private LocalDate transactionDate;
-
     private String transactionType;
-
+    private LocalDate transactionDate;
     private String description;
-
     private String category;
 
+    private BigDecimal preTaxIncome;
+    private BigDecimal deductedTaxRate;
     private BigDecimal amount;
 
-    private BigDecimal preTaxIncome;
-
+    /*
+     * PDF 분석 응답에만 사용하는 필드다.
+     * tax_transactions에는 저장하지 않는다.
+     */
     private BigDecimal taxDeducted;
+    private BigDecimal actualAmount;
 
-    private BigDecimal actualAmount;  // 실제금액
+    private Integer pageNumber;
+    private String rawText;
 
-    private Integer taxYear;   // 귀속연도
+    private Boolean parseSuccess;
+    private Boolean excluded;
+    private String failureReason;
 
-    private Boolean edited;    // 수정됬는지 여부
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TaxInputRequest {
 
-    private String status;     // 상태
+        // 요청으로 전달돼도 식별자와 소유자는 서버에서 결정한다.
+        private Long taxInputId;
+        private Long userId;
 
-    private Integer pageNumber;  // 페이지 숫자
+        private Integer taxYear;
 
-    private String rawText;     // 원본텍스트
+        private Boolean businessRegistered;
+        private Integer age;
+        private Boolean startupReliefApplied;
+        private String businessRegion;
 
-    private Boolean parseSuccess; // 파싱성공 여부
+        private Integer dependentCount;
+        private BigDecimal donationAmount;
+        private String saveStatus;
+    }
 
-    private Boolean excluded;  // 제외
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class CategoryRequest {
 
-    private String failureReason; // 실패 이유
+        private String category;
+    }
+
+    /*
+     * HTTP 요청 본문으로 받지 않는다.
+     * Controller가 인증 정보와 서버 세션으로 생성한다.
+     */
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class AccessContext {
+
+        private Long userId;  // 사용자 id
+        private boolean admin;  // 관리자
+        private Set<Long> guestInputIds;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TaxResultRow {
+
+        private Long taxInputId;
+        private String resultDetail;
+        private LocalDateTime calculatedAt;
+    }
+
+    @Getter
+    @Setter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TaxResultResponse {
+
+        private Long taxInputId;
+        private Map<String, Object> resultDetail;
+        private String calculatedAt;
+    }
 }

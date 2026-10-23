@@ -1,5 +1,6 @@
 // 세율·공제 한도는 예시값입니다. 실제 사용 전 국세청 자료로 확인하세요.
-export const YEAR = 2025;
+// 기준 연도는 페이지를 열 때 현재 날짜에서 가져온다.
+export const YEAR = new Date().getFullYear();
 export const MONTH_NOW = 9; // 1~9월 입력, 10~12월 예측
 export const FORECAST_WINDOW = 6; // 예측에 쓰는 최근 개월 수
 export const BASIC_DEDUCTION = 1_500_000;

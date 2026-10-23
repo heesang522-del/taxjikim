@@ -79,6 +79,20 @@ export function getPdfItemPeriod(item, year) {
   };
 }
 
+export function getRowTaxYear(row) {
+  const value = row?.date || row?.month || row?.year;
+
+  const match = String(value ?? '').match(/^(\d{4})(?:[-./]|$)/);
+
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+
+  return year >= 1000 && year <= 9999 ? year : null;
+}
+
 // 입력 경로와 관계없이 직접 입력과 PDF 거래를 한 목록으로 다룬다.
 export const getAllTaxRows = (state) => [
   ...state.manualRows.map((row) => ({ ...row, selected: true })),
@@ -142,9 +156,14 @@ function getLevel(row) {
   if (row.date) return 'detail';
   if (row.month) return 'month';
   if (row.year) return 'year';
+
   return 'unknown';
 }
 
+/**
+ * 모든 연도를 선택하되 같은 파일·연도의 상세와 합계가
+ * 중복 반영되지 않도록 기존 우선순위를 적용한다.
+ */
 function selectPreferredRows(rows, selected, fileKey = null) {
   const keys = new Set(
     rows.filter((row) => fileKey === null || row.sourceFileKey === fileKey).map((row) => row.sourceFileKey)
@@ -153,38 +172,44 @@ function selectPreferredRows(rows, selected, fileKey = null) {
   let result = rows;
 
   for (const key of keys) {
-    const available = result.filter((row) => row.sourceFileKey === key && !row.excluded && isPdfRowReady(row));
+    const years = new Set(result.filter((row) => row.sourceFileKey === key).map(getRowTaxYear));
 
-    const nonTotals = available.filter((row) => row.valueKind !== 'VALIDATION_TOTAL');
+    for (const year of years) {
+      const available = result.filter(
+        (row) => row.sourceFileKey === key && getRowTaxYear(row) === year && !row.excluded && isPdfRowReady(row)
+      );
 
-    const detail = nonTotals.filter((row) => getLevel(row) === 'detail');
+      const nonTotals = available.filter((row) => row.valueKind !== 'VALIDATION_TOTAL');
 
-    const monthly = nonTotals.filter((row) => getLevel(row) === 'month');
+      const detail = nonTotals.filter((row) => getLevel(row) === 'detail');
 
-    const yearly = nonTotals.filter((row) => getLevel(row) === 'year');
+      const monthly = nonTotals.filter((row) => getLevel(row) === 'month');
 
-    const undated = nonTotals.filter((row) => getLevel(row) === 'unknown');
+      const yearly = nonTotals.filter((row) => getLevel(row) === 'year');
 
-    const preferred = detail.length
-      ? [...detail, ...undated]
-      : monthly.length
-        ? [...monthly, ...undated]
-        : yearly.length
-          ? [...yearly, ...undated]
-          : nonTotals.length
-            ? nonTotals
-            : available.slice(0, 1);
+      const undated = nonTotals.filter((row) => getLevel(row) === 'unknown');
 
-    const ids = new Set(preferred.map((row) => row.id));
+      const preferred = detail.length
+        ? [...detail, ...undated]
+        : monthly.length
+          ? [...monthly, ...undated]
+          : yearly.length
+            ? [...yearly, ...undated]
+            : nonTotals.length
+              ? nonTotals
+              : available.slice(0, 1);
 
-    result = result.map((row) =>
-      row.sourceFileKey === key
-        ? {
-            ...row,
-            selected: Boolean(selected) && ids.has(row.id),
-          }
-        : row
-    );
+      const ids = new Set(preferred.map((row) => row.id));
+
+      result = result.map((row) =>
+        row.sourceFileKey === key && getRowTaxYear(row) === year
+          ? {
+              ...row,
+              selected: Boolean(selected) && ids.has(row.id),
+            }
+          : row
+      );
+    }
   }
 
   return result;
@@ -193,7 +218,9 @@ function selectPreferredRows(rows, selected, fileKey = null) {
 function changeFileRowSelection(rows, id, selected) {
   const target = rows.find((row) => row.id === id);
 
-  if (!target) return rows;
+  if (!target) {
+    return rows;
+  }
 
   const enabled = Boolean(selected) && !target.excluded && isPdfRowReady(target);
 
@@ -205,7 +232,8 @@ function changeFileRowSelection(rows, id, selected) {
       };
     }
 
-    if (!enabled || row.sourceFileKey !== target.sourceFileKey) {
+    // 중복 합산 검사는 같은 파일·연도의 자료끼리 수행한다.
+    if (!enabled || row.sourceFileKey !== target.sourceFileKey || getRowTaxYear(row) !== getRowTaxYear(target)) {
       return row;
     }
 
@@ -234,16 +262,24 @@ export function getPdfCalculationIssue(state) {
   const rows = getSelectedTaxRows(state);
 
   for (const file of state.uploadedFiles ?? []) {
-    const selected = rows.filter((row) => row.sourceFileKey === file.key);
+    const fileRows = rows.filter((row) => row.sourceFileKey === file.key);
 
-    if (selected.length > 1 && selected.some((row) => row.valueKind === 'VALIDATION_TOTAL')) {
-      return `${file.name}: 전체 합계와 개별 거래가 중복 선택되었습니다.`;
-    }
+    const years = new Set(fileRows.map(getRowTaxYear));
 
-    const levels = new Set(selected.map(getLevel).filter((level) => level !== 'unknown'));
+    for (const year of years) {
+      const selected = fileRows.filter((row) => getRowTaxYear(row) === year);
 
-    if (levels.size > 1) {
-      return `${file.name}: 상세·월별·연간 거래를 동시에 합산할 수 없습니다.`;
+      const label = year === null ? '연도 미확인' : `${year}년`;
+
+      if (selected.length > 1 && selected.some((row) => row.valueKind === 'VALIDATION_TOTAL')) {
+        return `${file.name} (${label}): 전체 합계와 개별 거래가 중복 선택되었습니다.`;
+      }
+
+      const levels = new Set(selected.map(getLevel).filter((level) => level !== 'unknown'));
+
+      if (levels.size > 1) {
+        return `${file.name} (${label}): 상세·월별·연간 거래를 동시에 합산할 수 없습니다.`;
+      }
     }
   }
 
