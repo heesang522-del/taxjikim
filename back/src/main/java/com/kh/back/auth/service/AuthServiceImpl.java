@@ -6,6 +6,7 @@ import com.kh.back.auth.security.CustomAuthenticationProvider;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.security.LoginSessionRepository;
 import com.kh.back.auth.security.LoginSessionRepository.RotationResult;
+import com.kh.back.chat.handler.ChatWebSocketHandler;
 import com.kh.back.common.security.JwtTokenProvider;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
@@ -40,6 +41,7 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final LoginSessionRepository loginSessionRepository;
     private final AuthCookieService authCookieService;
+    private final ChatWebSocketHandler chatWebSocketHandler;
 
     /**
      * 회원 인증 후 현재 로그인을 교체하고, 선택한 로그인 방식에 맞춰 쿠키를 설정합니다.
@@ -219,25 +221,40 @@ public class AuthServiceImpl implements AuthService {
     @Override
     public void logout(HttpServletRequest request, HttpServletResponse response) {
         String authorization = request.getHeader("Authorization");
+        // 로그아웃시킨 유저를 특정해둬야 아래에서 그 유저의 채팅 연결을 끊을 수 있다.
+        Long loggedOutUserId = null;
         // 명시적으로 전달된 Bearer 세션을 우선 종료하여 다른 쿠키 세션을 종료하지 않는다.
         if (StringUtils.hasText(authorization) && authorization.startsWith("Bearer ")) {
-            endSessionForToken(authorization.substring(7), "access");
+            loggedOutUserId = endSessionForToken(authorization.substring(7), "access");
+
         } else if (request.getCookies() != null) {
             for (Cookie cookie : request.getCookies()) {
                 if ("refreshToken".equals(cookie.getName()) || "accessToken".equals(cookie.getName())) {
                     String token = cookie.getValue();
-                    endSessionForToken(token, "accessToken".equals(cookie.getName()) ? "access" : "refresh");
+                    Long userId = endSessionForToken(token, "accessToken".equals(cookie.getName()) ? "access" : "refresh");
+                    if (userId != null) {
+                        loggedOutUserId = userId;
+                    }
                 }
             }
         }
         authCookieService.clearAuthenticationCookies(response);
         SecurityContextHolder.clearContext();
+
+        // 채팅 WebSocket은 핸드셰이크 때 한 번만 인증하므로, 로그아웃 이후에도 재검증 없이 계속 열려 있다.
+        // 여기서 그 유저가 열어둔 채팅 연결을 함께 끊어준다.
+        if (loggedOutUserId != null) {
+            chatWebSocketHandler.closeSessionsForUser(loggedOutUserId);
+        }
     }
 
-    private void endSessionForToken(String token, String type) {
+    private Long endSessionForToken(String token, String type) {
         if (jwtTokenProvider.validateToken(token) && jwtTokenProvider.isTokenType(token, type)) {
-            loginSessionRepository.endSessionIfCurrent(jwtTokenProvider.getUserId(token), jwtTokenProvider.getSessionId(token));
+            Long userId = jwtTokenProvider.getUserId(token);
+            loginSessionRepository.endSessionIfCurrent(userId, jwtTokenProvider.getSessionId(token));
+            return userId;
         }
+        return null;
     }
 
     @Transactional

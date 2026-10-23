@@ -1,6 +1,7 @@
 package com.kh.back.chat.handler;
 
 import com.kh.back.chat.dto.ChatMessageDto;
+import com.kh.back.chat.dto.ChatRoomDto;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
@@ -19,20 +20,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 채팅방 하나(roomId)마다, 그 방에 연결된 WebSocketSession들을 들고 있다가 실시간으로 메시지를 주고받게 해주는 핸들러.
- *
- * 전체 흐름 (한쪽이 메시지를 보냈을 때):
- *   1. {@link #handleTextMessage}: 클라이언트가 보낸 JSON({"content":"..."})을 받는다.
- *      발신자(senderId)는 클라이언트가 알려주는 게 아니라, 연결 시 {@link ChatHandshakeInterceptor}가
- *      확인해서 세션에 넣어둔 인증된 userId를 그대로 쓴다. (클라이언트가 다른 사람인 척 보낼 수 없게)
- *      다만 연결은 핸드셰이크 때 한 번만 인증하므로, 그 이후 로그아웃하거나 다른 기기에서 재로그인해도
- *      이미 연결된 소켓은 재검증 없이 계속 송수신된다 — 당장은 의도적으로 남겨둔 제약이다.
- *   2. 기존 REST API와 똑같은 {@link ChatService#sendMessage}를 호출해 DB에 저장한다.
- *      (종료된 방에 보내면 여기서 예외가 나고, 발신자에게만 에러로 알려준다.)
- *   3. {@link #deliverToCounterpart}: 저장에 성공하면, 같은 방에 연결된 "상대방"에게만 그 메시지를 쏴준다.
- *   4. 상대방이 지금 이 순간 연결돼 있다는 건 상대가 채팅창을 보고 있다는 뜻이므로, **실제로 전달에 성공했을 때만**
- *      읽음 처리까지 함께 한다. 전송이 실패하면 상대가 받지 못한 것이므로 읽음 처리하지 않는다.
- *
- * 연결이 끊긴 동안 쌓인 메시지는 이 핸들러가 다시 보내주지 않는다 — 재연결 후 REST 목록 API를 다시 불러서 채우는 건 클라이언트 책임이다.
  */
 @Slf4j
 @Component
@@ -43,6 +30,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private record IncomingMessage(String content) {}
 
     private final ChatService chatService;
+    //문자열 <-> JSON 전환용 Websocket은 Spring MVC처럼 변환해주는게 없음.
     private final ObjectMapper objectMapper;
 
     // roomId별로 그 방에 지금 연결돼 있는 세션들을 모아둔다. 메시지를 "같은 방의 누구에게" 보낼지 찾는 용도.
@@ -156,6 +144,33 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             session.close();
         } catch (IOException e) {
             log.warn("채팅 연결 종료 실패: sessionId={}", session.getId(), e);
+        }
+    }
+
+    // 로그아웃한 회원이 열어둔 상담방을 DB에서 먼저 찾고, 그 방에 연결된 해당 유저의 세션만 닫는다.
+    // 실제 제거는 session.close()가 트리거하는 afterConnectionClosed가 처리하므로 여기서 Set을 직접 건드리지 않는다.
+    public void closeSessionsForUser(Long userId) {
+        //해당 방 객체를 찾아서 가져옴
+        ChatRoomDto room = chatService.findOpenRoom(userId);
+        if (room == null) {
+            return;
+        }
+        // roomSessions는 해당 websocket세션에 있는 방정보를 가져옴
+        Set<WebSocketSession> roomSessions = rooms.get(String.valueOf(room.getRoomId()));
+        if (roomSessions == null) {
+            return;
+        }
+        // 해당 방의 세션을 손회하면서 각 세션의 userId와 로그아웃한 userId를 대조해 일치하면 session.close호출
+        for (WebSocketSession session : roomSessions) {
+            if (userId.equals(session.getAttributes().get("userId"))) {
+                try {
+                    //
+                    session.close();
+                }catch (IOException e) {
+                    // 이 close가 죽은 소켓애 대해 실행돼 서버가 멈추지 않게 하기 위한 장치
+                    log.warn("로그아웃 : sessionId={}", session.getId(), e);
+                }
+            }
         }
     }
 
