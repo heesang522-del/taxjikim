@@ -1,59 +1,64 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ROUTES } from './routes';
 import { useAuth } from '../store/useAuthStore';
-import { useBoard } from '../store/useBoardStore';
-import { useInquiry } from '../store/useInquiryStore';
+import { getNotifications, getUnreadNotificationCount, markAllNotificationsRead } from '../api/notifications';
 
-const KEY = 'taxlab.notif.seen.v1';
+const POLL_MS = 15000; // 실시간 알림 채널이 없어, 로그인 중에는 이 주기로 목록·안읽음 수를 다시 불러온다
 
-const readSeen = () => {
-  try {
-    const list = JSON.parse(localStorage.getItem(KEY));
-    return Array.isArray(list) ? new Set(list) : new Set();
-  } catch {
-    return new Set();
-  }
-};
+// 서버 알림을 화면이 쓰는 모양으로 바꾼다.
+// type(NOTICE/COMMENT)과 무관하게 targetType은 항상 POST·targetId는 게시글 ID라서 상세 경로를 하나로 통일한다.
+function toNotificationItem(n) {
+  return {
+    id: n.notificationId,
+    title: n.title,
+    desc: n.type === 'NOTICE' ? '새 공지가 올라왔습니다' : n.message,
+    createdAt: n.createdAt,
+    to: ROUTES.boardPost(n.targetId),
+    read: n.read,
+  };
+}
 
-/** 새 공지 + 내 Q&A(공개·비공개) 답변을 알림으로 모은다. 확인하면 이 브라우저에 읽음으로 저장한다. */
+/** 헤더 알림 벨이 쓰는 훅. 실시간 알림 채널이 없어 로그인 중에는 주기적으로 다시 불러오고,
+ *  벨을 열 때도 그 사이 쌓인 알림이 바로 보이도록 같은 데이터를 쓴다. */
 export function useNotifications() {
-  const { user } = useAuth();
-  const { posts } = useBoard();
-  const { inquiries } = useInquiry();
-  const [seen, setSeen] = useState(readSeen);
+  const { loggedIn } = useAuth();
+  const [items, setItems] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const items = useMemo(() => {
-    const notices = posts
-      .filter((p) => p.tab === '공지' && !p.deletedByAdmin)
-      .map((p) => ({ id: `notice-${p.id}`, title: p.title, desc: '새 공지가 올라왔습니다', createdAt: p.createdAt, to: ROUTES.boardPost(p.id) }));
-    const answers = inquiries
-      .filter((q) => user && q.author === user.nickname && q.status === '답변 완료')
-      .map((q) => ({
-        id: `inquiry-${q.id}`,
-        title: q.title,
-        desc: 'Q&A에 답변이 등록되었습니다',
-        createdAt: q.createdAt,
-        to: ROUTES.qnaPost(q.id),
-      }));
-    // 채팅 상담 답변 알림은 실제 채팅 API 연동 전까지 별도 작업으로 남겨둔다.
-    return [...notices, ...answers]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .map((n) => ({ ...n, read: seen.has(n.id) }));
-  }, [posts, inquiries, seen, user]);
+  const refresh = useCallback(() => {
+    if (!loggedIn) return Promise.resolve();
+    return Promise.all([getNotifications(), getUnreadNotificationCount()])
+      .then(([listResult, countResult]) => {
+        setItems((listResult.data || []).map(toNotificationItem));
+        setUnreadCount(countResult.data || 0);
+      })
+      .catch(() => {}); // 조회 실패는 다음 주기에 다시 시도한다
+  }, [loggedIn]);
 
-  const unreadCount = items.filter((n) => !n.read).length;
+  useEffect(() => {
+    if (!loggedIn) {
+      setItems([]);
+      setUnreadCount(0);
+      return undefined;
+    }
+    refresh();
+    const timer = setInterval(refresh, POLL_MS);
+    return () => clearInterval(timer);
+  }, [loggedIn, refresh]);
 
+  // 벨을 열 때마다 호출되므로, 이미 다 읽은 상태면 불필요한 요청을 보내지 않는다.
   const markAllRead = useCallback(() => {
-    setSeen((prev) => {
-      const next = new Set(prev);
-      items.forEach((n) => next.add(n.id));
-      try { localStorage.setItem(KEY, JSON.stringify([...next])); } catch { /* 저장 공간이 없거나 막힌 경우 무시 */ }
-      return next;
-    });
-  }, [items]);
+    if (unreadCount === 0) return Promise.resolve();
+    return markAllNotificationsRead()
+      .then(() => {
+        setUnreadCount(0);
+        setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+      })
+      .catch(() => {}); // 실패해도 다음 주기 조회에서 실제 서버 상태로 맞춰진다
+  }, [unreadCount]);
 
   return { items, unreadCount, markAllRead };
 }
