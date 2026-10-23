@@ -1,0 +1,293 @@
+﻿sample_id,description,category_code,group_id,review_status
+software_license_01_01,영상 편집 프로그램 월 이용료,SOFTWARE_LICENSE,software_license_01,PENDING
+software_license_02_01,영상 배경음악 사용 라이선스 구입,SOFTWARE_LICENSE,software_license_02,PENDING
+software_license_03_01,자막 제작 소프트웨어 이용권 구매,SOFTWARE_LICENSE,software_license_03,PENDING
+software_license_04_01,썸네일 디자인 프로그램 연간 사용권 구매,SOFTWARE_LICENSE,software_license_04,PENDING
+software_license_05_01,촬영 자료 백업용 클라우드 저장 서비스 이용료,SOFTWARE_LICENSE,software_license_05,PENDING
+software_license_07_01,먹방 영상 자막 편집 소프트웨어 사용권 구매,SOFTWARE_LICENSE,software_license_07,PENDING
+software_license_08_01,게임 리뷰 영상 제작용 PC 게임 이용권 구매,SOFTWARE_LICENSE,software_license_08,PENDING
+software_license_09_01,일상 브이로그 배경음악 사용 라이선스 구매,SOFTWARE_LICENSE,software_license_09,PENDING
+software_license_10_01,제품 리뷰 영상 색보정 프로그램 이용료,SOFTWARE_LICENSE,software_license_10,PENDING
+software_license_12_01,동영상 편집 도구 연간 이용권,SOFTWARE_LICENSE,software_license_12,PENDING
+software_license_13_01,영상 색보정 프로그램 사용료,SOFTWARE_LICENSE,software_license_13,PENDING
+software_license_14_01,자동 자막 생성 서비스 월 이용료,SOFTWARE_LICENSE,software_license_14,PENDING
+software_license_15_01,썸네일 제작 디자인 앱 구독료,SOFTWARE_LICENSE,software_license_15,PENDING
+software_license_16_01,영상 삽입용 음원 사용권 구매,SOFTWARE_LICENSE,software_license_16,PENDING
+software_license_17_01,배경음악 저작권 이용 라이선스 비용,SOFTWARE_LICENSE,software_license_17,PENDING
+software_license_18_01,효과음 다운로드 서비스 구독료,SOFTWARE_LICENSE,software_license_18,PENDING
+software_license_19_01,게임 리뷰용 스팀 게임 구매,SOFTWARE_LICENSE,software_license_19,PENDING
+software_license_21_01,팟캐스트 녹음 편집 앱 유료 구독,SOFTWARE_LICENSE,software_license_21,PENDING
+software_license_22_01,동영상 인코딩 도구 정식 버전 구매,SOFTWARE_LICENSE,software_license_22,PENDING
+software_license_23_01,촬영 사진 보정 앱 프리미엄 이용료,SOFTWARE_LICENSE,software_license_23,PENDING
+software_license_24_01,방송 화면 구성 프로그램 유료 플러그인 구매,SOFTWARE_LICENSE,software_license_24,PENDING
+software_license_26_01,편집 프로그램용 노이즈 제거 플러그인 결제,SOFTWARE_LICENSE,software_license_26,PENDING
+software_license_27_01,녹음 음성 복원 소프트웨어 정품 구매,SOFTWARE_LICENSE,software_license_27,PENDING
+software_license_29_01,자막 받아쓰기 서비스 사용 크레딧 충전,SOFTWARE_LICENSE,software_license_29,PENDING
+software_license_31_01,썸네일 작업용 유료 폰트 사용권 구입,SOFTWARE_LICENSE,software_license_31,PENDING
+software_license_32_01,영상 제목 그래픽 제작용 글꼴 라이선스,SOFTWARE_LICENSE,software_license_32,PENDING
+software_license_34_01,제품 소개 영상용 스톡 영상 라이선스 구매,SOFTWARE_LICENSE,software_license_34,PENDING
+software_license_35_01,영상에 삽입할 유료 사진 사용권 결제,SOFTWARE_LICENSE,software_license_35,PENDING
+software_license_36_01,브금 음원 사이트 월간 구독 결제,SOFTWARE_LICENSE,software_license_36,PENDING
+software_license_37_01,촬영 콘텐츠에 쓸 사운드 라이브러리 이용권,SOFTWARE_LICENSE,software_license_37,PENDING
+software_license_38_01,게임 리뷰 제작에 사용할 콘솔 게임 디지털판 구입,SOFTWARE_LICENSE,software_license_38,PENDING
+software_license_39_01,게임 공략 촬영용 추가 콘텐츠 DLC 구매,SOFTWARE_LICENSE,software_license_39,PENDING
+software_license_40_01,모바일 게임 리뷰용 유료 게임 앱 구매,SOFTWARE_LICENSE,software_license_40,PENDING
+software_license_41_01,VR 게임 플레이 영상 제작용 게임 사용권 구매,SOFTWARE_LICENSE,software_license_41,PENDING
+software_license_42_01,촬영 파일 온라인 백업 서비스 연간 구독,SOFTWARE_LICENSE,software_license_42,PENDING
+software_license_45_01,썸네일 제작용 벡터 디자인 프로그램 구독,SOFTWARE_LICENSE,software_license_45,PENDING
+equipment_01_01,영상 촬영용 카메라 구매,EQUIPMENT,equipment_01,PENDING
+equipment_03_01,촬영용 삼각대 구매,EQUIPMENT,equipment_03,PENDING
+equipment_05_01,촬영 조명 장비 구입,EQUIPMENT,equipment_05,PENDING
+equipment_06_01,여행 영상 촬영용 액션 카메라 구매,EQUIPMENT,equipment_06,PENDING
+equipment_07_01,먹방 녹음용 핀 마이크 구매,EQUIPMENT,equipment_07,PENDING
+equipment_08_01,게임 방송용 영상 캡처 장치 구매,EQUIPMENT,equipment_08,PENDING
+equipment_10_01,리뷰 촬영 대상 무선 마우스 구매,EQUIPMENT,equipment_10,PENDING
+equipment_11_01,브이로그 촬영용 디지털카메라 구입,EQUIPMENT,equipment_11,PENDING
+equipment_12_01,야외 촬영용 액션캠 구매,EQUIPMENT,equipment_12,PENDING
+equipment_13_01,인터뷰 녹음용 무선 마이크 세트 구매,EQUIPMENT,equipment_13,PENDING
+equipment_15_01,제품 촬영용 LED 조명 구매,EQUIPMENT,equipment_15,PENDING
+equipment_16_01,영상 편집 작업용 노트북 구매,EQUIPMENT,equipment_16,PENDING
+equipment_17_01,편집용 고해상도 모니터 구입,EQUIPMENT,equipment_17,PENDING
+equipment_19_01,리뷰 콘텐츠 제작용 기계식 키보드 구매,EQUIPMENT,equipment_19,PENDING
+equipment_20_01,작업실 인터넷 연결용 공유기 구매,EQUIPMENT,equipment_20,PENDING
+equipment_21_01,촬영 렌즈 새 제품 구입,EQUIPMENT,equipment_21,PENDING
+equipment_22_01,제품 접사 촬영용 매크로 렌즈 구매,EQUIPMENT,equipment_22,PENDING
+equipment_23_01,야외 촬영용 카메라 배터리 구매,EQUIPMENT,equipment_23,PENDING
+equipment_24_01,카메라 충전 거치대 구입,EQUIPMENT,equipment_24,PENDING
+equipment_27_01,영상 편집 컴퓨터 그래픽카드 구매,EQUIPMENT,equipment_27,PENDING
+equipment_28_01,편집 작업용 데스크톱 본체 구입,EQUIPMENT,equipment_28,PENDING
+equipment_29_01,방송용 오디오 인터페이스 구매,EQUIPMENT,equipment_29,PENDING
+equipment_30_01,게임 실황 녹음용 헤드셋 구입,EQUIPMENT,equipment_30,PENDING
+equipment_31_01,음향 편집 모니터링 헤드폰 구매,EQUIPMENT,equipment_31,PENDING
+equipment_32_01,방송 마이크 고정용 마이크 암 구매,EQUIPMENT,equipment_32,PENDING
+equipment_33_01,촬영 대본 표시용 프롬프터 장비 구입,EQUIPMENT,equipment_33,PENDING
+equipment_34_01,라이브 방송 영상 전환용 스위처 구매,EQUIPMENT,equipment_34,PENDING
+equipment_35_01,제품 촬영용 회전 전시대 장비 구매,EQUIPMENT,equipment_35,PENDING
+equipment_36_01,촬영용 조명 스탠드 구입,EQUIPMENT,equipment_36,PENDING
+equipment_37_01,카메라 장착용 슬라이더 구매,EQUIPMENT,equipment_37,PENDING
+equipment_38_01,손에 들고 촬영할 휴대용 짐벌 구매,EQUIPMENT,equipment_38,PENDING
+equipment_40_01,작업실 인터넷 연결용 네트워크 허브 구입,EQUIPMENT,equipment_40,PENDING
+equipment_41_01,게임 리뷰 촬영 대상 컨트롤러 구매,EQUIPMENT,equipment_41,PENDING
+equipment_42_01,전자기기 리뷰 대상 태블릿 구매,EQUIPMENT,equipment_42,PENDING
+equipment_43_01,일상 촬영용 스마트폰 기기 구매,EQUIPMENT,equipment_43,PENDING
+equipment_44_01,촬영 중 소리 수음용 휴대 녹음기 구입,EQUIPMENT,equipment_44,PENDING
+telecommunication_01_01,업무용 휴대전화 통신요금 납부,TELECOMMUNICATION,telecommunication_01,PENDING
+telecommunication_02_01,영상 업로드용 인터넷 회선 요금,TELECOMMUNICATION,telecommunication_02,PENDING
+telecommunication_03_01,촬영 현장 모바일 데이터 통신요금,TELECOMMUNICATION,telecommunication_03,PENDING
+telecommunication_04_01,업무 연락용 유심 통신 이용료,TELECOMMUNICATION,telecommunication_04,PENDING
+telecommunication_05_01,실시간 방송용 데이터 회선 사용료,TELECOMMUNICATION,telecommunication_05,PENDING
+telecommunication_06_01,해외 여행 촬영용 데이터 로밍 요금,TELECOMMUNICATION,telecommunication_06,PENDING
+telecommunication_07_01,먹방 라이브 송출용 인터넷 회선 요금,TELECOMMUNICATION,telecommunication_07,PENDING
+telecommunication_08_01,게임 실시간 방송용 유선 인터넷 통신요금,TELECOMMUNICATION,telecommunication_08,PENDING
+telecommunication_09_01,일상 브이로그 업로드용 모바일 데이터 요금,TELECOMMUNICATION,telecommunication_09,PENDING
+telecommunication_10_01,리뷰 영상 업로드용 업무 인터넷 회선 사용료,TELECOMMUNICATION,telecommunication_10,PENDING
+telecommunication_11_01,업무 연락용 휴대폰 월정액 요금,TELECOMMUNICATION,telecommunication_11,PENDING
+telecommunication_12_01,촬영 일정 조율에 사용하는 휴대전화 통화료,TELECOMMUNICATION,telecommunication_12,PENDING
+telecommunication_13_01,편집 작업실 유선 인터넷 월 이용료,TELECOMMUNICATION,telecommunication_13,PENDING
+telecommunication_14_01,영상 파일 전송용 광랜 사용료,TELECOMMUNICATION,telecommunication_14,PENDING
+telecommunication_15_01,라이브 방송 작업실 인터넷 회선 요금,TELECOMMUNICATION,telecommunication_15,PENDING
+telecommunication_16_01,야외 방송용 모바일 데이터 추가 이용료,TELECOMMUNICATION,telecommunication_16,PENDING
+telecommunication_17_01,촬영 영상 업로드용 데이터 충전 요금,TELECOMMUNICATION,telecommunication_17,PENDING
+telecommunication_18_01,해외 촬영 기간 휴대전화 로밍 이용료,TELECOMMUNICATION,telecommunication_18,PENDING
+telecommunication_19_01,여행 영상 촬영용 현지 데이터 유심 요금,TELECOMMUNICATION,telecommunication_19,PENDING
+telecommunication_21_01,작업실 광인터넷 회선 기본요금 납부,TELECOMMUNICATION,telecommunication_21,PENDING
+telecommunication_22_01,업무용 광대역 인터넷 월 청구요금,TELECOMMUNICATION,telecommunication_22,PENDING
+telecommunication_23_01,대용량 촬영본 전송을 위한 인터넷 회선 증속 이용료,TELECOMMUNICATION,telecommunication_23,PENDING
+telecommunication_24_01,고정형 인터넷 서비스 사용 대금,TELECOMMUNICATION,telecommunication_24,PENDING
+telecommunication_26_01,외주 작업자와 연락한 업무용 전화 통화요금,TELECOMMUNICATION,telecommunication_26,PENDING
+telecommunication_27_01,촬영 섭외용 휴대폰 요금제 청구액,TELECOMMUNICATION,telecommunication_27,PENDING
+telecommunication_28_01,업무용 알뜰폰 통신서비스 이용료,TELECOMMUNICATION,telecommunication_28,PENDING
+telecommunication_30_01,업무상 국제전화 발신 요금 납부,TELECOMMUNICATION,telecommunication_30,PENDING
+telecommunication_31_01,촬영팀 연락용 문자메시지 발송 통신료,TELECOMMUNICATION,telecommunication_31,PENDING
+telecommunication_32_01,야외 중계용 데이터 전용 요금제 이용료,TELECOMMUNICATION,telecommunication_32,PENDING
+telecommunication_33_01,영상 전송용 테더링 데이터 추가 구매,TELECOMMUNICATION,telecommunication_33,PENDING
+telecommunication_34_01,외부 촬영 중 데이터 사용량 초과 통신료,TELECOMMUNICATION,telecommunication_34,PENDING
+telecommunication_39_01,촬영장 임시 인터넷 회선 사용료,TELECOMMUNICATION,telecommunication_39,PENDING
+transport_01_01,촬영 장소 이동 택시비,TRANSPORT,transport_01,PENDING
+transport_02_01,콘텐츠 취재 이동 시외버스 운임,TRANSPORT,transport_02,PENDING
+transport_03_01,촬영 현장 방문 지하철 운임,TRANSPORT,transport_03,PENDING
+transport_04_01,지방 촬영 출장 기차 승차권 구매,TRANSPORT,transport_04,PENDING
+transport_05_01,장비 운반 차량의 촬영장 주차요금,TRANSPORT,transport_05,PENDING
+transport_06_01,여행 콘텐츠 촬영지 이동 항공권 구매,TRANSPORT,transport_06,PENDING
+transport_07_01,먹방 촬영 식당 방문 택시 운임,TRANSPORT,transport_07,PENDING
+transport_08_01,게임 행사 취재 이동 기차 운임,TRANSPORT,transport_08,PENDING
+transport_09_01,일상 브이로그 촬영 장소 이동 버스비,TRANSPORT,transport_09,PENDING
+transport_10_01,제품 리뷰 촬영장 방문 지하철 요금,TRANSPORT,transport_10,PENDING
+transport_11_01,인터뷰 촬영장 방문 택시 요금,TRANSPORT,transport_11,PENDING
+transport_12_01,촬영 종료 후 장비를 가지고 복귀한 택시비,TRANSPORT,transport_12,PENDING
+transport_13_01,콘텐츠 취재 장소 이동 시내버스 요금,TRANSPORT,transport_13,PENDING
+transport_14_01,촬영 일정 이동용 지하철 교통비,TRANSPORT,transport_14,PENDING
+transport_15_01,지방 촬영 출장 KTX 승차권 구입,TRANSPORT,transport_15,PENDING
+transport_16_01,지역 축제 취재를 위한 고속버스 운임,TRANSPORT,transport_16,PENDING
+transport_17_01,여행 영상 촬영지 방문 국내선 항공료,TRANSPORT,transport_17,PENDING
+transport_18_01,섬 여행 콘텐츠 취재 여객선 승선료,TRANSPORT,transport_18,PENDING
+transport_19_01,촬영장 방문 차량 주차료,TRANSPORT,transport_19,PENDING
+transport_20_01,촬영 장비 운반 차량 고속도로 통행료,TRANSPORT,transport_20,PENDING
+transport_22_01,촬영팀 미팅 장소 방문 광역버스 요금,TRANSPORT,transport_22,PENDING
+transport_23_01,지방 인터뷰 출장 SRT 열차표 구매,TRANSPORT,transport_23,PENDING
+transport_24_01,방송 행사 취재를 위한 무궁화호 승차권 결제,TRANSPORT,transport_24,PENDING
+transport_25_01,공항에서 촬영 숙소로 이동한 공항버스 운임,TRANSPORT,transport_25,PENDING
+transport_26_01,해외 촬영 출국 항공권 결제,TRANSPORT,transport_26,PENDING
+transport_29_01,해외 촬영 장소로 이동한 현지 택시 요금,TRANSPORT,transport_29,PENDING
+transport_31_01,촬영 장비를 싣고 이동한 차량 유료도로 통행료,TRANSPORT,transport_31,PENDING
+transport_32_01,촬영 장소 방문 중 발생한 터널 통행료,TRANSPORT,transport_32,PENDING
+transport_36_01,지역 축제 촬영 출장 중 시외버스표 결제,TRANSPORT,transport_36,PENDING
+transport_37_01,섬 촬영 현장 방문 도선 승선권 구매,TRANSPORT,transport_37,PENDING
+transport_38_01,다큐 취재 일정의 여객선 운임,TRANSPORT,transport_38,PENDING
+transport_39_01,촬영 출장 이동용 철도 승차권 변경 수수료,TRANSPORT,transport_39,PENDING
+supplies_props_02_01,제품 촬영 장식용 조화 소품 구입,SUPPLIES_PROPS,supplies_props_02,PENDING
+supplies_props_03_01,촬영 세트 고정용 테이프 구매,SUPPLIES_PROPS,supplies_props_03,PENDING
+supplies_props_04_01,카메라 청소용 일회용 클리닝 티슈 구입,SUPPLIES_PROPS,supplies_props_04,PENDING
+supplies_props_05_01,촬영 소품 제작용 종이 재료 구매,SUPPLIES_PROPS,supplies_props_05,PENDING
+supplies_props_06_01,여행 브이로그 촬영 지도 연출용 종이 구매,SUPPLIES_PROPS,supplies_props_06,PENDING
+supplies_props_07_01,먹방 촬영용 음식과 식재료 구매,SUPPLIES_PROPS,supplies_props_07,PENDING
+supplies_props_08_01,게임 방송 배경 꾸미기용 장식 소품 구매,SUPPLIES_PROPS,supplies_props_08,PENDING
+supplies_props_09_01,일상 영상 촬영용 꽃 장식 소품 구입,SUPPLIES_PROPS,supplies_props_09,PENDING
+supplies_props_10_01,리뷰 제품 촬영 배경용 천 구매,SUPPLIES_PROPS,supplies_props_10,PENDING
+supplies_props_12_01,촬영 세트 장식용 인조 꽃 구입,SUPPLIES_PROPS,supplies_props_12,PENDING
+supplies_props_13_01,촬영 배선 고정용 테이프 구매,SUPPLIES_PROPS,supplies_props_13,PENDING
+supplies_props_14_01,카메라 렌즈 청소용 일회용 티슈 구입,SUPPLIES_PROPS,supplies_props_14,PENDING
+supplies_props_15_01,영상 연출용 종이 장식 재료 구매,SUPPLIES_PROPS,supplies_props_15,PENDING
+supplies_props_16_01,먹방 촬영용 배달 음식 주문,SUPPLIES_PROPS,supplies_props_16,PENDING
+supplies_props_17_01,요리 콘텐츠 촬영용 채소와 육류 구매,SUPPLIES_PROPS,supplies_props_17,PENDING
+supplies_props_19_01,게임 방송 배경 장식용 포스터 구입,SUPPLIES_PROPS,supplies_props_19,PENDING
+supplies_props_20_01,일상 브이로그 촬영 연출용 풍선 구매,SUPPLIES_PROPS,supplies_props_20,PENDING
+supplies_props_21_01,제품 사진 배경에 사용할 무광 종이 구매,SUPPLIES_PROPS,supplies_props_21,PENDING
+supplies_props_22_01,촬영용 흰색 배경 천 구입,SUPPLIES_PROPS,supplies_props_22,PENDING
+supplies_props_23_01,콘텐츠 연출용 색상 카드지 구매,SUPPLIES_PROPS,supplies_props_23,PENDING
+supplies_props_24_01,촬영 세트 고정용 양면테이프 구입,SUPPLIES_PROPS,supplies_props_24,PENDING
+supplies_props_25_01,조명 케이블 정리용 일회용 케이블타이 구매,SUPPLIES_PROPS,supplies_props_25,PENDING
+supplies_props_26_01,카메라 외관 청소용 일회용 알코올 솜 구매,SUPPLIES_PROPS,supplies_props_26,PENDING
+supplies_props_27_01,렌즈 세척용 클리너 액 구입,SUPPLIES_PROPS,supplies_props_27,PENDING
+supplies_props_29_01,세트 장식 제작용 색종이와 리본 구입,SUPPLIES_PROPS,supplies_props_29,PENDING
+supplies_props_30_01,생일 콘셉트 영상 연출용 종이 가랜드 구매,SUPPLIES_PROPS,supplies_props_30,PENDING
+supplies_props_31_01,촬영 배경 장식용 인조 나뭇잎 구매,SUPPLIES_PROPS,supplies_props_31,PENDING
+supplies_props_32_01,먹방 콘텐츠 촬영용 도시락 주문,SUPPLIES_PROPS,supplies_props_32,PENDING
+supplies_props_34_01,신제품 음식 리뷰 촬영용 과자 구매,SUPPLIES_PROPS,supplies_props_34,PENDING
+supplies_props_35_01,빵집 리뷰 영상 촬영용 빵 구입,SUPPLIES_PROPS,supplies_props_35,PENDING
+supplies_props_36_01,요리 영상 제작에 쓸 달걀과 우유 구매,SUPPLIES_PROPS,supplies_props_36,PENDING
+supplies_props_37_01,베이킹 콘텐츠 촬영용 밀가루와 버터 구입,SUPPLIES_PROPS,supplies_props_37,PENDING
+supplies_props_38_01,음료 비교 리뷰 촬영용 커피와 주스 구매,SUPPLIES_PROPS,supplies_props_38,PENDING
+supplies_props_42_01,제품 촬영 연출용 포장지 구매,SUPPLIES_PROPS,supplies_props_42,PENDING
+supplies_props_44_01,리뷰 영상 배경 장식용 조화 구입,SUPPLIES_PROPS,supplies_props_44,PENDING
+supplies_props_45_01,게임 방송 세트 꾸미기용 종이 장식 구입,SUPPLIES_PROPS,supplies_props_45,PENDING
+space_rental_03_01,음성 녹음 부스 공간 대여료,SPACE_RENTAL,space_rental_03,PENDING
+space_rental_04_01,요리 영상 촬영용 주방 공간 대관료,SPACE_RENTAL,space_rental_04,PENDING
+space_rental_05_01,콘텐츠 촬영 행사장 대관료,SPACE_RENTAL,space_rental_05,PENDING
+space_rental_06_01,여행 촬영 출장 중 숙소 숙박비,SPACE_RENTAL,space_rental_06,PENDING
+space_rental_07_01,먹방 촬영용 공유 주방 공간 대관료,SPACE_RENTAL,space_rental_07,PENDING
+space_rental_08_01,게임 방송 촬영용 스튜디오 대여료,SPACE_RENTAL,space_rental_08,PENDING
+space_rental_09_01,일상 브이로그 지방 촬영 출장 숙박비,SPACE_RENTAL,space_rental_09,PENDING
+space_rental_10_01,제품 리뷰 촬영용 사진 스튜디오 대관료,SPACE_RENTAL,space_rental_10,PENDING
+space_rental_11_01,제품 촬영용 렌탈 스튜디오 이용료,SPACE_RENTAL,space_rental_11,PENDING
+space_rental_12_01,인터뷰 촬영 회의실 시간 대관료,SPACE_RENTAL,space_rental_12,PENDING
+space_rental_13_01,내레이션 녹음실 대여 비용,SPACE_RENTAL,space_rental_13,PENDING
+space_rental_14_01,먹방 촬영용 공유 주방 이용료,SPACE_RENTAL,space_rental_14,PENDING
+space_rental_15_01,게임 방송 촬영 공간 대여료,SPACE_RENTAL,space_rental_15,PENDING
+space_rental_16_01,영상 촬영용 실내 세트장 대관료,SPACE_RENTAL,space_rental_16,PENDING
+space_rental_17_01,여행 콘텐츠 촬영 출장 호텔 숙박비,SPACE_RENTAL,space_rental_17,PENDING
+space_rental_18_01,지방 취재 일정 중 게스트하우스 숙박료,SPACE_RENTAL,space_rental_18,PENDING
+space_rental_20_01,일상 브이로그 지방 촬영 숙소 이용료,SPACE_RENTAL,space_rental_20,PENDING
+space_rental_21_01,셀프 촬영 스튜디오 대관 비용,SPACE_RENTAL,space_rental_21,PENDING
+space_rental_22_01,제품 사진 촬영실 반일 대여료,SPACE_RENTAL,space_rental_22,PENDING
+space_rental_23_01,영상 촬영용 호리존 스튜디오 대관료,SPACE_RENTAL,space_rental_23,PENDING
+space_rental_24_01,방음 녹음 공간 예약 이용료,SPACE_RENTAL,space_rental_24,PENDING
+space_rental_25_01,팟캐스트 녹음실 시간제 사용료,SPACE_RENTAL,space_rental_25,PENDING
+space_rental_27_01,실시간 방송용 촬영 부스 공간 사용료,SPACE_RENTAL,space_rental_27,PENDING
+space_rental_28_01,요리 콘텐츠 제작용 키친 스튜디오 대여,SPACE_RENTAL,space_rental_28,PENDING
+space_rental_29_01,인터뷰 촬영용 실내 공간 대관 대금,SPACE_RENTAL,space_rental_29,PENDING
+space_rental_30_01,광고 영상 촬영 세트장 이용 비용,SPACE_RENTAL,space_rental_30,PENDING
+space_rental_31_01,게임 콘텐츠 합동 방송 스튜디오 대관,SPACE_RENTAL,space_rental_31,PENDING
+space_rental_34_01,지역 취재 출장 중 모텔 숙박비,SPACE_RENTAL,space_rental_34,PENDING
+space_rental_35_01,촬영팀 지방 출장 숙소 예약 대금,SPACE_RENTAL,space_rental_35,PENDING
+space_rental_36_01,야간 촬영 후 출장지 숙박 요금,SPACE_RENTAL,space_rental_36,PENDING
+space_rental_38_01,여행 콘텐츠 촬영 출장 호스텔 숙박료,SPACE_RENTAL,space_rental_38,PENDING
+space_rental_40_01,연속 촬영 일정의 게스트하우스 숙박 대금,SPACE_RENTAL,space_rental_40,PENDING
+outsourcing_02_01,자막 번역 작업 프리랜서 용역비,OUTSOURCING,outsourcing_02,PENDING
+outsourcing_03_01,썸네일 디자인 제작 외주비,OUTSOURCING,outsourcing_03,PENDING
+outsourcing_04_01,채널 로고 디자인 작업 용역비,OUTSOURCING,outsourcing_04,PENDING
+outsourcing_05_01,영상 음향 보정 작업 외주비,OUTSOURCING,outsourcing_05,PENDING
+outsourcing_06_01,여행 영상 외국어 자막 번역 외주비,OUTSOURCING,outsourcing_06,PENDING
+outsourcing_07_01,먹방 영상 컷 편집 작업 용역비,OUTSOURCING,outsourcing_07,PENDING
+outsourcing_08_01,게임 방송 하이라이트 편집 외주비,OUTSOURCING,outsourcing_08,PENDING
+outsourcing_09_01,일상 브이로그 썸네일 디자인 외주비,OUTSOURCING,outsourcing_09,PENDING
+outsourcing_10_01,제품 리뷰 영상 효과음 편집 외주 용역비,OUTSOURCING,outsourcing_10,PENDING
+outsourcing_11_01,촬영 원본 컷 편집 외주 작업비,OUTSOURCING,outsourcing_11,PENDING
+outsourcing_12_01,영상 자막 삽입 작업 대행료,OUTSOURCING,outsourcing_12,PENDING
+outsourcing_13_01,해외 시청자용 영어 자막 번역 용역비,OUTSOURCING,outsourcing_13,PENDING
+outsourcing_15_01,채널 소개 애니메이션 제작 외주비,OUTSOURCING,outsourcing_15,PENDING
+outsourcing_16_01,영상 색보정 전문 작업자 용역비,OUTSOURCING,outsourcing_16,PENDING
+outsourcing_17_01,녹음 파일 잡음 제거 외주 작업비,OUTSOURCING,outsourcing_17,PENDING
+outsourcing_18_01,게임 방송 하이라이트 편집 대행료,OUTSOURCING,outsourcing_18,PENDING
+outsourcing_19_01,먹방 영상 효과음 삽입 작업 외주비,OUTSOURCING,outsourcing_19,PENDING
+outsourcing_20_01,리뷰 영상 오프닝 디자인 제작 용역비,OUTSOURCING,outsourcing_20,PENDING
+outsourcing_21_01,원본 영상 편집자에게 지급한 컷 편집 대금,OUTSOURCING,outsourcing_21,PENDING
+outsourcing_25_01,자막 오탈자 교정 외주 용역비,OUTSOURCING,outsourcing_25,PENDING
+outsourcing_26_01,일본어 영상 자막 번역가 작업료,OUTSOURCING,outsourcing_26,PENDING
+outsourcing_28_01,채널 배너 이미지 디자인 외주 제작비,OUTSOURCING,outsourcing_28,PENDING
+outsourcing_29_01,방송 오버레이 그래픽 외부 제작비,OUTSOURCING,outsourcing_29,PENDING
+outsourcing_30_01,인트로 모션 그래픽 제작자 작업료,OUTSOURCING,outsourcing_30,PENDING
+outsourcing_31_01,리뷰 영상 제품 소개 애니메이션 외주비,OUTSOURCING,outsourcing_31,PENDING
+outsourcing_32_01,영상 음량 균일화 작업 대행료,OUTSOURCING,outsourcing_32,PENDING
+outsourcing_33_01,음성 녹음 잡음 정리 전문가 작업비,OUTSOURCING,outsourcing_33,PENDING
+outsourcing_34_01,촬영본 컬러 그레이딩 외주 대금,OUTSOURCING,outsourcing_34,PENDING
+outsourcing_36_01,여행 콘텐츠 지도 그래픽 제작 외주비,OUTSOURCING,outsourcing_36,PENDING
+outsourcing_38_01,게임 공략 영상 자막 제작 대행료,OUTSOURCING,outsourcing_38,PENDING
+outsourcing_39_01,일상 콘텐츠 썸네일 수정 디자이너 작업료,OUTSOURCING,outsourcing_39,PENDING
+outsourcing_40_01,리뷰 영상 배경음악 편집 외부 작업비,OUTSOURCING,outsourcing_40,PENDING
+ad_promotion_01_01,채널 홍보용 검색 광고 집행비,AD_PROMOTION,ad_promotion_01,PENDING
+ad_promotion_02_01,신규 영상 소개 배너 광고 게재료,AD_PROMOTION,ad_promotion_02,PENDING
+ad_promotion_03_01,채널 구독 홍보용 SNS 광고비,AD_PROMOTION,ad_promotion_03,PENDING
+ad_promotion_04_01,영상 콘텐츠 유료 노출 광고비,AD_PROMOTION,ad_promotion_04,PENDING
+ad_promotion_05_01,채널 소개 뉴스레터 광고 게재료,AD_PROMOTION,ad_promotion_05,PENDING
+ad_promotion_06_01,여행 채널 소개 검색 광고 집행비,AD_PROMOTION,ad_promotion_06,PENDING
+ad_promotion_07_01,먹방 신규 영상 홍보 배너 광고비,AD_PROMOTION,ad_promotion_07,PENDING
+ad_promotion_09_01,일상 브이로그 영상 홍보 유료 광고비,AD_PROMOTION,ad_promotion_09,PENDING
+ad_promotion_10_01,제품 리뷰 채널 소개 뉴스레터 광고비,AD_PROMOTION,ad_promotion_10,PENDING
+ad_promotion_12_01,채널 소개 이미지 배너 광고 집행비,AD_PROMOTION,ad_promotion_12,PENDING
+ad_promotion_13_01,여행 영상 홍보 SNS 유료 광고비,AD_PROMOTION,ad_promotion_13,PENDING
+ad_promotion_14_01,먹방 채널 홍보 게시물 광고 게재료,AD_PROMOTION,ad_promotion_14,PENDING
+ad_promotion_16_01,일상 브이로그 영상 유료 노출 비용,AD_PROMOTION,ad_promotion_16,PENDING
+ad_promotion_17_01,제품 리뷰 콘텐츠 홍보 광고비,AD_PROMOTION,ad_promotion_17,PENDING
+ad_promotion_18_01,채널 소개 뉴스레터 유료 광고료,AD_PROMOTION,ad_promotion_18,PENDING
+ad_promotion_20_01,채널 구독 유도 캠페인 광고비,AD_PROMOTION,ad_promotion_20,PENDING
+ad_promotion_22_01,신규 콘텐츠 유료 광고 노출 집행액,AD_PROMOTION,ad_promotion_22,PENDING
+ad_promotion_24_01,유튜브 채널 홍보 배너 게재 비용,AD_PROMOTION,ad_promotion_24,PENDING
+ad_promotion_25_01,새 영상 소개 스폰서 게시물 광고 집행비,AD_PROMOTION,ad_promotion_25,PENDING
+ad_promotion_26_01,온라인 커뮤니티 채널 홍보 광고 게재료,AD_PROMOTION,ad_promotion_26,PENDING
+ad_promotion_27_01,뉴스레터에 채널 소개 광고를 싣는 비용,AD_PROMOTION,ad_promotion_27,PENDING
+ad_promotion_28_01,게임 방송 일정 알림 유료 홍보 광고료,AD_PROMOTION,ad_promotion_28,PENDING
+ad_promotion_30_01,여행 콘텐츠 알리기 위한 검색광고 결제,AD_PROMOTION,ad_promotion_30,PENDING
+ad_promotion_31_01,리뷰 영상 방문자 유입 광고비 지출,AD_PROMOTION,ad_promotion_31,PENDING
+ad_promotion_32_01,브이로그 신규 구독자 모집 광고 집행 대금,AD_PROMOTION,ad_promotion_32,PENDING
+ad_promotion_33_01,영상 공개 알림 배너 광고료 납부,AD_PROMOTION,ad_promotion_33,PENDING
+ad_promotion_34_01,채널 소개 유료 광고 캠페인 결제,AD_PROMOTION,ad_promotion_34,PENDING
+ad_promotion_35_01,짧은 영상 홍보를 위한 피드 광고비,AD_PROMOTION,ad_promotion_35,PENDING
+ad_promotion_36_01,신규 영상 홍보용 스토리 광고 집행료,AD_PROMOTION,ad_promotion_36,PENDING
+ad_promotion_37_01,채널 홍보용 디스플레이 광고 게재 비용,AD_PROMOTION,ad_promotion_37,PENDING
+ad_promotion_38_01,외부 매체 채널 소개 광고 지면 구매비,AD_PROMOTION,ad_promotion_38,PENDING
+ad_promotion_40_01,라이브 방송 홍보용 유료 광고비 결제,AD_PROMOTION,ad_promotion_40,PENDING
+other_01_01,업무 거래 계약서 법률 검토 상담료,OTHER,other_01,PENDING
+other_02_01,업무 장부 기장 대행 수수료,OTHER,other_02,PENDING
+other_03_01,콘텐츠 제작 관련 직무 교육 수강료,OTHER,other_03,PENDING
+other_04_01,채널 사업 운영용 서류 발급 수수료,OTHER,other_04,PENDING
+other_05_01,업무용 장비 파손 보험 가입료,OTHER,other_05,PENDING
+other_06_01,여행 콘텐츠 제작 계약서 법률 검토 상담료,OTHER,other_06,PENDING
+other_07_01,먹방 채널 운영 장부 기장 대행 수수료,OTHER,other_07,PENDING
+other_08_01,게임 콘텐츠 제작 직무 교육 수강료,OTHER,other_08,PENDING
+other_10_01,리뷰 채널 업무용 촬영 장비 파손 보험료,OTHER,other_10,PENDING
+other_11_01,영상 제작 계약 내용 법률 상담 비용,OTHER,other_11,PENDING
+other_12_01,광고 출연 계약서 변호사 검토 수수료,OTHER,other_12,PENDING
+other_14_01,업무 회계 기장 서비스 수수료,OTHER,other_14,PENDING
+other_16_01,콘텐츠 기획 직무 강좌 수강 비용,OTHER,other_16,PENDING
+other_17_01,채널 사업 운영 관련 증명서 발급 비용,OTHER,other_17,PENDING
+other_18_01,업무 제출용 서류 발급 수수료,OTHER,other_18,PENDING
+other_19_01,촬영 장비 파손 보장 보험료,OTHER,other_19,PENDING
+other_20_01,업무용 카메라 보험 가입 비용,OTHER,other_20,PENDING
+other_21_01,콘텐츠 계약 분쟁 관련 변호사 상담 수수료,OTHER,other_21,PENDING
+other_22_01,협찬 계약 조항 검토 법률 자문료,OTHER,other_22,PENDING
+other_23_01,채널 거래 장부 정리 회계 대행료,OTHER,other_23,PENDING
+other_24_01,사업 운영 세무 기장 월 수수료,OTHER,other_24,PENDING
+other_25_01,영상 편집 실무 강의 등록비,OTHER,other_25,PENDING
+other_26_01,촬영 조명 기법 직무 교육 수강료,OTHER,other_26,PENDING
+other_27_01,온라인 콘텐츠 기획 교육비 납부,OTHER,other_27,PENDING

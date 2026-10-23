@@ -1,0 +1,33 @@
+{
+  "dataset_version": "expense_category_dummy_v4_draft",
+  "transaction_type": "EXPENSE",
+  "source": "synthetic_examples_not_real_transactions",
+  "model_input": [
+    "description"
+  ],
+  "target": "category_code",
+  "review_status": "PENDING",
+  "labeled_candidate_count": 365,
+  "seed_group_count": 365,
+  "needs_info_count": 10,
+  "category_counts": {
+    "SOFTWARE_LICENSE": 45,
+    "EQUIPMENT": 45,
+    "TELECOMMUNICATION": 40,
+    "TRANSPORT": 40,
+    "SUPPLIES_PROPS": 45,
+    "SPACE_RENTAL": 40,
+    "OUTSOURCING": 40,
+    "AD_PROMOTION": 40,
+    "OTHER": 30
+  },
+  "split_status": "NOT_SPLIT_REVIEW_SEEDS_FIRST",
+  "note": "Synthetic wording candidates; semantic independence and correctness are not guaranteed.",
+  "test_data_used_for_generation": false,
+  "training_ready": false,
+  "base_description_count": 180,
+  "new_description_count": 185,
+  "suffix_variants_generated": false,
+  "split_compatibility": "DRAFT_ONLY_NOT_COMPATIBLE_WITH_V3_FAMILIES",
+  "review_case_count": 8
+}

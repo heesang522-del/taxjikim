@@ -1,0 +1,35 @@
+{
+  "seed": 42,
+  "test_size": 0.2,
+  "source_sha256": "80cfccc2d5107141fb6972e6f06e60cbee0398268bcfb2ddfb0ad1c45f194ec8",
+  "split_rule": "stratified_by_category_keep_group_id_together",
+  "counts": {
+    "train": 292,
+    "test": 73
+  },
+  "category_counts": {
+    "train": {
+      "SOFTWARE_LICENSE": 36,
+      "EQUIPMENT": 36,
+      "TELECOMMUNICATION": 32,
+      "TRANSPORT": 32,
+      "SUPPLIES_PROPS": 36,
+      "SPACE_RENTAL": 32,
+      "OUTSOURCING": 32,
+      "AD_PROMOTION": 32,
+      "OTHER": 24
+    },
+    "test": {
+      "SOFTWARE_LICENSE": 9,
+      "EQUIPMENT": 9,
+      "TELECOMMUNICATION": 8,
+      "TRANSPORT": 8,
+      "SUPPLIES_PROPS": 9,
+      "SPACE_RENTAL": 8,
+      "OUTSOURCING": 8,
+      "AD_PROMOTION": 8,
+      "OTHER": 6
+    }
+  },
+  "limitation": "합성 정답 후보이며 group_id가 다른 유사한 의미까지 완전히 분리한 것은 아님"
+}
