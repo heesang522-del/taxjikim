@@ -47,13 +47,16 @@ def main() -> None:
     """두 모델을 학습·시험하고 비교 결과와 사용할 모델 이름을 저장한다."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--overwrite", action="store_true", help="기존 학습 결과 덮어쓰기")
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR, help="원본과 train_test 폴더 위치")
+    parser.add_argument("--output-dir", type=Path, default=OUTPUT_DIR, help="학습 결과 저장 위치")
     args = parser.parse_args()
-    if OUTPUT_DIR.exists() and not args.overwrite:
+    output_dir = args.output_dir
+    if output_dir.exists() and not args.overwrite:
         parser.error("학습 결과가 이미 있습니다. 다시 실행하려면 --overwrite를 지정하세요.")
 
-    split_dir = DATA_DIR / "train_test"
+    split_dir = args.data_dir / "train_test"
     split_meta = json.loads((split_dir / "split_manifest.json").read_text(encoding="utf-8"))
-    source_hash = hashlib.sha256((DATA_DIR / "labeled_candidates.csv").read_bytes()).hexdigest()
+    source_hash = hashlib.sha256((args.data_dir / "labeled_candidates.csv").read_bytes()).hexdigest()
     if source_hash != split_meta["source_sha256"]:
         raise ValueError("분할 후 원본 자료가 바뀌었습니다. 분할부터 다시 실행해주세요.")
     train = read_rows(split_dir / "train.csv")
@@ -91,7 +94,7 @@ def main() -> None:
         "candidates": {},
     }
     predictions = {}
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     print(f"학습 {len(train)}건 / 시험 {len(test)}건. 별도 validation은 사용하지 않습니다.", flush=True)
     for name, classifier in candidates.items():
         print(f"{name} 학습 중...", flush=True)
@@ -108,7 +111,7 @@ def main() -> None:
             "confusion_matrix": confusion_matrix(y_test, predicted, labels=labels).tolist(),
         }
         report["candidates"][name] = metrics
-        bundle_path = OUTPUT_DIR / f"{name}_bundle.pkl"
+        bundle_path = output_dir / f"{name}_bundle.pkl"
         joblib.dump({
             "pipeline": pipeline,
             "model_name": name,
@@ -128,7 +131,7 @@ def main() -> None:
         report["candidates"][name]["macro_f1"], report["candidates"][name]["accuracy"],
     ))
     report["selected_model"] = selected
-    with (OUTPUT_DIR / "test_predictions.csv").open("w", encoding="utf-8-sig", newline="") as file:
+    with (output_dir / "test_predictions.csv").open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=[
             "sample_id", "description", "expected_category", "logistic_regression", "linear_svc",
         ])
@@ -140,11 +143,11 @@ def main() -> None:
                 **{name: values[index] for name, values in predictions.items()},
             })
     # 보고서는 모델 두 개의 저장이 끝난 뒤 작성하고 API가 선택 모델을 확인할 때 사용한다.
-    (OUTPUT_DIR / "test_report.json").write_text(
+    (output_dir / "test_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
     )
     print(f"PDF 분류에 사용할 모델: {selected}")
-    print(f"저장 위치: {OUTPUT_DIR}")
+    print(f"저장 위치: {output_dir}")
 
 
 if __name__ == "__main__":
