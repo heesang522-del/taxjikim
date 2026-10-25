@@ -236,6 +236,7 @@ public class AuthServiceImpl implements AuthService {
                         loggedOutUserId = userId;
                     }
                 }
+                request.getSession().invalidate();
             }
         }
         authCookieService.clearAuthenticationCookies(response);

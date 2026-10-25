@@ -56,6 +56,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
+        // message -> json변환 통해서 객체 만들어서 userId, roomIdList
+        // roomIdList 통해서 -> websocket Session 메모리내에 있는것들 제거
+        // return.
+
         // 핸드셰이크 때 넣어둔 값. 둘 중 하나라도 없으면(=인증 안 된 세션) 조용히 무시한다.
         String roomId = (String) session.getAttributes().get("roomId");
         Long senderId = (Long) session.getAttributes().get("userId");

@@ -1,4 +1,19 @@
-# API 초안
+# 프론트 API 연결 안내
+
+세금·ML 목표 요청·응답과 저장 시점은 [전체 명세](../../docs/creator-tax-dummy-format.md)를 따른다. 아래 건별 저장 등은 기존 연결 기록이다. 인증은 뒤의 쿠키 인증 통일 기록을 우선하며 오래된 Bearer·accessToken 인자를 현재 계약으로 간주하지 않는다.
+
+## 알림 화면 연동 (2026-10-23)
+
+- `src/api/notifications.js`를 mock(`mocks/notifications.json`)에서 실제 REST API로 교체했다. 백엔드는 이미 구현되어 있었고(`com.kh.back.notification`), 이번 작업에서 API 호출 함수와 헤더 알림 벨(`utils/useNotifications.js`)을 연결했다.
+- `getNotifications()`: GET /api/v1/notifications — 로그인 회원의 알림 목록(최신순).
+- `getUnreadNotificationCount()`: GET /api/v1/notifications/unread-count — 미읽음 수.
+- `markAllNotificationsRead()`: PATCH /api/v1/notifications/read-all — 미읽음 전체 읽음 처리.
+- 에러 처리는 `api/chat.js`의 `requestChat` 패턴을 그대로 따른다(success:false·HTTP 오류·네트워크 오류를 구분해 `Error`로 던진다).
+- `isRead` 필드는 Lombok `isRead()` getter를 Jackson이 `read` 프로퍼티로 인식해 JSON 키가 `read`로 내려온다. Jackson+Lombok 조합으로 직접 재현해 확인했다(서버 기동 없이 별도 자바 스니펫으로 검증). 프론트는 `n.read`를 사용한다.
+- `utils/useNotifications.js`: `useBoardStore`(공지)·`useInquiryStore`(Q&A 답변 mock) 조합을 걷어내고 위 세 API로 교체했다. 실시간 알림 채널이 없어 로그인 중에는 15초 주기로 목록·안읽음 수를 함께 다시 불러온다. 벨을 열 때 `markAllRead()`를 호출하되 안읽음이 0이면 요청을 보내지 않는다.
+- 알림 클릭 이동 경로: `type`(NOTICE/COMMENT)과 무관하게 `targetType`은 항상 `POST`이므로 `ROUTES.boardPost(targetId)`로 통일했다. `/support/qna/:id`(mock 문의 티켓)와는 무관한 별개 기능이라 경로 모호성이 없다.
+- 범위 축소: Q&A "답변 완료" mock 알림(`useInquiryStore` 기반)은 포기했다. 백엔드의 `COMMENT` 알림이 QNA 게시글 댓글도 포함하지만 문구·대상이 다르므로 동일 기능은 아니다.
+- `components/layout/NotificationModal.jsx`·`mocks/notifications.json`은 어디서도 참조하지 않던 죽은 코드라 삭제했다.
 
 ## 알림 화면 연동 (2026-10-23)
 
@@ -37,7 +52,7 @@
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
 - 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
 
-모든 함수는 `src/api/*.js`의 async 함수이며, 현재는 `src/mocks/*.json`을 300~800ms 지연 후 반환한다. 화면은 `useApi(함수)` 훅으로만 호출한다.
+아래는 초기 mock 함수 목록이다. 인증·회원·PDF·채팅 등 실제 연결도 있으므로 전체를 mock으로 간주하지 않는다. 현재 호출은 기능 코드로 확인한다.
 
 | 함수 | 파일 | 사용 화면 | 응답 mock |
 | --- | --- | --- | --- |
@@ -72,7 +87,7 @@
 
 ## 로컬 상태 (API 아님)
 - 거래 내역: `store/useTransactionStore.js` (zustand). 세액은 이 내역과 `utils/tax.js`로 화면에서 계산한다.
-- 로그인 여부: `store/useAuthStore.js` (zustand persist). 실제 인증 없음.
+- 로그인 여부: 실제 쿠키 인증 결과를 메모리 상태에 반영한다. 새로고침 시 /api/v1/users/me로 확인한다.
 
 
 ## 로그인·로그아웃 실제 API 연결 (2026-10-14)
