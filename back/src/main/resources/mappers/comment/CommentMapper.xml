@@ -1,9 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.kh.back.comment.mapper.CommentMapper">
+
     <!-- 삭제된 게시글과 댓글은 조회에서 제외하고 실제 작성자 닉네임을 표시한다. -->
     <select id="findByPostId" resultType="com.kh.back.comment.dto.CommentDto">
-        SELECT c.COMMENT_ID, c.POST_ID, c.USER_ID, c.CONTENT, c.CREATED_AT, c.UPDATED_AT,
+        SELECT c.COMMENT_ID, c.POST_ID, c.USER_ID, c.PARENT_COMMENT_ID, c.CONTENT, c.CREATED_AT, c.UPDATED_AT,
             CASE WHEN u.USER_STATUS = 'DELETED' THEN '탈퇴한 회원'
                 ELSE COALESCE(u.NICKNAME, '알 수 없는 사용자') END AS WRITER
         FROM comments c
@@ -13,14 +14,28 @@
         ORDER BY c.COMMENT_ID ASC
     </select>
 
+    <!-- 답글 작성 시 부모 댓글 검증용. 삭제된 댓글은 부모로 쓸 수 없어 제외한다. -->
+    <select id="findById" resultType="com.kh.back.comment.dto.CommentDto">
+        SELECT COMMENT_ID, POST_ID, PARENT_COMMENT_ID
+        FROM comments
+        WHERE COMMENT_ID = #{commentId} AND DELETED_AT IS NULL
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="commentId">
-        INSERT INTO comments (POST_ID, USER_ID, CONTENT, CREATED_AT, UPDATED_AT)
-        VALUES (#{postId}, #{userId}, #{content}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO comments (POST_ID, USER_ID, PARENT_COMMENT_ID, CONTENT, CREATED_AT, UPDATED_AT)
+        VALUES (#{postId}, #{userId}, #{parentCommentId}, #{content}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     </insert>
 
     <!-- 본인 댓글만 삭제 시각을 기록하며 내용과 작성자 기록은 보존한다. -->
     <update id="softDelete">
         UPDATE comments SET DELETED_AT = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE COMMENT_ID = #{commentId} AND POST_ID = #{postId}
+            AND USER_ID = #{userId} AND DELETED_AT IS NULL
+    </update>
+
+    <!-- 본인 댓글만 내용을 수정하며 수정 시각을 갱신한다. -->
+    <update id="update">
+        UPDATE comments SET CONTENT = #{content}, UPDATED_AT = CURRENT_TIMESTAMP
         WHERE COMMENT_ID = #{commentId} AND POST_ID = #{postId}
             AND USER_ID = #{userId} AND DELETED_AT IS NULL
     </update>
