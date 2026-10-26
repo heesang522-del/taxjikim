@@ -1,5 +1,6 @@
 package com.kh.back.post.service;
 
+import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.common.dto.PageMeta;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.common.validation.PostValidator;
@@ -29,10 +30,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -219,11 +218,33 @@ public class PostServiceImpl implements PostService {
 
         PostDto post = postMapper.findById(postId);
 
-        if (post != null) {
-            post.setFiles(
-                    postMapper.findFilesByPostId(postId)
+        if (post == null) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "POST_NOT_FOUND",
+                    "게시글을 찾을 수 없습니다."
             );
         }
+
+        // QNA 비공개 글은 작성자 본인과 관리자만 볼 수 있다. 존재 여부가 드러나지 않도록 글이 없을 때와 같은 404로 응답한다.
+        boolean isPrivateQna = "QNA".equals(post.getBoardType()) && !post.isPublic();
+
+        if (isPrivateQna) {
+            Long currentUserId = postValidator.currentUserIdOrNull();
+            boolean isOwner = currentUserId != null && currentUserId.equals(post.getUserId());
+
+            if (!isOwner && !postValidator.hasAdminRole()) {
+                throw new ApiException(
+                        HttpStatus.NOT_FOUND,
+                        "POST_NOT_FOUND",
+                        "게시글을 찾을 수 없습니다."
+                );
+            }
+        }
+
+        post.setFiles(
+                postMapper.findFilesByPostId(postId)
+        );
 
         return post;
     }
@@ -329,12 +350,6 @@ public class PostServiceImpl implements PostService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void delete(Long postId) {
-        deleteById(postId);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
     public void deleteById(Long postId) {
 
         postValidator.requireLogin();
@@ -346,33 +361,35 @@ public class PostServiceImpl implements PostService {
         postMapper.deleteById(postId);
     }
 
-    @Override
-    public void requireAuthor(
-            Long postId,
-            Long userId
-    ) {
-
-        postValidator.validateAuthenticatedUserId(userId);
-
-        PostDto post = postMapper.findById(postId);
-
-        // 메서드 이름은 유지하지만 관리자도 통과할 수 있다.
-        postValidator.requireChange(post);
-    }
+    // 목록 응답 한 페이지에 보여줄 글 수. 클라이언트가 바꿀 수 없는 고정값이라 상수로 둔다.
+    private static final int PAGE_SIZE = 9;
 
     @Override
-    public Map<String, Object> getPostPage(
-            int page,
-            int size,
+    public ApiResponse<List<PostDto>> getPostPage(
             String sort,
-            String keyword
+            String keyword,
+            int page,
+            String boardType
     ) {
 
         page = Math.max(page, 1);
 
-        long offsetValue = ((long) page - 1) * size;
+        int totalCount = countAll(keyword, boardType);
+        List<PostDto> posts = findPage(sort, keyword, page, boardType);
 
-        if (offsetValue < 0 || offsetValue > Integer.MAX_VALUE) {
+        return ApiResponse.ok(posts, PageMeta.of(page, PAGE_SIZE, totalCount));
+    }
+
+    private List<PostDto> findPage(
+            String sort,
+            String keyword,
+            int page,
+            String boardType
+    ) {
+
+        long offsetValue = ((long) page - 1) * PAGE_SIZE;
+
+        if (offsetValue > Integer.MAX_VALUE) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_ERROR",
@@ -382,40 +399,16 @@ public class PostServiceImpl implements PostService {
 
         int offset = (int) offsetValue;
 
-        postValidator.validatePage(offset, size);
-
-        int total = postMapper.countAll(keyword);
-
-        Map<String, Object> result = new HashMap<>();
-
-        result.put(
-                "content",
-                findPage(sort, keyword, offset, size)
-        );
-
-        result.put(
-                "paging",
-                PageMeta.of(page, size, total)
-        );
-
-        return result;
-    }
-
-    @Override
-    public List<PostDto> findPage(
-            String sort,
-            String keyword,
-            int offset,
-            int size
-    ) {
-
-        postValidator.validatePage(offset, size);
+        postValidator.validatePage(offset, PAGE_SIZE);
 
         List<PostDto> posts = postMapper.findPage(
                 sort,
                 keyword,
                 offset,
-                size
+                PAGE_SIZE,
+                postValidator.normalizeBoardTypeFilter(boardType),
+                postValidator.currentUserIdOrNull(),
+                postValidator.hasAdminRole()
         );
 
         loadFileLists(posts);
@@ -423,23 +416,13 @@ public class PostServiceImpl implements PostService {
         return posts;
     }
 
-    @Override
-    public List<PostDto> findAll(
-            String sort,
-            String keyword
-    ) {
-
-        List<PostDto> posts =
-                postMapper.findAll(sort, keyword);
-
-        loadFileLists(posts);
-
-        return posts;
-    }
-
-    @Override
-    public int countAll(String keyword) {
-        return postMapper.countAll(keyword);
+    private int countAll(String keyword, String boardType) {
+        return postMapper.countAll(
+                keyword,
+                postValidator.normalizeBoardTypeFilter(boardType),
+                postValidator.currentUserIdOrNull(),
+                postValidator.hasAdminRole()
+        );
     }
 
     private List<FileMetadataDto> lockPendingFiles(

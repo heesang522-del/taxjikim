@@ -106,6 +106,48 @@ public class PostValidator {
     }
 
     /**
+     * 비로그인도 허용하는 목록 조회에서 쓴다. 로그인하지 않았으면 null을 반환한다.
+     */
+    public Long currentUserIdOrNull() {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext()
+                        .getAuthentication();
+
+        if (authentication == null
+                || !(authentication.getPrincipal()
+                instanceof CustomUserDetails details)) {
+            return null;
+        }
+
+        return details.getUserId();
+    }
+
+    /**
+     * 비로그인도 허용하는 목록 조회에서 쓴다. 로그인하지 않았거나 관리자가 아니면 false를 반환한다.
+     */
+    public boolean hasAdminRole() {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext()
+                        .getAuthentication();
+
+        if (authentication == null
+                || !(authentication.getPrincipal()
+                instanceof CustomUserDetails)) {
+            return false;
+        }
+
+        return authentication.getAuthorities()
+                .stream()
+                .anyMatch(authority ->
+                        "ROLE_ADMIN".equals(
+                                authority.getAuthority()
+                        )
+                );
+    }
+
+    /**
      * 관리자와 일반 사용자 모두 게시글을 작성할 수 있다.
      * 공지사항과 FAQ는 관리자만 작성할 수 있다.
      */
@@ -154,20 +196,6 @@ public class PostValidator {
         requireBoardPermission(post.getBoardType());
 
         return userId;
-    }
-
-    /**
-     * 전달된 회원 번호가 실제 인증 사용자와 일치하는지 검사한다.
-     */
-    public void validateAuthenticatedUserId(Long userId) {
-
-        if (!Objects.equals(requireLogin(), userId)) {
-            throw new ApiException(
-                    HttpStatus.FORBIDDEN,
-                    "ACCESS_DENIED",
-                    "인증 사용자 정보가 일치하지 않습니다."
-            );
-        }
     }
 
     /**
@@ -599,6 +627,23 @@ public class PostValidator {
                     "게시판 종류가 필요합니다."
             );
         }
+
+        return toBoardTypeCode(value);
+    }
+
+    /**
+     * 목록 조회 필터용 정규화. 값이 없으면 전체 게시판(필터 없음)으로 본다.
+     */
+    public String normalizeBoardTypeFilter(String value) {
+
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        return toBoardTypeCode(value);
+    }
+
+    private String toBoardTypeCode(String value) {
 
         String trimmed = value.trim();
 
