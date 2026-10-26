@@ -37,7 +37,6 @@
 - GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED 목록, 최대 100개.
 - DELETE /admin/account-locks/{loginId}: ADMIN 전용 제한 해제, 기존 로그인 종료, 실패 기록 초기화.
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
-- 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
 
 아래는 초기 mock 함수 목록이다. 인증·회원·PDF·채팅 등 실제 연결도 있으므로 전체를 mock으로 간주하지 않는다. 현재 호출은 기능 코드로 확인한다.
 

@@ -1,40 +1,32 @@
 # ML 폴더·파일 안내
 
-실행 방법과 현재 상태는 [ML 작업 안내](home-handoff.md)를 확인한다.
-
-## 폴더 역할
-
-| 폴더 | 역할 |
-| --- | --- |
-| `app/` | PDF 거래 추출과 지출 카테고리 분류 API |
-| `scripts/` | 더미데이터 생성·train/test 분할·모델 학습 코드 |
-| `data/expense/category_dummy_v4_draft/` | 현재 사용하는 지출 설명·정답 후보 365건과 별도 보류 자료 |
-| `data/expense/category_dummy_v4_draft/train_test/` | 학습·시험 자료와 분할 요약 |
-| `models/expense_classifier/` | 두 모델·시험 결과·서버에서 선택해 사용할 모델 정보 |
-| `models/expense_baseline_v1/` | 이전 실험 결과 보존본 |
-| `docs/` | 파일 역할과 실행 안내 |
-
-## 파일 역할
+## 학습과 직접 시험
 
 | 파일 | 역할 |
 | --- | --- |
-| `app/main.py` | 서버 시작 시 모델을 읽고 기존 PDF 응답의 지출 거래에 예측 카테고리를 추가 |
-| `app/pdf_parser.py` | PDF·OCR에서 날짜·구분·설명·금액 등 거래 정보를 추출 |
-| `app/__init__.py` | app을 Python 패키지로 구성 |
-| `scripts/generate_dummy.py` | 설명·정답 카테고리 후보 생성 |
-| `scripts/split_expense_data.py` | 같은 그룹을 함께 유지하며 train/test 분할 |
-| `scripts/train_expense.py` | 설명 전처리 Pipeline과 두 분류 모델을 학습·시험·저장 |
-| `data/expense/category_dummy_v4_draft/labeled_candidates.csv` | 학습·시험에 사용할 설명·정답 후보 |
-| `data/expense/category_dummy_v4_draft/review_cases.csv` | 카테고리 기준이 미확정인 경계 사례. 이번 학습에서 제외 |
-| `data/expense/category_dummy_v4_draft/needs_info.csv` | 설명이 부족한 사례. 이번 학습에서 제외 |
-| `data/expense/category_dummy_v4_draft/manifest.json` | 원본 데이터의 출처·건수·검토 상태 |
-| `data/expense/category_dummy_v4_draft/train_test/train.csv` | 전처리와 모델을 학습할 설명·정답 |
-| `data/expense/category_dummy_v4_draft/train_test/test.csv` | 학습에 넣지 않고 두 모델을 비교할 설명·정답 |
-| `data/expense/category_dummy_v4_draft/train_test/split_manifest.json` | 분할 비율·시드·원본 식별값·분할 건수 |
-| `models/expense_classifier/logistic_regression_bundle.pkl` | TF-IDF와 로지스틱 회귀 모델을 함께 저장 |
-| `models/expense_classifier/linear_svc_bundle.pkl` | TF-IDF와 선형 SVM 모델을 함께 저장 |
-| `models/expense_classifier/test_report.json` | 정확도·macro F1·카테고리별 결과와 API 선택 모델 |
-| `models/expense_classifier/test_predictions.csv` | 시험 자료의 설명·정답·두 모델 예측을 한 행씩 비교 |
+| `data/expense/training/training_data.csv` | 정답이 있는 365건 전체. 두 모델이 배우는 유일한 기본 학습 CSV |
+| `data/expense/testing/test_data.csv` | 직접 확인할 새 설명. 학습에는 사용하지 않음 |
+| `scripts/train_expense.py` | 전체 학습 CSV로 LogisticRegression·LinearSVC를 학습 |
+| `scripts/test_expense.py` | 직접 입력 또는 시험 CSV로 두 모델의 결과·점수를 화면에 출력 |
+| `scripts/retrain_expense.py` | 전체 기본 자료와 승인된 추가 CSV로 새 모델 생성 |
+
+## 서버와 결과 파일
+
+| 파일 | 역할 |
+| --- | --- |
+| `app/main.py` | PDF 거래 설명을 선택한 모델로 분류 |
+| `app/pdf_parser.py` | PDF·OCR에서 거래 정보를 추출 |
+| `app/__init__.py` | Python 패키지 표시 |
+| `requirements.txt` | 실행에 필요한 라이브러리 목록 |
+| `models/expense_classifier/*_bundle.pkl` | 설명 전처리와 모델 두 개 |
+| `models/expense_classifier/model_report.json` | 학습 건수·원본 식별값·서버 선택 모델. 현재 시험 정확도는 담지 않음 |
+| `models/expense_classifier/previous_test_report.json` | 이전 292/73 분할 실험의 점수. 현재 전체 학습 모델의 점수가 아님 |
+| `models/expense_classifier/previous_test_predictions.csv` | 이전 분할 실험의 개별 예측 기록 |
+| `data/expense/reference/manifest.json` | 기본 데이터의 출처·건수·검토 상태 |
+| `data/expense/reference/needs_info.csv` | 설명이 부족한 더미 사례. 학습 제외 |
+| `data/expense/reference/review_cases.csv` | 정답 기준이 미확정인 더미 사례. 학습 제외 |
+| `docs/home-handoff.md` | 현재 실행 방법 |
+| `docs/retraining.md` | 추가 CSV 재학습 방법 |
 
 ## 정답 코드와 카테고리
 
@@ -60,10 +52,9 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 
 ## 읽는 순서
 
-1. `data/expense/category_dummy_v4_draft/labeled_candidates.csv`: 설명과 정답 후보 확인
-2. `scripts/split_expense_data.py`: 학습·시험 분할 방식 확인
-3. `scripts/train_expense.py`: 전처리·두 모델 학습·시험 방식 확인
-4. `models/expense_classifier/test_predictions.csv`: 시험 설명과 두 모델의 예측 비교
-5. `app/main.py`: 선택한 모델을 PDF 거래에 연결하는 코드 확인
+1. `training_data.csv`: 모델이 배우는 설명과 정답
+2. `train_expense.py`: 두 모델 학습
+3. `data/expense/testing/test_data.csv`와 `test_expense.py`: 새 설명으로 직접 시험
+4. `app/main.py`: PDF 거래와 모델 연결
 
-기존 버전과 이번 결과는 데이터·분할이 다르므로 점수를 단순 비교하지 않는다. 별도 validation 자료는 사용하지 않는다.
+기존 train/test 분할 파일과 분할 스크립트는 제거했다.
