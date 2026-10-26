@@ -13,6 +13,7 @@ from pdfminer.pdfparser import PDFSyntaxError
 from pdfplumber.utils.exceptions import PdfminerException
 
 from . import pdf_parser
+from .expense_classifier import classify_descriptions
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -20,9 +21,9 @@ MODEL_DIR = Path(__file__).resolve().parents[1] / "models/expense_classifier"
 
 
 def load_expense_model() -> dict:
-    """학습·시험 비교에서 선택한 지출 모델과 전처리 파이프라인을 읽는다."""
+    """전체 데이터로 학습한 지출 모델과 전처리 파이프라인을 읽는다."""
     try:
-        report = json.loads((MODEL_DIR / "test_report.json").read_text(encoding="utf-8"))
+        report = json.loads((MODEL_DIR / "model_report.json").read_text(encoding="utf-8"))
         selected = report["selected_model"]
         if selected not in ("logistic_regression", "linear_svc"):
             raise ValueError("선택한 모델 이름이 올바르지 않습니다.")
@@ -30,7 +31,7 @@ def load_expense_model() -> dict:
         return joblib.load(MODEL_DIR / f"{selected}_bundle.pkl")
     except (FileNotFoundError, KeyError, ValueError) as exc:
         raise RuntimeError(
-            "지출 모델을 먼저 준비해주세요: python scripts/split_expense_data.py → python scripts/train_expense.py"
+            "지출 모델을 먼저 준비해주세요: python scripts/train_expense.py"
         ) from exc
 
 
@@ -169,9 +170,9 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
 
     try:
         # 설명 배열과 원래 거래 참조를 같은 순서로 보관하므로 날짜·금액을 다시 조합하지 않는다.
-        predictions = model["pipeline"].predict(descriptions)
-        for transaction, category in zip(targets, predictions):
-            transaction["category"] = str(category)
+        predictions = classify_descriptions(model["pipeline"], model["model_name"], descriptions)
+        for transaction, prediction in zip(targets, predictions):
+            transaction["category"] = prediction["category"]
     except Exception as exc:
         logger.exception("지출 카테고리 예측 실패")
         raise HTTPException(status_code=503, detail={

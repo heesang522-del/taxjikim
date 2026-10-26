@@ -1,0 +1,379 @@
+{
+  "created_at": "2026-10-23T16:53:22.929406+09:00",
+  "sklearn_version": "1.9.1",
+  "train_count": 292,
+  "test_count": 73,
+  "model_input": [
+    "description"
+  ],
+  "labels": [
+    "AD_PROMOTION",
+    "EQUIPMENT",
+    "OTHER",
+    "OUTSOURCING",
+    "SOFTWARE_LICENSE",
+    "SPACE_RENTAL",
+    "SUPPLIES_PROPS",
+    "TELECOMMUNICATION",
+    "TRANSPORT"
+  ],
+  "dataset_review_status": "PENDING",
+  "data_hashes": {
+    "train.csv": "a51e2f25de5225d2ae8fcbaf74c77113b69e850efe5600547dd36c81ce767e3c",
+    "test.csv": "e0609ba0be867ea6e406625a598983cd3d88b5bb92c9ddb481f4ae1b3c19cd11",
+    "split_manifest.json": "540822275cd81391be53b78547e7bae578fc3cf6d39c87d5c94e84ac24572d1d"
+  },
+  "selection_rule": "macro_f1_then_accuracy_on_same_test",
+  "limitation": "합성 후보의 같은 시험 자료로 비교·선택한 결과이며 별도의 독립 최종 평가 점수가 아님",
+  "candidates": {
+    "logistic_regression": {
+      "accuracy": 0.9726027397260274,
+      "macro_f1": 0.9728012842563926,
+      "classification_report": {
+        "AD_PROMOTION": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 8.0
+        },
+        "EQUIPMENT": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 9.0
+        },
+        "OTHER": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 6.0
+        },
+        "OUTSOURCING": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 8.0
+        },
+        "SOFTWARE_LICENSE": {
+          "precision": 0.9,
+          "recall": 1.0,
+          "f1-score": 0.9473684210526315,
+          "support": 9.0
+        },
+        "SPACE_RENTAL": {
+          "precision": 0.8888888888888888,
+          "recall": 1.0,
+          "f1-score": 0.9411764705882353,
+          "support": 8.0
+        },
+        "SUPPLIES_PROPS": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 9.0
+        },
+        "TELECOMMUNICATION": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1-score": 0.9333333333333333,
+          "support": 8.0
+        },
+        "TRANSPORT": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1-score": 0.9333333333333333,
+          "support": 8.0
+        },
+        "accuracy": 0.9726027397260274,
+        "macro avg": {
+          "precision": 0.9765432098765431,
+          "recall": 0.9722222222222222,
+          "f1-score": 0.9728012842563926,
+          "support": 73.0
+        },
+        "weighted avg": {
+          "precision": 0.9754946727549467,
+          "recall": 0.9726027397260274,
+          "f1-score": 0.9724528888700398,
+          "support": 73.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          8,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          9,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          6,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          8,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          9,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          8,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          7,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          7
+        ]
+      ]
+    },
+    "linear_svc": {
+      "accuracy": 0.958904109589041,
+      "macro_f1": 0.9597676107480029,
+      "classification_report": {
+        "AD_PROMOTION": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 8.0
+        },
+        "EQUIPMENT": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 9.0
+        },
+        "OTHER": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 6.0
+        },
+        "OUTSOURCING": {
+          "precision": 0.8888888888888888,
+          "recall": 1.0,
+          "f1-score": 0.9411764705882353,
+          "support": 8.0
+        },
+        "SOFTWARE_LICENSE": {
+          "precision": 0.8888888888888888,
+          "recall": 0.8888888888888888,
+          "f1-score": 0.8888888888888888,
+          "support": 9.0
+        },
+        "SPACE_RENTAL": {
+          "precision": 0.8888888888888888,
+          "recall": 1.0,
+          "f1-score": 0.9411764705882353,
+          "support": 8.0
+        },
+        "SUPPLIES_PROPS": {
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1-score": 1.0,
+          "support": 9.0
+        },
+        "TELECOMMUNICATION": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1-score": 0.9333333333333333,
+          "support": 8.0
+        },
+        "TRANSPORT": {
+          "precision": 1.0,
+          "recall": 0.875,
+          "f1-score": 0.9333333333333333,
+          "support": 8.0
+        },
+        "accuracy": 0.958904109589041,
+        "macro avg": {
+          "precision": 0.9629629629629629,
+          "recall": 0.9598765432098766,
+          "f1-score": 0.9597676107480029,
+          "support": 73.0
+        },
+        "weighted avg": {
+          "precision": 0.9619482496194826,
+          "recall": 0.958904109589041,
+          "f1-score": 0.9587966693526727,
+          "support": 73.0
+        }
+      },
+      "confusion_matrix": [
+        [
+          8,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          9,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          6,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          8,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          8,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          8,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          9,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          7,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          7
+        ]
+      ]
+    }
+  },
+  "selected_model": "logistic_regression"
+}

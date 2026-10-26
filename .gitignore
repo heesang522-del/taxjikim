@@ -17,10 +17,38 @@
 *.py[cod]
 **/.ipynb_checkpoints/
 
+# 현재 합성 더미데이터만 공유하고 실제 거래 데이터는 계속 제외한다.
 /ml/data/*
 !/ml/data/.gitkeep
+!/ml/data/expense/
+/ml/data/expense/*
+!/ml/data/expense/training/
+!/ml/data/expense/testing/
+!/ml/data/expense/reference/
+
+# 수입 합성 학습·시험 자료와 카테고리 안내만 공유한다. 사용자 수집 자료는 제외한다.
+!/ml/data/income/
+/ml/data/income/*
+!/ml/data/income/training/
+!/ml/data/income/testing/
+/ml/data/income/training/*
+/ml/data/income/testing/*
+!/ml/data/income/training/training_data.csv
+!/ml/data/income/testing/test_data.csv
+!/ml/data/income/reference/
+/ml/data/income/reference/*
+!/ml/data/income/reference/categories.md
+
+# 서버 실행에 필요한 현재 모델과 두 모델 비교 결과만 공유한다.
 /ml/models/*
 !/ml/models/.gitkeep
+!/ml/models/expense_classifier/
+/ml/models/expense_classifier/*
+!/ml/models/expense_classifier/logistic_regression_bundle.pkl
+!/ml/models/expense_classifier/linear_svc_bundle.pkl
+!/ml/models/expense_classifier/model_report.json
+!/ml/models/expense_classifier/previous_test_report.json
+!/ml/models/expense_classifier/previous_test_predictions.csv
 
 # IntelliJ IDEA
 **/.idea/
