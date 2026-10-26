@@ -13,6 +13,7 @@ from pdfminer.pdfparser import PDFSyntaxError
 from pdfplumber.utils.exceptions import PdfminerException
 
 from . import pdf_parser
+from .expense_classifier import classify_descriptions
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -169,9 +170,9 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
 
     try:
         # 설명 배열과 원래 거래 참조를 같은 순서로 보관하므로 날짜·금액을 다시 조합하지 않는다.
-        predictions = model["pipeline"].predict(descriptions)
-        for transaction, category in zip(targets, predictions):
-            transaction["category"] = str(category)
+        predictions = classify_descriptions(model["pipeline"], model["model_name"], descriptions)
+        for transaction, prediction in zip(targets, predictions):
+            transaction["category"] = prediction["category"]
     except Exception as exc:
         logger.exception("지출 카테고리 예측 실패")
         raise HTTPException(status_code=503, detail={

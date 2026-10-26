@@ -4,11 +4,11 @@
 
 | 파일 | 역할 |
 | --- | --- |
-| `data/expense/training/training_data.csv` | 정답이 있는 365건 전체. 두 모델이 배우는 유일한 기본 학습 CSV |
-| `data/expense/testing/test_data.csv` | 직접 확인할 새 설명. 학습에는 사용하지 않음 |
-| `scripts/train_expense.py` | 전체 학습 CSV로 LogisticRegression·LinearSVC를 학습 |
+| `data/expense/training/training_data.csv` | 정답이 있는 학습 CSV 전체. 두 모델이 배우는 유일한 기본 학습 CSV |
+| `data/expense/training/training_data_simple.csv` | 품목·서비스 중심의 비교용 데이터. train_expense.py --simple로 선택 |
+| `data/expense/testing/test_data.csv` | 직접 확인할 새 설명. 직접 입력 시험 시 자동 누적하며 학습에는 사용하지 않음 |
+| `scripts/train_expense.py` | 기본 CSV와 추가 CSV(있을 때)를 합쳐 LogisticRegression·LinearSVC를 학습 |
 | `scripts/test_expense.py` | 직접 입력 또는 시험 CSV로 두 모델의 결과·점수를 화면에 출력 |
-| `scripts/retrain_expense.py` | 전체 기본 자료와 승인된 추가 CSV로 새 모델 생성 |
 
 ## 서버와 결과 파일
 
@@ -58,3 +58,28 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 4. `app/main.py`: PDF 거래와 모델 연결
 
 기존 train/test 분할 파일과 분할 스크립트는 제거했다.
+
+## 선택형 SetFit 시험
+
+- `train_expense.py --setfit`: 사전학습 언어 모델 기반의 별도 시험 모델 생성
+- `test_expense.py --setfit`: 기존 두 모델과 SetFit 예측을 함께 확인
+- `models/expense_setfit/`: SetFit 시험 모델. 서버에서 사용하지 않음
+- `models/.hf_cache/`: 최초 모델 다운로드 캐시
+
+실행 방법과 제한은 home-handoff.md의 SetFit 항목을 확인한다.
+
+## 단순화 모델 선택
+
+- `--simple`: 학습에서는 training_data_simple.csv, 시험에서는 단순화 모델을 선택
+- `models/expense_classifier_simple/`: 단순화 CSV로 학습한 LogisticRegression·LinearSVC
+- `models/expense_setfit_simple/`: 단순화 CSV로 학습한 SetFit
+- 기본 명령과 서비스 모델 경로는 유지한다.
+
+### 합친 데이터 비교용 파일
+
+- `data/expense/training/training_data_combined.csv`: 기존·단순화 원본을 합치고 중복을 제거한 학습 자료. `--combined` 학습 때 다시 생성한다.
+- `models/expense_classifier_combined/`: 합친 데이터로 학습한 LogisticRegression·LinearSVC와 학습 기록.
+- `models/expense_setfit_combined/`: 합친 데이터로 학습한 SetFit과 학습 기록.
+- 학습·시험 스크립트에 `--combined`를 붙여 선택한다. 직접 수정할 학습 자료는 두 원본 CSV다.
+
+- `app/expense_classifier.py`: 최고 점수와 1·2위 차이로 미분류를 판정한다. 서버와 직접 시험이 공유한다.
