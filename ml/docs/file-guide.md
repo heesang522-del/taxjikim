@@ -1,40 +1,32 @@
 # ML 폴더·파일 안내
 
-실행 방법과 현재 상태는 [ML 작업 안내](home-handoff.md)를 확인한다.
-
-## 폴더 역할
-
-| 폴더 | 역할 |
-| --- | --- |
-| `app/` | PDF 거래 추출과 지출 카테고리 분류 API |
-| `scripts/` | 더미데이터 생성·train/test 분할·모델 학습 코드 |
-| `data/expense/category_dummy_v4_draft/` | 현재 사용하는 지출 설명·정답 후보 365건과 별도 보류 자료 |
-| `data/expense/category_dummy_v4_draft/train_test/` | 학습·시험 자료와 분할 요약 |
-| `models/expense_classifier/` | 두 모델·시험 결과·서버에서 선택해 사용할 모델 정보 |
-| `models/expense_baseline_v1/` | 이전 실험 결과 보존본 |
-| `docs/` | 파일 역할과 실행 안내 |
-
-## 파일 역할
+## 학습과 직접 시험
 
 | 파일 | 역할 |
 | --- | --- |
-| `app/main.py` | 서버 시작 시 모델을 읽고 기존 PDF 응답의 지출 거래에 예측 카테고리를 추가 |
-| `app/pdf_parser.py` | PDF·OCR에서 날짜·구분·설명·금액 등 거래 정보를 추출 |
-| `app/__init__.py` | app을 Python 패키지로 구성 |
-| `scripts/generate_dummy.py` | 설명·정답 카테고리 후보 생성 |
-| `scripts/split_expense_data.py` | 같은 그룹을 함께 유지하며 train/test 분할 |
-| `scripts/train_expense.py` | 설명 전처리 Pipeline과 두 분류 모델을 학습·시험·저장 |
-| `data/expense/category_dummy_v4_draft/labeled_candidates.csv` | 학습·시험에 사용할 설명·정답 후보 |
-| `data/expense/category_dummy_v4_draft/review_cases.csv` | 카테고리 기준이 미확정인 경계 사례. 이번 학습에서 제외 |
-| `data/expense/category_dummy_v4_draft/needs_info.csv` | 설명이 부족한 사례. 이번 학습에서 제외 |
-| `data/expense/category_dummy_v4_draft/manifest.json` | 원본 데이터의 출처·건수·검토 상태 |
-| `data/expense/category_dummy_v4_draft/train_test/train.csv` | 전처리와 모델을 학습할 설명·정답 |
-| `data/expense/category_dummy_v4_draft/train_test/test.csv` | 학습에 넣지 않고 두 모델을 비교할 설명·정답 |
-| `data/expense/category_dummy_v4_draft/train_test/split_manifest.json` | 분할 비율·시드·원본 식별값·분할 건수 |
-| `models/expense_classifier/logistic_regression_bundle.pkl` | TF-IDF와 로지스틱 회귀 모델을 함께 저장 |
-| `models/expense_classifier/linear_svc_bundle.pkl` | TF-IDF와 선형 SVM 모델을 함께 저장 |
-| `models/expense_classifier/test_report.json` | 정확도·macro F1·카테고리별 결과와 API 선택 모델 |
-| `models/expense_classifier/test_predictions.csv` | 시험 자료의 설명·정답·두 모델 예측을 한 행씩 비교 |
+| `data/expense/training/training_data.csv` | 정답이 있는 학습 CSV 전체. 두 모델이 배우는 유일한 기본 학습 CSV |
+| `data/expense/training/training_data_simple.csv` | 품목·서비스 중심의 비교용 데이터. train_expense.py --simple로 선택 |
+| `data/expense/testing/test_data.csv` | 직접 확인할 새 설명. 직접 입력 시험 시 자동 누적하며 학습에는 사용하지 않음 |
+| `scripts/train_expense.py` | 기본 CSV와 추가 CSV(있을 때)를 합쳐 LogisticRegression·LinearSVC를 학습 |
+| `scripts/test_expense.py` | 직접 입력 또는 시험 CSV로 두 모델의 결과·점수를 화면에 출력 |
+
+## 서버와 결과 파일
+
+| 파일 | 역할 |
+| --- | --- |
+| `app/main.py` | PDF 거래 설명을 선택한 모델로 분류 |
+| `app/pdf_parser.py` | PDF·OCR에서 거래 정보를 추출 |
+| `app/__init__.py` | Python 패키지 표시 |
+| `requirements.txt` | 실행에 필요한 라이브러리 목록 |
+| `models/expense_classifier/*_bundle.pkl` | 설명 전처리와 모델 두 개 |
+| `models/expense_classifier/model_report.json` | 학습 건수·원본 식별값·서버 선택 모델. 현재 시험 정확도는 담지 않음 |
+| `models/expense_classifier/previous_test_report.json` | 이전 292/73 분할 실험의 점수. 현재 전체 학습 모델의 점수가 아님 |
+| `models/expense_classifier/previous_test_predictions.csv` | 이전 분할 실험의 개별 예측 기록 |
+| `data/expense/reference/manifest.json` | 기본 데이터의 출처·건수·검토 상태 |
+| `data/expense/reference/needs_info.csv` | 설명이 부족한 더미 사례. 학습 제외 |
+| `data/expense/reference/review_cases.csv` | 정답 기준이 미확정인 더미 사례. 학습 제외 |
+| `docs/home-handoff.md` | 현재 실행 방법 |
+| `docs/retraining.md` | 추가 CSV 재학습 방법 |
 
 ## 정답 코드와 카테고리
 
@@ -56,14 +48,74 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 | 공통 | `OTHER` | 기타 — 용도는 알지만 위 범주에 포함되지 않는 거래 |
 | 공통 | `UNCLASSIFIED` | 미분류 — 설명이 부족하거나 판단을 보류한 거래 |
 
-`AD_SPONSORSHIP`은 광고로 **받은 수입**, `AD_PROMOTION`은 광고를 위해 **쓴 지출**이다. 미분류는 억지로 정답을 붙여 학습하는 카테고리가 아니다. 현재 생성 CSV에는 지출 후보만 있으며 수입 후보는 아직 추가하지 않았다.
+`AD_SPONSORSHIP`은 광고로 **받은 수입**, `AD_PROMOTION`은 광고를 위해 **쓴 지출**이다. 미분류는 억지로 정답을 붙여 학습하는 카테고리가 아니다. 수입과 지출 학습 자료는 각 data/income, data/expense 폴더에서 관리한다.
 
 ## 읽는 순서
 
-1. `data/expense/category_dummy_v4_draft/labeled_candidates.csv`: 설명과 정답 후보 확인
-2. `scripts/split_expense_data.py`: 학습·시험 분할 방식 확인
-3. `scripts/train_expense.py`: 전처리·두 모델 학습·시험 방식 확인
-4. `models/expense_classifier/test_predictions.csv`: 시험 설명과 두 모델의 예측 비교
-5. `app/main.py`: 선택한 모델을 PDF 거래에 연결하는 코드 확인
+1. `training_data.csv`: 모델이 배우는 설명과 정답
+2. `train_expense.py`: 두 모델 학습
+3. `data/expense/testing/test_data.csv`와 `test_expense.py`: 새 설명으로 직접 시험
+4. `app/main.py`: PDF 거래와 모델 연결
 
-기존 버전과 이번 결과는 데이터·분할이 다르므로 점수를 단순 비교하지 않는다. 별도 validation 자료는 사용하지 않는다.
+기존 train/test 분할 파일과 분할 스크립트는 제거했다.
+
+## 선택형 SetFit 시험
+
+- `train_expense.py --setfit`: 사전학습 언어 모델 기반의 별도 시험 모델 생성
+- `test_expense.py --setfit`: 기존 두 모델과 SetFit 예측을 함께 확인
+- `models/expense_setfit/`: SetFit 시험 모델. 서버에서 사용하지 않음
+- `models/.hf_cache/`: 최초 모델 다운로드 캐시
+
+실행 방법과 제한은 home-handoff.md의 SetFit 항목을 확인한다.
+
+## 단순화 모델 선택
+
+- `--simple`: 학습에서는 training_data_simple.csv, 시험에서는 단순화 모델을 선택
+- `models/expense_classifier_simple/`: 단순화 CSV로 학습한 LogisticRegression·LinearSVC
+- `models/expense_setfit_simple/`: 단순화 CSV로 학습한 SetFit
+- 기본 명령과 서비스 모델 경로는 유지한다.
+
+### 합친 데이터 비교용 파일
+
+- `data/expense/training/training_data_combined.csv`: 기존·단순화 원본을 합치고 중복을 제거한 학습 자료. `--combined` 학습 때 다시 생성한다.
+- `models/expense_classifier_combined/`: 합친 데이터로 학습한 LogisticRegression·LinearSVC와 학습 기록.
+- `models/expense_setfit_combined/`: 합친 데이터로 학습한 SetFit과 학습 기록.
+- 학습·시험 스크립트에 `--combined`를 붙여 선택한다. 직접 수정할 학습 자료는 두 원본 CSV다.
+
+- `app/expense_classifier.py`: 최고 점수와 1·2위 차이로 미분류를 판정한다. 서버와 직접 시험이 공유한다.
+
+## 수입 분류 구조 (TJK-190)
+
+| 파일 | 역할 |
+| --- | --- |
+| `data/income/training/training_data.csv` | PDF에서 추출한 수입 설명·정답 학습 자료 |
+| `data/income/testing/test_data.csv` | 직접 시험한 수입 설명과 확인할 정답 기록 |
+| `scripts/train_income.py` | 수입 CSV를 읽어 전처리·모델 학습·저장. `--setfit`이면 SetFit 학습 |
+| `scripts/test_income.py` | 저장한 수입 모델로 설명을 시험하고 점수·미분류 사유 표시 |
+| `app/income_classifier.py` | 수입 모델 점수와 격차로 분류·미분류 판단 |
+| `models/income_classifier/` | 수입 LogisticRegression·LinearSVC와 학습 기록 저장 위치 |
+| `models/income_setfit/` | 수입 SetFit과 학습 기록 저장 위치 |
+
+수입 코드는 `YOUTUBE_SETTLEMENT`(유튜브 정산), `AD_SPONSORSHIP`(광고·협찬),
+`EXTERNAL_SUPPORT`(외부 후원), `OTHER`(기타)를 사용한다. `UNCLASSIFIED`는 학습 정답에 넣지 않는다.
+두 가상 PDF의 수입 49건에서 같은 설명을 제거한 7개를 추가했다. 초기 자료는 정산 2개·광고/협찬 3개·외부 후원 2개다. 이후 사용자가 확인한 예시 14개를 보강해 현재 총 21개다.
+거래 설명은 원문을 유지하고 거래처·날짜·금액은 학습 열에 넣지 않았다. 검토 상태는 PENDING이다.
+수입 21개로 LogisticRegression·LinearSVC·SetFit 학습과 저장 모델 재로딩을 확인했다. 성능 평가는 별도다. 심플 데이터는 나중에 별도로 작성한다. 기타에는 영상 소스·굿즈 판매·강의료 예시를 포함한다. 최소 두 카테고리의 자료가 있어야 학습할 수 있다.
+모델은 설명만 입력받으며 sample_id·group_id·review_status는 학습 자료 관리용이다.
+추가 자료는 `data/income/user_approved/`가 있을 때 합치며 현재 지출 구조와 같은 APPROVED 제한이 있다.
+사용자 데이터 자동 수집과 기존 CSV에 누적하는 연결은 아직 구현하지 않았다.
+미분류 기준은 지출에서 가져온 임시값이므로 수입 자료를 시험한 뒤 다시 정해야 한다.
+현재 PDF 서버의 수입 처리는 바꾸지 않았다. 데이터 추가·학습·시험 후 연결한다.
+
+데이터를 추가한 다음 프로젝트 루트에서 실행한다.
+
+```powershell
+python ml/scripts/train_income.py
+python ml/scripts/train_income.py --setfit
+python ml/scripts/test_income.py --setfit
+```
+
+재학습에는 학습 명령 끝에 `--overwrite`를 붙인다. 시험은 `--setfit`을 빼면 머신러닝 두 모델만 비교한다.
+
+- `data/expense/reference/categories.md`: 지출 정답 코드·한글 이름·포함 예시와 미분류의 차이를 확인하는 안내.
+- `data/income/reference/categories.md`: 수입 정답 코드·한글 이름·포함 예시와 미분류의 차이를 확인하는 안내.
