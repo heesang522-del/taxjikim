@@ -209,3 +209,22 @@ python ml/scripts/test_expense.py --combined --setfit
 기준 검토에 사용했던 사례를 다시 확인한 결과이며 독립 시험 정확도로 해석하지 않는다.
 경계값·점수 부족·격차 부족·빈 설명, 세 모델 시험 출력, PDF 처리 함수와 분류 함수의 연결을 확인했다.
 PDF 추출 결과를 대체한 함수 호출 점검으로, 실제 PDF 파일과 Spring·화면을 통한 전체 실행은 별도 확인이 필요하다.
+
+## TJK-190 수입 분류 작업 상태
+
+지출과 같은 구조의 `train_income.py`, `test_income.py`, `app/income_classifier.py`와 빈 CSV 양식을 추가했다.
+LogisticRegression·LinearSVC·선택적 SetFit 학습 경로를 수입 전용으로 분리했다.
+초기 구조 생성 후, 가상 PDF 2개에서 수입 설명 7개를 training_data.csv에 추가했다. 이후 예시를 보강한 21개로 수입 세 모델을 학습하고 시험 명령 실행을 확인했다.
+TJK-190은 수입 학습·직접 시험과 현재 임시 기준을 적용한 미분류 처리 범위로 마무리했다.
+지출에서 가져온 미분류 수치는 유지한다. 데이터 보강과 기준 개선은 추후 작업이며 PDF 서버 연결은 별도 작업이다.
+파일 역할과 실행 명령은 file-guide.md의 수입 분류 구조를 참고한다.
+
+### 첫 수입 학습 자료 추가
+
+출처는 `creator_transactions_100.pdf`와 `creator_tax_dummy_100_transactions.pdf`다.
+수입 26건·23건에서 반복 설명을 제외한 7개를 원문으로 넣었다. 금액·거래처는 제외했다.
+정답: 유튜브 정산 계열은 YOUTUBE_SETTLEMENT, 협찬·제휴 콘텐츠 대금은 AD_SPONSORSHIP,
+외부 후원은 EXTERNAL_SUPPORT. 기타는 해당 설명이 없어 추가하지 않았다.
+PDF 원본을 저장소에 복사하지 않았다. 심플 자료 작성·모델 학습은 이번 작업에서 하지 않았다.
+
+수입 시험 시작 시 모델이 없다는 오류가 나면 먼저 train_income.py를 실행한다. --setfit 시험에는 train_income.py --setfit 학습도 필요하다. 현재 로컬에는 두 학습을 완료한 모델이 있다.

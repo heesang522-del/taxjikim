@@ -48,7 +48,7 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 | 공통 | `OTHER` | 기타 — 용도는 알지만 위 범주에 포함되지 않는 거래 |
 | 공통 | `UNCLASSIFIED` | 미분류 — 설명이 부족하거나 판단을 보류한 거래 |
 
-`AD_SPONSORSHIP`은 광고로 **받은 수입**, `AD_PROMOTION`은 광고를 위해 **쓴 지출**이다. 미분류는 억지로 정답을 붙여 학습하는 카테고리가 아니다. 현재 생성 CSV에는 지출 후보만 있으며 수입 후보는 아직 추가하지 않았다.
+`AD_SPONSORSHIP`은 광고로 **받은 수입**, `AD_PROMOTION`은 광고를 위해 **쓴 지출**이다. 미분류는 억지로 정답을 붙여 학습하는 카테고리가 아니다. 수입과 지출 학습 자료는 각 data/income, data/expense 폴더에서 관리한다.
 
 ## 읽는 순서
 
@@ -83,3 +83,39 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 - 학습·시험 스크립트에 `--combined`를 붙여 선택한다. 직접 수정할 학습 자료는 두 원본 CSV다.
 
 - `app/expense_classifier.py`: 최고 점수와 1·2위 차이로 미분류를 판정한다. 서버와 직접 시험이 공유한다.
+
+## 수입 분류 구조 (TJK-190)
+
+| 파일 | 역할 |
+| --- | --- |
+| `data/income/training/training_data.csv` | PDF에서 추출한 수입 설명·정답 학습 자료 |
+| `data/income/testing/test_data.csv` | 직접 시험한 수입 설명과 확인할 정답 기록 |
+| `scripts/train_income.py` | 수입 CSV를 읽어 전처리·모델 학습·저장. `--setfit`이면 SetFit 학습 |
+| `scripts/test_income.py` | 저장한 수입 모델로 설명을 시험하고 점수·미분류 사유 표시 |
+| `app/income_classifier.py` | 수입 모델 점수와 격차로 분류·미분류 판단 |
+| `models/income_classifier/` | 수입 LogisticRegression·LinearSVC와 학습 기록 저장 위치 |
+| `models/income_setfit/` | 수입 SetFit과 학습 기록 저장 위치 |
+
+수입 코드는 `YOUTUBE_SETTLEMENT`(유튜브 정산), `AD_SPONSORSHIP`(광고·협찬),
+`EXTERNAL_SUPPORT`(외부 후원), `OTHER`(기타)를 사용한다. `UNCLASSIFIED`는 학습 정답에 넣지 않는다.
+두 가상 PDF의 수입 49건에서 같은 설명을 제거한 7개를 추가했다. 초기 자료는 정산 2개·광고/협찬 3개·외부 후원 2개다. 이후 사용자가 확인한 예시 14개를 보강해 현재 총 21개다.
+거래 설명은 원문을 유지하고 거래처·날짜·금액은 학습 열에 넣지 않았다. 검토 상태는 PENDING이다.
+수입 21개로 LogisticRegression·LinearSVC·SetFit 학습과 저장 모델 재로딩을 확인했다. 성능 평가는 별도다. 심플 데이터는 나중에 별도로 작성한다. 기타에는 영상 소스·굿즈 판매·강의료 예시를 포함한다. 최소 두 카테고리의 자료가 있어야 학습할 수 있다.
+모델은 설명만 입력받으며 sample_id·group_id·review_status는 학습 자료 관리용이다.
+추가 자료는 `data/income/user_approved/`가 있을 때 합치며 현재 지출 구조와 같은 APPROVED 제한이 있다.
+사용자 데이터 자동 수집과 기존 CSV에 누적하는 연결은 아직 구현하지 않았다.
+미분류 기준은 지출에서 가져온 임시값이므로 수입 자료를 시험한 뒤 다시 정해야 한다.
+현재 PDF 서버의 수입 처리는 바꾸지 않았다. 데이터 추가·학습·시험 후 연결한다.
+
+데이터를 추가한 다음 프로젝트 루트에서 실행한다.
+
+```powershell
+python ml/scripts/train_income.py
+python ml/scripts/train_income.py --setfit
+python ml/scripts/test_income.py --setfit
+```
+
+재학습에는 학습 명령 끝에 `--overwrite`를 붙인다. 시험은 `--setfit`을 빼면 머신러닝 두 모델만 비교한다.
+
+- `data/expense/reference/categories.md`: 지출 정답 코드·한글 이름·포함 예시와 미분류의 차이를 확인하는 안내.
+- `data/income/reference/categories.md`: 수입 정답 코드·한글 이름·포함 예시와 미분류의 차이를 확인하는 안내.
