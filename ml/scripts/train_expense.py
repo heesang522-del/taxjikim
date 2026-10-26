@@ -1,9 +1,13 @@
-"""지출 분류 모델 두 개를 같은 train/test로 비교하고 PDF 분류용 모델을 저장한다."""
+"""정답이 있는 전체 지출 데이터로 두 모델을 학습한다. 시험 입력은 별도로 받는다."""
 
 import argparse
 import csv
 import hashlib
 import json
+import os
+import shutil
+import tempfile
+import unicodedata
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -12,22 +16,41 @@ import joblib
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-DATA_DIR = BASE_DIR / "data/expense/category_dummy_v4_draft"
+DATA_DIR = BASE_DIR / "data/expense/training"
 OUTPUT_DIR = BASE_DIR / "models/expense_classifier"
+SETFIT_DIR = BASE_DIR / "models/expense_setfit"
+SIMPLE_OUTPUT_DIR = BASE_DIR / "models/expense_classifier_simple"
+SIMPLE_SETFIT_DIR = BASE_DIR / "models/expense_setfit_simple"
+COMBINED_OUTPUT_DIR = BASE_DIR / "models/expense_classifier_combined"
+COMBINED_SETFIT_DIR = BASE_DIR / "models/expense_setfit_combined"
+SETFIT_BASE_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+
+
+def read_csv(path: Path) -> list[dict[str, str]]:
+    """UTF-8 CSV를 행 목록으로 읽는다."""
+    with path.open(encoding="utf-8-sig", newline="") as file:
+        return list(csv.DictReader(file))
+
+
+def write_csv(path: Path, rows: list[dict[str, str]]) -> None:
+    """설명·정답 자료를 원래 열 그대로 CSV에 저장한다."""
+    with path.open("w", encoding="utf-8-sig", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def read_rows(path: Path) -> list[dict[str, str]]:
-    """분할된 지출 설명·정답 자료를 읽는다."""
-    with path.open(encoding="utf-8-sig", newline="") as file:
-        rows = list(csv.DictReader(file))
+    """설명과 정답 카테고리가 있는 학습 자료를 읽는다."""
+    rows = read_csv(path)
     if not rows or any(
-        not row.get("description", "").strip() or not row.get("category_code", "").strip()
+        not row.get("description", "").strip()
+        or not row.get("category_code", "").strip()
         for row in rows
     ):
         raise ValueError(f"설명·정답을 확인해주세요: {path.name}")
@@ -35,117 +58,238 @@ def read_rows(path: Path) -> list[dict[str, str]]:
 
 
 def build_pipeline(classifier: LogisticRegression | LinearSVC) -> Pipeline:
-    """기존 TF-IDF 전처리와 분류기를 함께 학습·저장하는 파이프라인을 만든다."""
+    """설명 전처리와 분류 모델을 학습·예측에서 함께 사용한다."""
     return Pipeline([
-        # 전처리는 학습 설명으로만 학습하며 API에서도 같은 파이프라인을 사용한다.
         ("tfidf", TfidfVectorizer(analyzer="char", ngram_range=(2, 5), sublinear_tf=True)),
         ("classifier", classifier),
     ])
 
 
+FIELDS = ("sample_id", "description", "category_code", "group_id", "review_status")
+
+
+def normalized(text: str) -> str:
+    """공백·대소문자·유니코드 표현 차이로 중복이 누락되지 않게 한다."""
+    return " ".join(unicodedata.normalize("NFKC", text).split()).casefold()
+
+
+def merge_training_rows(
+    train: list[dict[str, str]],
+    additions: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], dict[str, int]]:
+    """승인 자료만 합치고 설명 중복·정답 충돌을 차단한다."""
+    labels = {row["category_code"] for row in train}
+    seen: dict[str, dict[str, str]] = {
+        field: {} for field in ("sample_id", "group_id", "description")
+    }
+    merged = []
+    counts = {"added": 0, "duplicates": 0}
+    for index, original in enumerate(train + additions):
+        row = {field: (original.get(field) or "").strip() for field in FIELDS}
+        if any(not row[field] for field in FIELDS):
+            raise ValueError("CSV 필수값이 비어 있습니다: " + str(index + 1))
+        is_addition = index >= len(train)
+        if is_addition and row["review_status"] != "APPROVED":
+            raise ValueError("추가 CSV는 사람이 검토한 APPROVED 행만 허용합니다.")
+        label = row["category_code"]
+        if label not in labels:
+            raise ValueError(f"지원하지 않는 지출 카테고리: {label}")
+        keys = {field: normalized(row[field]) for field in seen}
+        for field, key in keys.items():
+            if key in seen[field] and seen[field][key] != label:
+                raise ValueError(f"같은 {field}에 서로 다른 정답이 있습니다.")
+        # 같은 ID의 다른 설명은 갱신으로 간주하지 않고 원본 확인을 요구한다.
+        if keys["sample_id"] in seen["sample_id"]:
+            matching = next(item for item in merged if normalized(item["sample_id"]) == keys["sample_id"])
+            if normalized(matching["description"]) != keys["description"] or normalized(matching["group_id"]) != keys["group_id"]:
+                raise ValueError("같은 sample_id의 내용이 변경되었습니다.")
+        duplicate = keys["description"] in seen["description"] or keys["sample_id"] in seen["sample_id"]
+        for field, key in keys.items():
+            seen[field][key] = label
+        if duplicate:
+            counts["duplicates"] += 1
+            continue
+        merged.append(row)
+        if is_addition:
+            counts["added"] += 1
+    return merged, counts
+
+
+def train_setfit(rows: list[dict[str, str]], output_dir: Path,
+                 steps: int, report: dict) -> None:
+    """한국어 지원 사전학습 모델을 제한된 횟수로 학습해 별도 시험 모델로 저장한다."""
+    os.environ.setdefault("HF_HOME", str(BASE_DIR / "models/.hf_cache"))
+    from datasets import Dataset
+    from setfit import SetFitModel, Trainer, TrainingArguments
+    import torch
+
+    # CPU 시험이 다른 작업을 지나치게 점유하지 않도록 스레드를 제한한다.
+    torch.set_num_threads(min(4, os.cpu_count() or 1))
+    labels = sorted({row["category_code"] for row in rows})
+    dataset = Dataset.from_dict({
+        "text": [row["description"] for row in rows],
+        "label": [labels.index(row["category_code"]) for row in rows],
+    })
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    lock = output_dir.parent / f".{output_dir.name}.train.lock"
+    with lock.open("x", encoding="utf-8") as file:
+        file.write("training setfit")
+    try:
+        with tempfile.TemporaryDirectory(prefix="setfit-trial-", dir=output_dir.parent) as temp:
+            model = SetFitModel.from_pretrained(SETFIT_BASE_MODEL, labels=labels, device="cpu")
+            arguments = TrainingArguments(
+                output_dir=str(Path(temp) / "checkpoints"),
+                batch_size=(8, 16), num_epochs=(1, 1), num_iterations=2,
+                max_steps=steps, max_length=64,
+                report_to="none", save_strategy="no", eval_strategy="no",
+                logging_steps=5, seed=42,
+            )
+            limit = "전체 1에포크" if steps == -1 else f"최대 {steps}단계"
+            print(f"SetFit 시험 학습: {len(rows)}건 / 언어 모델 {limit}", flush=True)
+            Trainer(model=model, args=arguments, train_dataset=dataset).train()
+            saved = Path(temp) / "model"
+            model.save_pretrained(str(saved))
+            restored = SetFitModel.from_pretrained(str(saved), device="cpu")
+            probe = [rows[0]["description"]]
+            if list(restored.predict(probe)) != list(model.predict(probe)):
+                raise ValueError("SetFit 저장 전후 예측 결과가 다릅니다.")
+            report.update({"selected_model": "setfit", "base_model": SETFIT_BASE_MODEL,
+                           "trial_max_steps": steps, "service_model_replaced": False})
+            (saved / "model_report.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+            )
+            # 서비스 모델 폴더와 분리된 시험 결과만 반영한다.
+            shutil.copytree(saved, output_dir, dirs_exist_ok=True)
+    finally:
+        lock.unlink()
+    print(f"SetFit 시험 모델 저장: {output_dir}")
+
+
 def main() -> None:
-    """두 모델을 학습·시험하고 비교 결과와 사용할 모델 이름을 저장한다."""
+    """추가 CSV가 있으면 합치고, 없으면 기본 CSV만 학습한다."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--overwrite", action="store_true", help="기존 학습 결과 덮어쓰기")
+    parser.add_argument("--overwrite", action="store_true", help="기존 모델 덮어쓰기")
+    parser.add_argument("--data-dir", type=Path, default=DATA_DIR)
+    datasets = parser.add_mutually_exclusive_group()
+    datasets.add_argument("--simple", action="store_true", help="단순화 CSV로 별도 비교 모델 학습")
+    datasets.add_argument("--combined", action="store_true", help="기존·단순화 CSV를 합쳐 별도 모델 학습")
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--setfit", action="store_true", help="기존 모델 대신 SetFit 별도 시험 학습")
+    parser.add_argument("--setfit-steps", type=int, default=-1, help="-1: 전체 1에포크, 양수: 최대 학습 단계")
+    parser.add_argument("--incoming-dir", type=Path,
+                        default=BASE_DIR / "data/expense/user_approved",
+                        help="추가 CSV 폴더. 없거나 비어 있으면 기본 자료만 학습")
+    parser.add_argument("--selected-model", choices=("logistic_regression", "linear_svc"),
+                        default="logistic_regression", help="서버에서 사용할 모델 (자동 비교 선택 아님)")
     args = parser.parse_args()
-    if OUTPUT_DIR.exists() and not args.overwrite:
-        parser.error("학습 결과가 이미 있습니다. 다시 실행하려면 --overwrite를 지정하세요.")
+    default_output = (SIMPLE_SETFIT_DIR if args.setfit else SIMPLE_OUTPUT_DIR) if args.simple else (
+        SETFIT_DIR if args.setfit else OUTPUT_DIR
+    )
+    if args.combined:
+        default_output = COMBINED_SETFIT_DIR if args.setfit else COMBINED_OUTPUT_DIR
+    args.output_dir = args.output_dir or default_output
+    if (args.simple or args.combined) and args.output_dir.resolve() in (
+        OUTPUT_DIR.resolve(), SETFIT_DIR.resolve(),
+    ):
+        parser.error("단순화 데이터 비교는 기존 모델 폴더에 저장할 수 없습니다.")
+    if args.setfit and args.output_dir.resolve() == OUTPUT_DIR.resolve():
+        parser.error("SetFit 시험은 서비스 모델 폴더에 저장할 수 없습니다.")
+    if args.setfit_steps == 0 or args.setfit_steps < -1:
+        parser.error("--setfit-steps는 -1 또는 1 이상이어야 합니다.")
+    if args.output_dir.exists() and not args.overwrite:
+        parser.error("결과 폴더가 이미 있습니다. 다시 학습하려면 --overwrite를 지정하세요.")
 
-    split_dir = DATA_DIR / "train_test"
-    split_meta = json.loads((split_dir / "split_manifest.json").read_text(encoding="utf-8"))
-    source_hash = hashlib.sha256((DATA_DIR / "labeled_candidates.csv").read_bytes()).hexdigest()
-    if source_hash != split_meta["source_sha256"]:
-        raise ValueError("분할 후 원본 자료가 바뀌었습니다. 분할부터 다시 실행해주세요.")
-    train = read_rows(split_dir / "train.csv")
-    test = read_rows(split_dir / "test.csv")
-    for field in ("sample_id", "group_id", "description"):
-        if {row[field] for row in train} & {row[field] for row in test}:
-            raise ValueError(f"학습·시험 사이에 겹치는 {field}가 있습니다.")
+    source = args.data_dir / ("training_data_simple.csv" if args.simple else "training_data.csv")
+    print(f"학습 CSV: {source}", flush=True)
+    # 합친 모델은 매번 두 원본을 읽어 최신 추가 내용을 반영한다.
+    sources = [source]
+    if args.combined:
+        sources = [args.data_dir / "training_data.csv", args.data_dir / "training_data_simple.csv"]
+    incoming = sorted(args.incoming_dir.glob("*.csv"))
+    paths = sources + incoming
+    contents = {path: path.read_bytes() for path in paths}
+    base_rows = [row for path in sources for row in read_rows(path)]
+    additions = []
+    for path in incoming:
+        additions.extend(read_csv(path))
+    rows, counts = merge_training_rows(base_rows, additions)
+    if any(path.read_bytes() != data for path, data in contents.items()):
+        raise ValueError("읽는 중 학습 CSV가 변경됐습니다. 다시 실행해주세요.")
+    if args.combined:
+        # 실제 학습에 사용한 중복 제거 결과를 확인할 수 있게 남긴다.
+        source = args.data_dir / "training_data_combined.csv"
+        write_csv(source, rows)
+        contents[source] = source.read_bytes()
+    descriptions = [row["description"] for row in rows]
+    categories = [row["category_code"] for row in rows]
+    labels = sorted(set(categories))
+    if len(labels) < 2 or "UNCLASSIFIED" in labels:
+        raise ValueError("학습 정답 카테고리를 확인해주세요. 미분류는 정답에 넣지 않습니다.")
 
-    x_train = [row["description"] for row in train]
-    y_train = [row["category_code"] for row in train]
-    x_test = [row["description"] for row in test]
-    y_test = [row["category_code"] for row in test]
-    labels = sorted(set(y_train))
-    if len(labels) < 2 or set(y_test) != set(labels):
-        raise ValueError("학습·시험 카테고리 구성을 확인해주세요.")
+    report = {
+        "created_at": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),
+        "sklearn_version": sklearn.__version__,
+        "train_count": len(rows), "model_input": ["description"], "labels": labels,
+        "source_sha256": hashlib.sha256(contents[source]).hexdigest(),
+        "source_file": str(source.resolve()),
+        "input_sha256": {str(path.resolve()): hashlib.sha256(data).hexdigest()
+                         for path, data in contents.items()},
+        "base_count": len(base_rows), "additional_count": counts["added"],
+        "duplicate_count": counts["duplicates"],
+        "dataset_review_status": sorted({row.get("review_status", "UNKNOWN") for row in rows}),
+        "training_mode": "all_labeled_rows",
+        "evaluation": "not_evaluated_use_separate_manual_inputs",
+        "selection_rule": "explicit_selection_not_test_score",
+        "selected_model": args.selected_model,
+    }
+    if args.setfit:
+        train_setfit(rows, args.output_dir, args.setfit_steps, report)
+        return
 
     candidates = {
         "logistic_regression": LogisticRegression(max_iter=2000, random_state=42),
         "linear_svc": LinearSVC(max_iter=5000, random_state=42),
     }
-    report = {
-        "created_at": datetime.now(ZoneInfo("Asia/Seoul")).isoformat(),
-        "sklearn_version": sklearn.__version__,
-        "train_count": len(train),
-        "test_count": len(test),
-        "model_input": ["description"],
-        "labels": labels,
-        "dataset_review_status": "PENDING",
-        "data_hashes": {
-            name: hashlib.sha256((split_dir / name).read_bytes()).hexdigest()
-            for name in ("train.csv", "test.csv", "split_manifest.json")
-        },
-        "selection_rule": "macro_f1_then_accuracy_on_same_test",
-        "limitation": "합성 후보의 같은 시험 자료로 비교·선택한 결과이며 별도의 독립 최종 평가 점수가 아님",
-        "candidates": {},
-    }
-    predictions = {}
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    print(f"학습 {len(train)}건 / 시험 {len(test)}건. 별도 validation은 사용하지 않습니다.", flush=True)
-    for name, classifier in candidates.items():
-        print(f"{name} 학습 중...", flush=True)
-        pipeline = build_pipeline(classifier)
-        pipeline.fit(x_train, y_train)
-        predicted = pipeline.predict(x_test)
-        predictions[name] = list(predicted)
-        metrics = {
-            "accuracy": float(accuracy_score(y_test, predicted)),
-            "macro_f1": float(f1_score(y_test, predicted, average="macro", zero_division=0)),
-            "classification_report": classification_report(
-                y_test, predicted, labels=labels, output_dict=True, zero_division=0,
-            ),
-            "confusion_matrix": confusion_matrix(y_test, predicted, labels=labels).tolist(),
-        }
-        report["candidates"][name] = metrics
-        bundle_path = OUTPUT_DIR / f"{name}_bundle.pkl"
-        joblib.dump({
-            "pipeline": pipeline,
-            "model_name": name,
-            "transaction_type": "EXPENSE",
-            "input_fields": ["description"],
-            "labels": labels,
-            "sklearn_version": sklearn.__version__,
-            "dataset_review_status": "PENDING",
-        }, bundle_path)
-        restored = joblib.load(bundle_path)
-        if list(restored["pipeline"].predict(x_test)) != list(predicted):
-            raise ValueError("저장 전후 예측 결과가 다릅니다.")
-        print(f"  시험 정확도 {metrics['accuracy']:.3f} / macro F1 {metrics['macro_f1']:.3f}", flush=True)
+    print(f"기본 {len(base_rows)}건 + 추가 {counts['added']}건 / 중복 제외 {counts['duplicates']}건")
+    args.output_dir.parent.mkdir(parents=True, exist_ok=True)
+    lock = args.output_dir.parent / f".{args.output_dir.name}.train.lock"
+    # 같은 모델 폴더를 대상으로 동시에 학습하지 않는다.
+    with lock.open("x", encoding="utf-8") as file:
+        file.write("training")
+    try:
+        with tempfile.TemporaryDirectory(prefix="expense-training-", dir=args.output_dir.parent) as temp:
+            staging_dir = Path(temp)
+            for name, classifier in candidates.items():
+                pipeline = build_pipeline(classifier)
+                pipeline.fit(descriptions, categories)
+                path = staging_dir / f"{name}_bundle.pkl"
+                joblib.dump({
+                    "pipeline": pipeline, "model_name": name,
+                    "transaction_type": "EXPENSE", "input_fields": ["description"],
+                    "labels": labels, "sklearn_version": sklearn.__version__,
+                    "dataset_review_status": report["dataset_review_status"],
+                }, path)
+                restored = joblib.load(path)["pipeline"]
+                if list(restored.predict(descriptions)) != list(pipeline.predict(descriptions)):
+                    raise ValueError("모델 저장 전후 예측 결과가 다릅니다.")
+                print(f"{name}: 전체 {len(rows)}건 학습·저장 완료", flush=True)
 
-    # 비교 기준은 실행 전에 고정한다. 시험 점수를 보고 학습 설정을 반복 조정하지 않는다.
-    selected = max(candidates, key=lambda name: (
-        report["candidates"][name]["macro_f1"], report["candidates"][name]["accuracy"],
-    ))
-    report["selected_model"] = selected
-    with (OUTPUT_DIR / "test_predictions.csv").open("w", encoding="utf-8-sig", newline="") as file:
-        writer = csv.DictWriter(file, fieldnames=[
-            "sample_id", "description", "expected_category", "logistic_regression", "linear_svc",
-        ])
-        writer.writeheader()
-        for index, row in enumerate(test):
-            writer.writerow({
-                "sample_id": row["sample_id"], "description": row["description"],
-                "expected_category": row["category_code"],
-                **{name: values[index] for name, values in predictions.items()},
-            })
-    # 보고서는 모델 두 개의 저장이 끝난 뒤 작성하고 API가 선택 모델을 확인할 때 사용한다.
-    (OUTPUT_DIR / "test_report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
-    )
-    print(f"PDF 분류에 사용할 모델: {selected}")
-    print(f"저장 위치: {OUTPUT_DIR}")
+            # 학습 자료를 다시 맞힌 점수를 시험 정확도처럼 기록하지 않는다.
+            (staging_dir / "model_report.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
+            )
+            # 두 모델 학습이 모두 성공한 뒤에만 결과를 반영한다.
+            args.output_dir.mkdir(parents=True, exist_ok=True)
+            for name in candidates:
+                (staging_dir / f"{name}_bundle.pkl").replace(args.output_dir / f"{name}_bundle.pkl")
+            (staging_dir / "model_report.json").replace(args.output_dir / "model_report.json")
+    finally:
+        lock.unlink()
+    print(f"서버 선택 모델: {args.selected_model} (새 시험 점수로 선택한 결과 아님)")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (ValueError, OSError) as exc:
+        raise SystemExit(f"학습 중단: {exc}") from exc
