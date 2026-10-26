@@ -21,13 +21,13 @@
     "AD_PROMOTION": 40,
     "OTHER": 30
   },
-  "split_status": "NOT_SPLIT_REVIEW_SEEDS_FIRST",
+  "split_status": "NO_SPLIT_ALL_LABELED_ROWS_FOR_TRAINING",
   "note": "Synthetic wording candidates; semantic independence and correctness are not guaranteed.",
   "test_data_used_for_generation": false,
   "training_ready": false,
   "base_description_count": 180,
   "new_description_count": 185,
   "suffix_variants_generated": false,
-  "split_compatibility": "DRAFT_ONLY_NOT_COMPATIBLE_WITH_V3_FAMILIES",
-  "review_case_count": 8
+  "review_case_count": 8,
+  "manual_test_file": "../testing/test_data.csv (not used for training)"
 }

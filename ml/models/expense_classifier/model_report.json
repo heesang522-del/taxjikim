@@ -1,0 +1,27 @@
+{
+  "created_at": "2026-10-26T11:37:53.235032+09:00",
+  "sklearn_version": "1.9.1",
+  "train_count": 365,
+  "model_input": [
+    "description"
+  ],
+  "labels": [
+    "AD_PROMOTION",
+    "EQUIPMENT",
+    "OTHER",
+    "OUTSOURCING",
+    "SOFTWARE_LICENSE",
+    "SPACE_RENTAL",
+    "SUPPLIES_PROPS",
+    "TELECOMMUNICATION",
+    "TRANSPORT"
+  ],
+  "source_sha256": "80cfccc2d5107141fb6972e6f06e60cbee0398268bcfb2ddfb0ad1c45f194ec8",
+  "dataset_review_status": [
+    "PENDING"
+  ],
+  "training_mode": "all_labeled_rows",
+  "evaluation": "not_evaluated_use_separate_manual_inputs",
+  "selection_rule": "explicit_selection_not_test_score",
+  "selected_model": "logistic_regression"
+}

@@ -1,4 +1,4 @@
-"""초기 분할을 보존하고 승인된 추가 CSV를 누적해 지출 모델을 재학습한다."""
+"""전체 초기 자료와 승인된 추가 CSV를 누적해 지출 모델을 재학습한다."""
 
 import argparse
 import hashlib
@@ -11,8 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from split_expense_data import read_csv, write_csv
-from train_expense import BASE_DIR, DATA_DIR, read_rows
+from train_expense import BASE_DIR, DATA_DIR, read_rows, read_csv, write_csv
 
 
 FIELDS = ("sample_id", "description", "category_code", "group_id", "review_status")
@@ -25,16 +24,13 @@ def normalized(text: str) -> str:
 
 def merge_training_rows(
     train: list[dict[str, str]],
-    test: list[dict[str, str]],
     additions: list[dict[str, str]],
 ) -> tuple[list[dict[str, str]], dict[str, int]]:
-    """승인 자료만 합치고 시험자료 중복·정답 충돌을 차단한다."""
+    """승인 자료만 합치고 설명 중복·정답 충돌을 차단한다."""
     labels = {row["category_code"] for row in train}
-    protected = {
-        field: {normalized(row[field]) for row in test}
-        for field in ("sample_id", "group_id", "description")
+    seen: dict[str, dict[str, str]] = {
+        field: {} for field in ("sample_id", "group_id", "description")
     }
-    seen: dict[str, dict[str, str]] = {field: {} for field in protected}
     merged = []
     counts = {"added": 0, "duplicates": 0}
     for index, original in enumerate(train + additions):
@@ -47,9 +43,7 @@ def merge_training_rows(
         label = row["category_code"]
         if label not in labels:
             raise ValueError(f"지원하지 않는 지출 카테고리: {label}")
-        keys = {field: normalized(row[field]) for field in protected}
-        if any(keys[field] in protected[field] for field in protected):
-            raise ValueError("시험자료와 ID·그룹·설명이 겹칩니다. 추가 CSV를 확인하세요.")
+        keys = {field: normalized(row[field]) for field in seen}
         for field, key in keys.items():
             if key in seen[field] and seen[field][key] != label:
                 raise ValueError(f"같은 {field}에 서로 다른 정답이 있습니다.")
@@ -79,10 +73,7 @@ def run(initial_dir: Path, incoming_dir: Path, runs_dir: Path) -> None:
     with lock.open("x", encoding="utf-8") as file:
         file.write(str(os.getpid()))
     try:
-        paths = [initial_dir / "labeled_candidates.csv"] + [
-            initial_dir / "train_test" / name
-            for name in ("train.csv", "test.csv", "split_manifest.json")
-        ]
+        paths = [initial_dir / "training_data.csv"]
         paths += sorted(incoming_dir.glob("*.csv"))
         contents = {path: path.read_bytes() for path in paths}
         hashes = {str(path.resolve()): hashlib.sha256(data).hexdigest() for path, data in contents.items()}
@@ -92,35 +83,23 @@ def run(initial_dir: Path, incoming_dir: Path, runs_dir: Path) -> None:
             if previous.get("fingerprint") == fingerprint and previous.get("status") == "COMPLETED":
                 print("입력 CSV가 이전 성공 실행과 같습니다. 재학습을 생략합니다.")
                 return
-        split_meta = json.loads(contents[initial_dir / "train_test/split_manifest.json"])
-        if hashes[str((initial_dir / "labeled_candidates.csv").resolve())] != split_meta["source_sha256"]:
-            raise ValueError("초기 원본과 분할 정보가 다릅니다. 기존 분할을 확인하세요.")
-        train = read_rows(initial_dir / "train_test/train.csv")
-        test = read_rows(initial_dir / "train_test/test.csv")
+        train = read_rows(initial_dir / "training_data.csv")
         additions = []
         for path in sorted(incoming_dir.glob("*.csv")):
             additions.extend(read_csv(path))
-        merged, counts = merge_training_rows(train, test, additions)
+        merged, counts = merge_training_rows(train, additions)
         if any(path.read_bytes() != data for path, data in contents.items()):
             raise ValueError("준비 중 입력 파일이 변경됐습니다. 다시 실행하세요.")
         run_id = datetime.now(ZoneInfo("Asia/Seoul")).strftime("%Y%m%d_%H%M%S_%f")
         run_dir = runs_dir / run_id
         data_dir = run_dir / "dataset"
-        split_dir = data_dir / "train_test"
-        split_dir.mkdir(parents=True)
-        write_csv(data_dir / "labeled_candidates.csv", merged + test)
-        write_csv(split_dir / "train.csv", merged)
-        write_csv(split_dir / "test.csv", test)
-        split_meta["source_sha256"] = hashlib.sha256((data_dir / "labeled_candidates.csv").read_bytes()).hexdigest()
-        split_meta["counts"] = {"train": len(merged), "test": len(test)}
-        # 누적 자료로 매번 다시 분할하지 않고 초기 시험 세트를 고정한다.
-        split_meta["split_rule"] = "initial_test_frozen_additions_train_only"
-        split_meta.pop("category_counts", None)
-        (split_dir / "split_manifest.json").write_text(json.dumps(split_meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        data_dir.mkdir(parents=True)
+        # 초기 365건도 모두 학습하며, 직접 시험할 CSV는 읽지 않는다.
+        write_csv(data_dir / "training_data.csv", merged)
         manifest = {
             "status": "RUNNING", "fingerprint": fingerprint, "input_sha256": hashes,
-            "initial_train_count": len(train), "test_count": len(test), **counts,
-            "limitation": "초기 합성 후보는 PENDING이며, 반복 사용 시험 점수는 독립적인 최종 평가가 아님. 의미가 유사한 설명의 누출은 수동 검토 필요.",
+            "initial_train_count": len(train), "train_count": len(merged), **counts,
+            "limitation": "초기 합성 후보는 PENDING 상태 유지. 전체 학습 후 새로운 설명으로 별도 수동 확인 필요.",
         }
         manifest_path = run_dir / "run_manifest.json"
         manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -137,7 +116,7 @@ def run(initial_dir: Path, incoming_dir: Path, runs_dir: Path) -> None:
         finally:
             manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
         print(f"재학습 완료: {run_dir}")
-        print("운영 모델은 유지했습니다. 평가 결과를 검토한 뒤 별도로 교체하세요.")
+        print("운영 모델은 유지했습니다. 새 설명으로 직접 확인한 뒤 별도로 교체하세요.")
     finally:
         lock.unlink()
 

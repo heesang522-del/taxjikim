@@ -22,7 +22,9 @@
 !/ml/data/.gitkeep
 !/ml/data/expense/
 /ml/data/expense/*
-!/ml/data/expense/category_dummy_v4_draft/
+!/ml/data/expense/training/
+!/ml/data/expense/testing/
+!/ml/data/expense/reference/
 
 # 서버 실행에 필요한 현재 모델과 두 모델 비교 결과만 공유한다.
 /ml/models/*
@@ -31,8 +33,9 @@
 /ml/models/expense_classifier/*
 !/ml/models/expense_classifier/logistic_regression_bundle.pkl
 !/ml/models/expense_classifier/linear_svc_bundle.pkl
-!/ml/models/expense_classifier/test_report.json
-!/ml/models/expense_classifier/test_predictions.csv
+!/ml/models/expense_classifier/model_report.json
+!/ml/models/expense_classifier/previous_test_report.json
+!/ml/models/expense_classifier/previous_test_predictions.csv
 
 # IntelliJ IDEA
 **/.idea/

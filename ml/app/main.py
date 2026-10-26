@@ -20,9 +20,9 @@ MODEL_DIR = Path(__file__).resolve().parents[1] / "models/expense_classifier"
 
 
 def load_expense_model() -> dict:
-    """학습·시험 비교에서 선택한 지출 모델과 전처리 파이프라인을 읽는다."""
+    """전체 데이터로 학습한 지출 모델과 전처리 파이프라인을 읽는다."""
     try:
-        report = json.loads((MODEL_DIR / "test_report.json").read_text(encoding="utf-8"))
+        report = json.loads((MODEL_DIR / "model_report.json").read_text(encoding="utf-8"))
         selected = report["selected_model"]
         if selected not in ("logistic_regression", "linear_svc"):
             raise ValueError("선택한 모델 이름이 올바르지 않습니다.")
@@ -30,7 +30,7 @@ def load_expense_model() -> dict:
         return joblib.load(MODEL_DIR / f"{selected}_bundle.pkl")
     except (FileNotFoundError, KeyError, ValueError) as exc:
         raise RuntimeError(
-            "지출 모델을 먼저 준비해주세요: python scripts/split_expense_data.py → python scripts/train_expense.py"
+            "지출 모델을 먼저 준비해주세요: python scripts/train_expense.py"
         ) from exc
 
 
