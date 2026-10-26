@@ -30,6 +30,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @RestController
@@ -255,13 +256,41 @@ public class TaxUploadController {
             Long taxInputId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
-        return ApiResponse.ok(
-                service.parsePdf(
-                        access(principal, servletRequest),
-                        taxInputId,
-                        file
-                )
+
+        // 비회원은 업로드 전에 서버 세션을 생성한다.
+        HttpSession guestSession = principal == null
+                ? servletRequest.getSession(true)
+                : null;
+
+        // 서비스에서 PDF 분석과 DB 저장을 완료한 뒤 응답을 받는다.
+        PdfParseResponseDto response = service.parsePdf(
+                access(principal, servletRequest),
+                taxInputId,
+                file
         );
+
+        /*
+         * 이번 업로드에서 서버가 생성한 분석번호를 비회원 세션에 등록한다.
+         * 이후 같은 세션에서 저장된 거래를 조회·수정할 수 있게 한다.
+         */
+        if (guestSession != null
+                && response.getTransactions() != null) {
+
+            response.getTransactions().stream()
+                    .filter(Objects::nonNull)
+                    .map(TaxTransactionDto::getTaxInputId)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .forEach(createdInputId ->
+                            changeGuestInput(
+                                    guestSession,
+                                    createdInputId,
+                                    true
+                            )
+                    );
+        }
+
+        return ApiResponse.ok(response);
     }
 
     private AccessContext access(
@@ -318,17 +347,18 @@ public class TaxUploadController {
     private void changeGuestInput(
             HttpSession session,
             Long taxInputId,
-            boolean add
+            boolean add       //ex: 비회원이 PDF를 올려 taxInputId = 7이 생성되면, 세션에 7을 등록,  이후 서버는 이 세션에서 만든 분석번호인가?를 확인해 조회·수정을 허용
+
     ) {
-        if (session == null) {
+        if (session == null) {  // 만약 session 값이 없으면 ; 를 반환( 종료)
             return;
         }
 
-        synchronized (session) {
+        synchronized (session) { // synchronized 가 같은 세션 동시 변경을 막음
             Set<Long> ids =
                     new HashSet<>(readGuestInputs(session));
 
-            if (add) {
+            if (add) {    // 만약 add가 true면 분석번호를 추가, false면 제거
                 ids.add(taxInputId);
             } else {
                 ids.remove(taxInputId);
@@ -336,7 +366,8 @@ public class TaxUploadController {
 
             session.setAttribute(
                     GUEST_INPUT_IDS,
-                    Set.copyOf(ids)
+                    Set.copyOf(ids)  //ids 에 3,7 이 있으면 , 세션에 접근 가능한
+                                      // 분석번호 목록으로  3, 7을 저장
             );
         }
     }

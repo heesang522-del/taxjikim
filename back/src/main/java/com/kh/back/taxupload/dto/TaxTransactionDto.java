@@ -32,8 +32,8 @@ public class TaxTransactionDto {
     private BigDecimal amount;
 
     /*
-     * PDF 분석 응답에만 사용하는 필드다.
-     * tax_transactions에는 저장하지 않는다.
+     * PDF 분석 결과 전달용 필드다.
+     * 아래 필드는 현재 tax_transactions에 저장하지 않는다.
      */
     private BigDecimal taxDeducted;
     private BigDecimal actualAmount;
@@ -44,6 +44,19 @@ public class TaxTransactionDto {
     private Boolean parseSuccess;
     private Boolean excluded;
     private String failureReason;
+
+    // 월별 자료는 실제 거래일을 생성하지 않고 월과 연도를 전달한다.
+    private String transactionMonth;
+    private Integer documentYear;
+
+    // 상세·월별 집계 등 자료의 집계 단위를 전달한다.
+    private String valueKind;
+
+    // 실제 입출금액과 공제대상금액을 구분한다.
+    private String amountBasis;
+
+    // 사용자 확인이 필요한 분석 결과인지 전달한다.
+    private Boolean needsReview;
 
     @Getter
     @Setter
@@ -88,8 +101,8 @@ public class TaxTransactionDto {
     @AllArgsConstructor
     public static class AccessContext {
 
-        private Long userId;  // 사용자 id
-        private boolean admin;  // 관리자
+        private Long userId;
+        private boolean admin;
         private Set<Long> guestInputIds;
     }
 
