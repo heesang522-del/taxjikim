@@ -31,217 +31,88 @@ public class PostApiController {
 
     private final PostService postService;
 
-    private final ObjectMapper objectMapper =
-            new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @GetMapping
-    public ApiResponse<Map<String, Object>> getPostPage(
-            @RequestParam(defaultValue = "latest")
-            String sort,
+    public ApiResponse<List<PostDto>> getPostPage(@RequestParam(defaultValue = "latest") String sort,
 
-            @RequestParam(defaultValue = "")
-            String keyword,
+                                                  @RequestParam(defaultValue = "") String keyword,
 
-            @RequestParam(defaultValue = "1")
-            int page
-    ) {
+                                                  @RequestParam(defaultValue = "1") int page,
 
-        int size = 9;
+                                                  @RequestParam(required = false) String boardType) {
 
-        page = Math.max(page, 1);
+        return postService.getPostPage(sort, keyword, page, boardType);
+    }
 
-        long offsetValue = ((long) page - 1) * size;
+    @GetMapping("/{postId}")
+    public ApiResponse<PostDto> getPost(@PathVariable Long postId) {
 
-        if (offsetValue > Integer.MAX_VALUE) {
-            throw invalid("페이지 범위를 초과했습니다.");
-        }
+        return ApiResponse.ok(postService.findById(postId));
+    }
 
-        int totalCount = postService.countAll(keyword);
 
-        int totalPages =
-                (int) Math.ceil((double) totalCount / size);
+    @PostMapping(value = "/upload-chunk", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> uploadChunk(@ModelAttribute ChunkDto dto) throws IOException {
+
+        String savedFileName = postService.processChunkUpload(dto);
 
         Map<String, Object> result = new HashMap<>();
 
-        result.put(
-                "posts",
-                postService.findPage(
-                        sort,
-                        keyword,
-                        (int) offsetValue,
-                        size
-                )
-        );
+        result.put("completed", savedFileName != null);
 
-        result.put("page", page);
-        result.put("totalPages", totalPages);
-        result.put("hasNext", page < totalPages);
+        result.put("savedFileName", savedFileName);
 
         return ApiResponse.ok(result);
     }
 
-    @PostMapping(
-            value = "/upload-chunk",
-            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
-    )
-    public ApiResponse<Map<String, Object>> uploadChunk(
-            @ModelAttribute ChunkDto dto
-    ) throws IOException {
+    @PostMapping(consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
+    public ApiResponse<Void> createPost(@RequestParam("title") String title, @RequestParam("content") String content, @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
 
-        String savedFileName =
-                postService.processChunkUpload(dto);
+                                        @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
 
-        Map<String, Object> result = new HashMap<>();
+                                        @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson) {
 
-        result.put(
-                "completed",
-                savedFileName != null
-        );
+        PostDto post = makePost(title, content, boardType, isPublic);
 
-        result.put(
-                "savedFileName",
-                savedFileName
-        );
-
-        return ApiResponse.ok(result);
-    }
-
-    @PostMapping(
-            consumes = {
-                    MediaType.MULTIPART_FORM_DATA_VALUE,
-                    MediaType.APPLICATION_FORM_URLENCODED_VALUE
-            }
-    )
-    public ApiResponse<Void> createPost(
-            @RequestParam("title") String title,
-            @RequestParam("content") String content,
-            @RequestParam(value = "boardType", defaultValue = "INFO"
-            ) String boardType,
-
-            @RequestParam(
-                    value = "isPublic",
-                    defaultValue = "true"
-            )
-            boolean isPublic,
-
-            @RequestParam(
-                    value = "savedFileNamesJson",
-                    required = false
-            )
-            String savedFileNamesJson,
-
-            @RequestParam(
-                    value = "savedFileNames",
-                    required = false
-            )
-            String savedFileNamesAlt
-    ) {
-
-        PostDto post = makePost(
-                title,
-                content,
-                boardType,
-                isPublic
-        );
-
-        postService.saveWithFiles(
-                post,
-                parseFileNames(
-                        savedFileNamesJson,
-                        savedFileNamesAlt
-                )
-        );
+        postService.saveWithFiles(post, parseFileNames(savedFileNamesJson));
 
         return ApiResponse.ok(null);
     }
 
-    @PostMapping(
-            value = {
-                    "/{postId}",
-                    "/{postId}/update"
-            },
-            consumes = {
-                    MediaType.MULTIPART_FORM_DATA_VALUE,
-                    MediaType.APPLICATION_FORM_URLENCODED_VALUE
-            }
-    )
-    public ApiResponse<Void> updatePost(
-            @PathVariable Long postId,
+    @PostMapping(value = {"/{postId}", "/{postId}/update"}, consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
+    public ApiResponse<Void> updatePost(@PathVariable Long postId,
 
-            @RequestParam("title")
-            String title,
+                                        @RequestParam("title") String title,
 
-            @RequestParam("content")
-            String content,
+                                        @RequestParam("content") String content,
 
-            @RequestParam(
-                    value = "boardType",
-                    defaultValue = "INFO"
-            )
-            String boardType,
+                                        @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
 
-            @RequestParam(
-                    value = "isPublic",
-                    defaultValue = "true"
-            )
-            boolean isPublic,
+                                        @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
 
-            @RequestParam(
-                    value = "deleteFileIds",
-                    required = false
-            )
-            List<Long> deleteFileIds,
+                                        @RequestParam(value = "deleteFileIds", required = false) List<Long> deleteFileIds,
 
-            @RequestParam(
-                    value = "savedFileNamesJson",
-                    required = false
-            )
-            String savedFileNamesJson,
+                                        @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson) {
 
-            @RequestParam(
-                    value = "savedFileNames",
-                    required = false
-            )
-            String savedFileNamesAlt
-    ) {
-
-        PostDto post = makePost(
-                title,
-                content,
-                boardType,
-                isPublic
-        );
+        PostDto post = makePost(title, content, boardType, isPublic);
 
         post.setPostId(postId);
 
-        postService.updateWithFiles(
-                post,
-                deleteFileIds,
-                parseFileNames(
-                        savedFileNamesJson,
-                        savedFileNamesAlt
-                )
-        );
+        postService.updateWithFiles(post, deleteFileIds, parseFileNames(savedFileNamesJson));
 
         return ApiResponse.ok(null);
     }
 
     @DeleteMapping("/{postId}")
-    public ApiResponse<Void> deletePost(
-            @PathVariable Long postId
-    ) {
+    public ApiResponse<Void> deletePost(@PathVariable Long postId) {
 
         postService.deleteById(postId);
 
         return ApiResponse.ok(null);
     }
 
-    private PostDto makePost(
-            String title,
-            String content,
-            String boardType,
-            boolean isPublic
-    ) {
+    private PostDto makePost(String title, String content, String boardType, boolean isPublic) {
 
         PostDto post = new PostDto();
 
@@ -254,22 +125,14 @@ public class PostApiController {
         return post;
     }
 
-    private List<String> parseFileNames(
-            String primary,
-            String alternative
-    ) {
+    private List<String> parseFileNames(String savedFileNamesJson) {
 
-        String value =
-                primary != null && !primary.isBlank()
-                        ? primary
-                        : alternative;
-
-        if (value == null || value.isBlank()) {
+        if (savedFileNamesJson == null || savedFileNamesJson.isBlank()) {
             return List.of();
         }
 
         try {
-            JsonNode root = objectMapper.readTree(value);
+            JsonNode root = objectMapper.readTree(savedFileNamesJson);
 
             if (root == null || !root.isArray()) {
                 throw invalid("첨부파일 목록은 배열이어야 합니다.");
@@ -295,10 +158,6 @@ public class PostApiController {
 
     private ApiException invalid(String message) {
 
-        return new ApiException(
-                HttpStatus.BAD_REQUEST,
-                "VALIDATION_ERROR",
-                message
-        );
+        return new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message);
     }
 }

@@ -11,20 +11,21 @@ import java.util.List;
 @Mapper
 public interface PostMapper {
 
-    List<PostDto> findAll(
-            @Param("sort") String sort,
-            @Param("keyword") String keyword
-    );
-
     List<PostDto> findPage(
             @Param("sort") String sort,
             @Param("keyword") String keyword,
             @Param("offset") int offset,
-            @Param("size") int size
+            @Param("size") int size,
+            @Param("boardType") String boardType,
+            @Param("currentUserId") Long currentUserId,
+            @Param("isAdmin") boolean isAdmin
     );
 
     int countAll(
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("boardType") String boardType,
+            @Param("currentUserId") Long currentUserId,
+            @Param("isAdmin") boolean isAdmin
     );
 
     PostDto findById(
@@ -38,6 +39,11 @@ public interface PostMapper {
     void save(PostDto post);
 
     void update(PostDto post);
+
+    void updateAnswerStatus(
+            @Param("postId") Long postId,
+            @Param("answerStatus") String answerStatus
+    );
 
     void deleteById(
             @Param("postId") Long postId

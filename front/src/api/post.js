@@ -42,9 +42,9 @@ export function toBoardPost(post) {
 export async function getBoardPosts() {
   const posts = [];
   let page = 1;
-  let hasNext;
+  let totalPages = 1;
 
-  // 기존 화면의 탭·검색을 위해 서버 페이지를 모두 읽는다.
+  // 기존 화면의 탭·검색을 위해 서버 페이지를 모두 읽는다. 페이징 정보는 meta에 담겨 온다.
   do {
     const response = await client.get('', {
       baseURL: POST_API_BASE,
@@ -53,16 +53,75 @@ export async function getBoardPosts() {
 
     const result = response.data;
 
-    if (!result?.success || !Array.isArray(result.data?.posts)) {
+    if (!result?.success || !Array.isArray(result.data)) {
       throw new Error(result?.error?.message || result?.message || '게시글 목록을 불러오지 못했습니다.');
     }
 
-    posts.push(...result.data.posts.map(toBoardPost));
-    hasNext = result.data.hasNext === true;
+    posts.push(...result.data.map(toBoardPost));
+    totalPages = result.meta?.totalPages || 1;
     page += 1;
-  } while (hasNext);
+  } while (page <= totalPages);
 
   return posts;
+}
+
+// 서버의 QNA 게시글을 Q&A 화면에서 쓰는 필드로 변환한다.
+export function toInquiry(post) {
+  return {
+    id: String(post.postId),
+    userId: post.userId,
+    title: post.title || '',
+    body: post.content || '',
+    // Lombok의 boolean 필드 isPublic은 Jackson이 "is"를 떼고 public으로 직렬화한다.
+    visibility: post.public ? 'public' : 'private',
+    author: post.writer || '알 수 없는 사용자',
+    status: post.answerStatus === 'DONE' ? '답변 완료' : '답변 대기',
+    createdAt: post.createdAt || '',
+    files: (post.files || []).map((file) => file.originalFileName || file.storedFileName),
+  };
+}
+
+export async function getInquiries() {
+  const inquiries = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const response = await client.get('', {
+      baseURL: POST_API_BASE,
+      params: { page, boardType: 'QNA' },
+    });
+
+    const result = response.data;
+
+    if (!result?.success || !Array.isArray(result.data)) {
+      throw new Error(result?.error?.message || result?.message || 'Q&A 목록을 불러오지 못했습니다.');
+    }
+
+    inquiries.push(...result.data.map(toInquiry));
+    totalPages = result.meta?.totalPages || 1;
+    page += 1;
+  } while (page <= totalPages);
+
+  return inquiries;
+}
+
+export async function getInquiryDetail(postId) {
+  try {
+    const response = await client.get(`/${encodeURIComponent(postId)}`, {
+      baseURL: POST_API_BASE,
+    });
+
+    if (!response.data?.success) {
+      throw new Error(response.data?.error?.message || response.data?.message || '문의를 불러오지 못했습니다.');
+    }
+
+    return toInquiry(response.data.data);
+  } catch (error) {
+    const result = error.response?.data;
+
+    throw new Error(result?.error?.message || result?.message || error.message || '문의를 불러오지 못했습니다.');
+  }
 }
 
 export async function deletePost(postId) {
