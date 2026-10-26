@@ -1,6 +1,7 @@
 package com.kh.back.chat.handler;
 
 import com.kh.back.chat.dto.ChatMessageDto;
+import com.kh.back.chat.dto.ChatRoomDto;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
@@ -40,6 +41,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private record IncomingMessage(String content) {}
 
     private final ChatService chatService;
+    //문자열 <-> JSON 전환용 Websocket은 Spring MVC처럼 변환해주는게 없음.
     private final ObjectMapper objectMapper;
 
     // roomId별로 그 방에 지금 연결돼 있는 세션들을 모아둔다. 메시지를 "같은 방의 누구에게" 보낼지 찾는 용도.
@@ -152,6 +154,33 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             session.close();
         } catch (IOException e) {
             log.warn("채팅 연결 종료 실패: sessionId={}", session.getId(), e);
+        }
+    }
+
+    // 로그아웃한 회원이 열어둔 상담방을 DB에서 먼저 찾고, 그 방에 연결된 해당 유저의 세션만 닫는다.
+    // 실제 제거는 session.close()가 트리거하는 afterConnectionClosed가 처리하므로 여기서 Set을 직접 건드리지 않는다.
+    public void closeSessionsForUser(Long userId) {
+        //해당 방 객체를 찾아서 가져옴
+        ChatRoomDto room = chatService.findOpenRoom(userId);
+        if (room == null) {
+            return;
+        }
+        // roomSessions는 해당 websocket세션에 있는 방정보를 가져옴
+        Set<WebSocketSession> roomSessions = rooms.get(String.valueOf(room.getRoomId()));
+        if (roomSessions == null) {
+            return;
+        }
+        // 해당 방의 세션을 손회하면서 각 세션의 userId와 로그아웃한 userId를 대조해 일치하면 session.close호출
+        for (WebSocketSession session : roomSessions) {
+            if (userId.equals(session.getAttributes().get("userId"))) {
+                try {
+                    //
+                    session.close();
+                }catch (IOException e) {
+                    // 이 close가 죽은 소켓애 대해 실행돼 서버가 멈추지 않게 하기 위한 장치
+                    log.warn("로그아웃 : sessionId={}", session.getId(), e);
+                }
+            }
         }
     }
 
