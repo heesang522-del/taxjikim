@@ -83,6 +83,26 @@
 
         </if>
 
+        <!-- boardType이 없으면 모든 게시판을 섞어서 보여준다(기존 동작과 동일). -->
+        <if test="boardType != null and boardType != ''">
+
+            AND p.BOARD_TYPE = #{boardType}
+
+        </if>
+
+        <!-- QNA 비공개 글은 boardType 필터 여부와 상관없이 작성자 본인·관리자만 조회된다. -->
+        <if test="!isAdmin">
+
+            AND (
+            p.BOARD_TYPE != 'QNA'
+            OR p.IS_PUBLIC = true
+            <if test="currentUserId != null">
+                OR p.USER_ID = #{currentUserId}
+            </if>
+            )
+
+        </if>
+
     </sql>
 
     <sql id="정렬조건">
@@ -130,25 +150,6 @@
 
     </select>
 
-    <select id="findAll" resultMap="게시글매핑">
-
-        SELECT
-        <include refid="게시글조회컬럼"/>
-
-        FROM POSTS p
-
-        LEFT JOIN USERS u
-        ON u.USER_ID = p.USER_ID
-
-        WHERE p.DELETED_AT IS NULL
-
-        <include refid="검색조건"/>
-
-        ORDER BY
-        <include refid="정렬조건"/>
-
-    </select>
-
     <select id="findPage" resultMap="게시글매핑">
 
         SELECT
@@ -191,17 +192,34 @@
         BOARD_TYPE,
         TITLE,
         CONTENT,
-        IS_PUBLIC
+        IS_PUBLIC,
+        ANSWER_STATUS
         )
         VALUES (
         #{userId},
         #{boardType},
         #{title},
         #{content},
-        #{public}
+        #{public},
+        <!-- QNA 글만 답변 대기 상태로 시작한다. 다른 게시판은 답변 상태를 쓰지 않는다. -->
+        <choose>
+            <when test="boardType == 'QNA'">'WAITING'</when>
+            <otherwise>NULL</otherwise>
+        </choose>
         )
 
     </insert>
+
+    <!-- QNA 글에 관리자 답변(댓글)이 달리면 WAITING -&gt; DONE으로 전환한다. -->
+    <update id="updateAnswerStatus">
+
+        UPDATE POSTS
+        SET ANSWER_STATUS = #{answerStatus}
+        WHERE POST_ID = #{postId}
+        AND BOARD_TYPE = 'QNA'
+        AND DELETED_AT IS NULL
+
+    </update>
 
     <!-- 수정해도 원래 작성자의 USER_ID는 유지한다. -->
     <update id="update">

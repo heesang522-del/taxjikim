@@ -10,6 +10,7 @@ public class CommentDto {
     private Long commentId;
     private Long postId;
     private Long userId;
+    private Long parentCommentId;
     private String content;
     private String writer;
     private LocalDateTime createdAt;

@@ -1,22 +1,58 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
+import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Card, Pill } from '../components/common/index';
 import NoticeCard from '../components/community/NoticeCard';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
 import { useInquiry } from '../store/useInquiryStore';
+import { getInquiryDetail } from '../api/post.js';
+import { getComments } from '../api/comment.js';
+
+// 서버 문의는 숫자 postId, 브라우저 예시 문의는 'q1' 같은 문자열 id를 쓴다.
+const isServerId = (id) => /^\d+$/.test(id);
 
 /** Q&A 상세. 공개 글은 누구나, 비공개 글은 작성자와 관리자만 볼 수 있다. */
 export default function QnaPostPage() {
   const { id } = useParams();
   const { loggedIn, user, isAdmin } = useAuth();
   const { inquiries } = useInquiry();
-  const q = inquiries.find((x) => x.id === id);
+  const [serverInquiry, setServerInquiry] = useState(null);
+  const [loading, setLoading] = useState(isServerId(id));
+  const [loadError, setLoadError] = useState(false);
   const back = <Button variant="primary" to={ROUTES.helpQna}>Q&A 목록으로</Button>;
 
-  if (!q) return <NoticeCard title="문의를 찾을 수 없습니다" desc="삭제되었거나 주소가 잘못되었습니다." action={back} />;
+  // 서버 문의는 상세 API로 직접 조회한다. 목록을 먼저 불러오지 않았어도 바로 들어올 수 있어야 한다.
+  useEffect(() => {
+    if (!isServerId(id)) return undefined;
+    let active = true;
+    setLoading(true);
+    setLoadError(false);
+
+    getInquiryDetail(id)
+      .then(async (detail) => {
+        // QNA 댓글은 전부 관리자 답변이다. 가장 최근 답변을 보여준다.
+        const comments = await getComments(id).catch(() => []);
+        const answer = comments.length ? comments[comments.length - 1].body : null;
+        if (active) setServerInquiry({ ...detail, answer });
+      })
+      .catch(() => { if (active) setLoadError(true); })
+      .finally(() => { if (active) setLoading(false); });
+
+    return () => { active = false; };
+  }, [id]);
+
+  if (isServerId(id) && loading) {
+    return <p className="state-msg" role="status">문의를 불러오는 중입니다.</p>;
+  }
+
+  const q = isServerId(id) ? serverInquiry : inquiries.find((x) => x.id === id);
+
+  if (!q || loadError) {
+    return <NoticeCard title="문의를 찾을 수 없습니다" desc="삭제되었거나 주소가 잘못되었습니다." action={back} />;
+  }
 
   const mine = loggedIn && q.author === user.nickname;
   if (q.visibility === 'private' && !mine && !isAdmin) {
