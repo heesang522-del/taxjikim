@@ -4,6 +4,7 @@ import math
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+from threading import Event, Thread
 from typing import Annotated
 
 import joblib
@@ -14,6 +15,12 @@ from pdfplumber.utils.exceptions import PdfminerException
 
 from . import pdf_parser
 from .expense_classifier import classify_descriptions
+
+# 프로젝트 루트와 ml 폴더 중 어디서 서버를 실행해도 같은 스케줄러를 사용한다.
+if __package__ == "ml.app":
+    from ..scripts.retrain_scheduler import run_scheduler
+else:
+    from scripts.retrain_scheduler import run_scheduler
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -35,9 +42,9 @@ def load_expense_model() -> dict:
         ) from exc
 
 
+# 서버 시작 시 모델과 스케줄러를 준비하고 종료 시 스케줄러를 정리한다.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """서버 시작 시 선택된 지출 모델을 한 번 불러온다."""
     logger.info(
         "사용 중인 PDF 파서: %s",
         Path(pdf_parser.__file__).resolve(),
@@ -45,7 +52,19 @@ async def lifespan(app: FastAPI):
     app.state.expense_model = load_expense_model()
     logger.info("지출 분류 모델: %s", app.state.expense_model["model_name"])
 
-    yield
+    # 요청을 처리하는 서버와 별도로 스케줄러를 실행한다.
+    stop_event = Event()
+    worker = Thread(target=run_scheduler, args=(stop_event,))
+    worker.start()
+    logger.info("재학습 스케줄러 시작")
+
+    try:
+        yield
+    finally:
+        # 진행 중인 학습은 끝날 때까지 기다리고, 다음 학습은 시작하지 않는다.
+        stop_event.set()
+        worker.join()
+        logger.info("재학습 스케줄러 종료")
 
 
 app = FastAPI(
