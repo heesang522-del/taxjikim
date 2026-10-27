@@ -1,8 +1,8 @@
-import SummaryCards from './SummaryCards'
-import MonthlyChart from './MonthlyChart'
-import RegistrationComparison from './RegistrationComparison'
-import RelatedLinks from './RelatedLinks'
-import { Grid, Hint, Stack } from '../ui'
+import { SummaryCards } from './SummaryCards';
+import MonthlyChart from './MonthlyChart';
+import RegistrationComparison from './RegistrationComparison';
+import RelatedLinks from './RelatedLinks';
+import { Grid, Hint, Stack } from '../ui';
 
 export default function ResultView({ result, count, options, onRetry }) {
   return (
@@ -15,5 +15,5 @@ export default function ResultView({ result, count, options, onRetry }) {
         <RelatedLinks links={options.guideLinks} onRetry={onRetry} />
       </Grid>
     </Stack>
-  )
+  );
 }
