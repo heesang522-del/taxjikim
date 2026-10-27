@@ -28,6 +28,9 @@ export async function getComments(postId) {
     author: comment.writer,
     createdAt: comment.createdAt,
     updatedAt: comment.updatedAt,
+    // 부모가 삭제됐어도 살아있는 답글이 있으면 자리는 유지된 채로 내려온다.
+    // deletedByType('SELF'|'ADMIN')이 있으면 삭제된 댓글이고 body/author가 없다.
+    deleted: comment.deletedByType != null,
   }));
 }
 
