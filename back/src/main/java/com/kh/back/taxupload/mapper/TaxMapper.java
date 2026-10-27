@@ -78,4 +78,14 @@ public interface TaxMapper {
             @Param("status") String status,
             @Param("failReason") String failReason
     );
+
+
+int insertTransactionHistory(
+        @Param("taxInputId") Long taxInputId,
+        @Param("transactionId") Long transactionId,
+        @Param("changeType") String changeType,
+        @Param("beforeData") String beforeData,
+        @Param("afterData") String afterData,
+        @Param("changedBy") Long changedBy
+);
 }

@@ -44,10 +44,9 @@ public class TaxUploadController {
     private final YearEndTaxService service;
 
     @PostMapping("/inputs/create")
-    public ResponseEntity<ApiResponse<TaxInputRequest>> createInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @RequestBody TaxInputRequest request
+    public ResponseEntity<ApiResponse<TaxInputRequest>> createInput(@AuthenticationPrincipal CustomUserDetails principal,
+                                                                    HttpServletRequest servletRequest,
+                                                                    @RequestBody TaxInputRequest request
     ) {
         HttpSession guestSession = principal == null
                 ? servletRequest.getSession(true)
@@ -73,11 +72,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/list")
-    public ApiResponse<List<TaxInputRequest>> getSavedInputs(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @RequestParam(value = "taxYear", required = false)
-            Integer taxYear
+    public ApiResponse<List<TaxInputRequest>> getSavedInputs(@AuthenticationPrincipal CustomUserDetails principal,
+                                                             HttpServletRequest servletRequest,
+                                                             @RequestParam(value = "taxYear", required = false)
+                                                                 Integer taxYear
     ) {
         return ApiResponse.ok(
                 service.getSavedInputs(
@@ -88,10 +86,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/{taxInputId}/detail")
-    public ApiResponse<TaxInputRequest> getInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
+    public ApiResponse<TaxInputRequest> getInput(@AuthenticationPrincipal CustomUserDetails principal,
+                                                 HttpServletRequest servletRequest,
+                                                 @PathVariable("taxInputId")
+                                                     Long taxInputId
     ) {
         return ApiResponse.ok(
                 service.getInput(
@@ -102,11 +100,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/{taxInputId}/update")
-    public ApiResponse<TaxInputRequest> updateInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @RequestBody TaxInputRequest request
+    public ApiResponse<TaxInputRequest> updateInput(@AuthenticationPrincipal CustomUserDetails principal,
+                                                    HttpServletRequest servletRequest,
+                                                    @PathVariable("taxInputId") Long taxInputId,
+                                                    @RequestBody TaxInputRequest request
     ) {
         TaxInputRequest updated = service.updateInput(
                 access(principal, servletRequest),
@@ -126,10 +123,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/{taxInputId}/delete")
-    public ResponseEntity<Void> deleteInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
+    public ResponseEntity<Void> deleteInput(@AuthenticationPrincipal CustomUserDetails principal,
+                                            HttpServletRequest servletRequest,
+                                            @PathVariable("taxInputId")
+                                                Long taxInputId
     ) {
         service.deleteInput(
                 access(principal, servletRequest),
@@ -150,11 +147,11 @@ public class TaxUploadController {
      * 일부 거래만 전달하면 나머지 기존 거래는 삭제된다.
      */
     @PostMapping("/inputs/{taxInputId}/transactions/save")
-    public ApiResponse<List<TaxTransactionDto>> saveTransactions(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @RequestBody List<TaxTransactionDto> rows
+    public ApiResponse<List<TaxTransactionDto>> saveTransactions(@AuthenticationPrincipal CustomUserDetails principal,
+                                                                 HttpServletRequest servletRequest,
+                                                                 @PathVariable("taxInputId")
+                                                                     Long taxInputId,
+                                                                 @RequestBody List<TaxTransactionDto> rows
     ) {
         return ApiResponse.ok(
                 service.saveTransactions(
@@ -166,10 +163,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/{taxInputId}/transactions/list")
-    public ApiResponse<List<TaxTransactionDto>> getTransactions(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
+    public ApiResponse<List<TaxTransactionDto>> getTransactions(@AuthenticationPrincipal CustomUserDetails principal,
+                                                                HttpServletRequest servletRequest,
+                                                                @PathVariable("taxInputId")
+                                                                    Long taxInputId
     ) {
         return ApiResponse.ok(
                 service.getTransactions(
@@ -182,12 +179,13 @@ public class TaxUploadController {
     @PostMapping(
             "/inputs/{taxInputId}/transactions/{transactionId}/category/update"
     )
-    public ResponseEntity<Void> updateCategory(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @PathVariable("transactionId") Long transactionId,
-            @RequestBody CategoryRequest request
+    public ResponseEntity<Void> updateCategory(@AuthenticationPrincipal CustomUserDetails principal,
+                                               HttpServletRequest servletRequest,
+                                               @PathVariable("taxInputId")
+                                                   Long taxInputId,
+                                               @PathVariable("transactionId")
+                                                   Long transactionId,
+                                               @RequestBody CategoryRequest request
     ) {
         service.updateCategory(
                 access(principal, servletRequest),
@@ -202,11 +200,12 @@ public class TaxUploadController {
     @PostMapping(
             "/inputs/{taxInputId}/transactions/{transactionId}/delete"
     )
-    public ResponseEntity<Void> deleteTransaction(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @PathVariable("transactionId") Long transactionId
+    public ResponseEntity<Void> deleteTransaction(@AuthenticationPrincipal CustomUserDetails principal,
+                                                  HttpServletRequest servletRequest,
+                                                  @PathVariable("taxInputId")
+                                                      Long taxInputId,
+                                                  @PathVariable("transactionId")
+                                                      Long transactionId
     ) {
         service.deleteTransaction(
                 access(principal, servletRequest),
@@ -218,10 +217,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/{taxInputId}/results/detail")
-    public ApiResponse<TaxResultResponse> getResult(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
+    public ApiResponse<TaxResultResponse> getResult(@AuthenticationPrincipal CustomUserDetails principal,
+                                                    HttpServletRequest servletRequest,
+                                                    @PathVariable("taxInputId")
+                                                        Long taxInputId
     ) {
         return ApiResponse.ok(
                 service.getResult(
@@ -232,10 +231,10 @@ public class TaxUploadController {
     }
 
     @PostMapping("/inputs/{taxInputId}/calculate")
-    public ApiResponse<TaxResultResponse> calculateInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
+    public ApiResponse<TaxResultResponse> calculateInput(@AuthenticationPrincipal CustomUserDetails principal,
+                                                         HttpServletRequest servletRequest,
+                                                         @PathVariable("taxInputId")
+                                                             Long taxInputId
     ) {
         return ApiResponse.ok(
                 service.calculateInput(
@@ -249,12 +248,10 @@ public class TaxUploadController {
             value = "/parse",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    public ApiResponse<PdfParseResponseDto> parsePdf(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @RequestParam(value = "taxInputId", required = false)
-            Long taxInputId,
-            @RequestParam("file") MultipartFile file
+    public ApiResponse<PdfParseResponseDto> parsePdf(@AuthenticationPrincipal CustomUserDetails principal, HttpServletRequest servletRequest,
+                                                     @RequestParam(value = "taxInputId", required = false)
+                                                     Long taxInputId,
+                                                     @RequestParam("file") MultipartFile file
     ) throws IOException {
 
         // 비회원은 업로드 전에 서버 세션을 생성한다.

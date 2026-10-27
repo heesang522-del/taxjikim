@@ -5,12 +5,22 @@ import styled from 'styled-components';
 
 import { Button } from '../common/index';
 import { uploadTaxPdfApi } from '../../api/taxApi';
+import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
 
-import {
-  normalizeTaxKind,
-  parseTaxAmount,
-  useTaxStore,
-} from '../../store/useTaxStore';
+const Container = styled.div`
+  min-width: 0;
+  max-width: 100%;
+`;
+
+const StatusArea = styled.div`
+  height: 54px;
+  padding-top: 8px;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+`;
 
 const FileSection = styled.section`
   margin-top: 12px;
@@ -18,6 +28,7 @@ const FileSection = styled.section`
   border: 1px solid #dce3ed;
   border-radius: 12px;
   background: #fff;
+  min-width: 0;
 `;
 
 const FileHeader = styled.div`
@@ -26,10 +37,13 @@ const FileHeader = styled.div`
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
 `;
 
 const FileName = styled.p`
   margin: 0;
+  min-width: 0;
+  flex: 1 1 160px;
   font-weight: 600;
   overflow-wrap: anywhere;
 `;
@@ -39,25 +53,29 @@ const Notice = styled.p`
   color: #536476;
   font-size: 13px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 `;
 
-const ErrorMessage = styled.p`
-  margin: 10px 0 0;
-  padding: 10px 12px;
+const ErrorMessage = styled.div`
+  padding: 8px 10px;
   border-radius: 8px;
   background: #fff4f3;
   color: #a82020;
+`;
+
+const ReviewList = styled.ul`
+  margin: 8px 0 0;
+  padding-left: 20px;
+  max-height: 220px;
+  overflow: auto;
   font-size: 13px;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 `;
 
 function normalizeDate(value) {
   if (Array.isArray(value) && value.length === 3) {
-    return value.map((part, index) => (
-        index === 0
-            ? String(part).padStart(4, '0')
-            : String(part).padStart(2, '0')
-    )).join('-');
+    return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
   }
 
   return typeof value === 'string' ? value : '';
@@ -66,21 +84,16 @@ function normalizeDate(value) {
 function normalizeCategory(value) {
   const category = String(value ?? '').trim();
 
-  return /^[A-Z][A-Z0-9_]{0,49}$/.test(category)
-      ? category
-      : 'UNCLASSIFIED';
-}
-
-function isEvidence(item) {
-  return item.amountBasis === 'DEDUCTION_ELIGIBLE';
+  return /^[A-Z][A-Z0-9_]{0,49}$/.test(category) ? category : 'UNCLASSIFIED';
 }
 
 function toTransactionRow(item, index, fileKey) {
   const date = normalizeDate(item.transactionDate);
+  const actualAmount = parseTaxAmount(item.actualAmount ?? item.amount);
 
-  const actualAmount = parseTaxAmount(
-      item.actualAmount ?? item.amount,
-  );
+  const needsReview = item.needsReview === true || item.parseSuccess !== true;
+
+  const excluded = item.excluded === true || needsReview;
 
   return {
     id: `pdf-${crypto.randomUUID()}`,
@@ -89,30 +102,24 @@ function toTransactionRow(item, index, fileKey) {
     sourceItemIndex: index,
     autoImported: true,
 
-    // 서버가 발급한 DB 식별자를 유지한다.
-    transactionId: item.transactionId,
-    taxInputId: item.taxInputId,
-    persisted: true,
+    transactionId: null,
+    taxInputId: null,
+    persisted: false,
 
     kind: normalizeTaxKind(item.transactionType),
     date,
-    month: item.transactionMonth ?? null,
-    year: date || item.transactionMonth
-        ? null
-        : item.documentYear == null
-            ? null
-            : String(item.documentYear),
+    month: null,
+    year: null,
     documentYear: item.documentYear ?? null,
 
     memo: item.description ?? '',
     cat: normalizeCategory(item.category),
-
     amt: actualAmount ?? '',
     actualAmount,
+
     preTaxIncome: parseTaxAmount(item.preTaxIncome),
     taxDeducted: parseTaxAmount(item.taxDeducted),
     deductedTaxRate: item.deductedTaxRate ?? null,
-
     amountBasis: item.amountBasis ?? 'UNSPECIFIED',
     valueKind: item.valueKind ?? 'DETAIL',
 
@@ -120,39 +127,11 @@ function toTransactionRow(item, index, fileKey) {
     rawText: item.rawText ?? '',
 
     parseSuccess: item.parseSuccess === true,
-    needsReview: item.needsReview === true,
-    failureReason: item.failureReason ?? null,
+    needsReview,
+    failureReason: needsReview ? item.failureReason || '거래 내용을 확인해주세요.' : null,
 
-    selected: true,
-    excluded: false,
-  };
-}
-
-function toEvidenceRow(item, index, fileKey) {
-  return {
-    id: `${fileKey}:evidence:${index}`,
-    sourceFileKey: fileKey,
-
-    transactionId: item.transactionId,
-    taxInputId: item.taxInputId,
-    persisted: true,
-
-    transactionDate: normalizeDate(item.transactionDate),
-    transactionMonth: item.transactionMonth ?? null,
-    documentYear: item.documentYear ?? null,
-
-    description: item.description ?? '',
-    category: normalizeCategory(item.category),
-    amount: parseTaxAmount(item.amount),
-
-    amountBasis: 'DEDUCTION_ELIGIBLE',
-    valueKind: item.valueKind ?? 'MONTHLY_AGGREGATE',
-
-    pageNumber: item.pageNumber ?? null,
-    rawText: item.rawText ?? '',
-
-    needsReview: item.needsReview === true,
-    failureReason: item.failureReason ?? null,
+    selected: !excluded,
+    excluded,
   };
 }
 
@@ -160,28 +139,13 @@ function fileKey(file) {
   return [file.name, file.size, file.lastModified].join(':');
 }
 
-export function FileUploader({
-                               compact = false,
-                               onUploadSuccess,
-                             }) {
+export function FileUploader({ compact = false, onUploadSuccess }) {
   const inputRef = useRef(null);
   const uploadingRef = useRef(false);
 
-  const saving = useTaxStore(
-      (state) => state.taxSaveBusy === true,
-  );
-
-  const uploadedFiles = useTaxStore(
-      (state) => state.uploadedFiles,
-  );
-
-  const fileRows = useTaxStore(
-      (state) => state.fileRows,
-  );
-
-  const evidenceDocuments = useTaxStore(
-      (state) => state.evidenceDocuments,
-  ) ?? [];
+  const saving = useTaxStore((state) => state.taxSaveBusy === true);
+  const uploadedFiles = useTaxStore((state) => state.uploadedFiles) ?? [];
+  const fileRows = useTaxStore((state) => state.fileRows) ?? [];
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -190,11 +154,7 @@ export function FileUploader({
   const busy = loading || saving;
 
   async function handleUpload(file) {
-    if (
-        !file
-        || uploadingRef.current
-        || useTaxStore.getState().taxSaveBusy
-    ) {
+    if (!file || uploadingRef.current || useTaxStore.getState().taxSaveBusy) {
       return;
     }
 
@@ -206,25 +166,20 @@ export function FileUploader({
       return;
     }
 
-    if (file.size > 6 * 1024 * 1024) {
-      setError('PDF 파일은 6MB 이하여야 합니다.');
+    if (file.size === 0 || file.size > 6 * 1024 * 1024) {
+      setError('비어 있지 않은 6MB 이하 PDF를 선택해주세요.');
       return;
     }
 
     const key = fileKey(file);
-    const current = useTaxStore.getState();
 
-    if ((current.uploadedFiles ?? []).some(
-        (entry) => entry.key === key,
-    )) {
+    if ((useTaxStore.getState().uploadedFiles ?? []).some((entry) => entry.key === key)) {
       setError('이미 불러온 파일입니다.');
       return;
     }
 
     uploadingRef.current = true;
     setLoading(true);
-
-    // 업로드 중 팝업 결정 등 다른 저장 요청이 겹치지 않도록 막는다.
     useTaxStore.setState({ taxSaveBusy: true });
 
     let resultInfo = null;
@@ -232,126 +187,43 @@ export function FileUploader({
     try {
       const result = await uploadTaxPdfApi(file);
 
-      const invalidItem = result.transactions.find((item) => (
-          item.parseSuccess !== true
-          || item.needsReview === true
-          || parseTaxAmount(item.amount) === null
-      ));
+      const transactionRows = result.transactions.map((item, index) => toTransactionRow(item, index, key));
 
-      if (invalidItem) {
-        throw new Error(
-            'DB 저장 응답에 확인이 필요한 거래가 있습니다. '
-            + '재업로드하기 전에 저장 결과를 확인해주세요.',
-        );
-      }
-
-      const normalItems = result.transactions.filter(
-          (item) => !isEvidence(item),
-      );
-
-      const evidenceItems = result.transactions.filter(isEvidence);
-
-      const transactionRows = normalItems.map(
-          (item, index) => toTransactionRow(item, index, key),
-      );
-
-      const evidenceRows = evidenceItems.map(
-          (item, index) => toEvidenceRow(item, index, key),
-      );
-
-      /*
-       * 서버에서 DB 저장과 재조회까지 완료한 결과를 한 번에 반영한다.
-       * 저장된 거래번호를 화면용 임시 번호로 대체하지 않는다.
-       */
-      useTaxStore.setState((state) => {
-        const previousSnapshots = state.taxSavedSnapshots ?? [];
-
-        const newInputIds = new Set(
-            result.snapshots.map((snapshot) => snapshot.taxInputId),
-        );
-
-        return {
-          uploadedFiles: [
-            ...(state.uploadedFiles ?? []).filter(
-                (entry) => entry.key !== key,
-            ),
-            {
-              key,
-              name: file.name,
-              fileId: result.fileId,
-              count: transactionRows.length,
-              savedCount: result.savedCount,
-              persisted: true,
-              taxInputIdsByYear: result.taxInputIdsByYear,
-            },
-          ],
-
-          fileRows: [
-            ...(state.fileRows ?? []).filter(
-                (row) => row.sourceFileKey !== key,
-            ),
-            ...transactionRows,
-          ],
-
-          evidenceDocuments: [
-            ...(state.evidenceDocuments ?? []).filter(
-                (document) => document.key !== key,
-            ),
-            ...(evidenceRows.length > 0
-                ? [{
-                  key,
-                  name: file.name,
-                  rows: evidenceRows,
-                  persisted: true,
-                }]
-                : []),
-          ],
-
-          taxInputIdsByYear: {
-            ...(state.taxInputIdsByYear ?? {}),
-            ...result.taxInputIdsByYear,
+      useTaxStore.setState((state) => ({
+        uploadedFiles: [
+          ...(state.uploadedFiles ?? []),
+          {
+            key,
+            name: file.name,
+            fileId: result.fileId,
+            count: transactionRows.length,
           },
-
-          taxSavedSnapshots: [
-            ...previousSnapshots.filter(
-                (snapshot) => !newInputIds.has(snapshot.taxInputId),
-            ),
-            ...result.snapshots,
-          ],
-
-          /*
-           * 새 파일이 추가되면 이전 결정 결과는 최신 입력과 다르다.
-           * 팝업의 결정에서 전체 입력과 프로필을 다시 저장한다.
-           */
-          taxLastSavedSignature: null,
-          taxPendingSnapshot: null,
-
-          inputMethod: 'file',
-          calculated: false,
-        };
-      });
+        ],
+        fileRows: [...(state.fileRows ?? []), ...transactionRows],
+        taxLastSavedSignature: null,
+        calculated: false,
+        inputMethod: 'file',
+      }));
 
       setMessage(
-          `DB에 ${result.savedCount}건을 저장했습니다. `
-          + `일반 거래 ${transactionRows.length}건 · `
-          + `월별 증빙 ${evidenceRows.length}건`,
+        `분석 ${transactionRows.length}건` +
+          ` · 저장 대기 ${transactionRows.length - result.reviewCount}건` +
+          ` · 검토 ${result.reviewCount}건`
       );
 
       resultInfo = {
         transactionCount: transactionRows.length,
-        evidenceCount: evidenceRows.length,
-        persisted: true,
-        taxInputIdsByYear: result.taxInputIdsByYear,
+        savedCount: 0,
+        reviewCount: result.reviewCount,
+        evidenceCount: 0,
+        persisted: false,
+        taxInputIdsByYear: {},
       };
     } catch (cause) {
-      setError(
-          `${cause.message ?? 'PDF 내역을 불러오지 못했습니다.'}`
-          + (cause.code ? ` [${cause.code}]` : ''),
-      );
+      setError((cause.message ?? 'PDF를 불러오지 못했습니다.') + (cause.code ? ` [${cause.code}]` : ''));
     } finally {
       uploadingRef.current = false;
       setLoading(false);
-
       useTaxStore.setState({ taxSaveBusy: false });
     }
 
@@ -359,9 +231,7 @@ export function FileUploader({
       try {
         await onUploadSuccess?.(resultInfo);
       } catch {
-        setError(
-            'DB 저장과 목록 반영은 완료됐지만 후속 화면 처리에 실패했습니다.',
-        );
+        setError('분석 결과는 반영됐지만 후속 화면 처리에 실패했습니다. 현재 목록을 확인해주세요.');
       }
     }
   }
@@ -369,115 +239,95 @@ export function FileUploader({
   function handleRemoveFile(key) {
     if (busy || useTaxStore.getState().taxSaveBusy) return;
 
-    /*
-     * 원본 스냅샷은 보존한다.
-     * 화면에서 제거한 결과는 팝업 결정 시 새 수정본에 반영한다.
-     */
     useTaxStore.setState((state) => ({
-      uploadedFiles: (state.uploadedFiles ?? []).filter(
-          (entry) => entry.key !== key,
-      ),
-      fileRows: (state.fileRows ?? []).filter(
-          (row) => row.sourceFileKey !== key,
-      ),
-      evidenceDocuments: (state.evidenceDocuments ?? []).filter(
-          (document) => document.key !== key,
-      ),
+      uploadedFiles: (state.uploadedFiles ?? []).filter((entry) => entry.key !== key),
+      fileRows: (state.fileRows ?? []).filter((row) => row.sourceFileKey !== key),
       taxLastSavedSignature: null,
-      taxPendingSnapshot: null,
       calculated: false,
     }));
 
     setError('');
-    setMessage(
-        '파일을 현재 목록에서 제외했습니다. '
-        + '원본은 DB에 보존되며, 팝업 결정 시 제외된 목록을 새로 저장합니다.',
-    );
+    setMessage('화면에서 파일 내역을 제외했습니다. 저장된 DB 거래를 삭제하려면 내역 확인·수정에서 삭제해주세요.');
   }
 
   return (
-      <div style={compact ? undefined : { padding: 16 }}>
-        <Button
-            type="button"
-            size="sm"
-            disabled={busy}
-            onClick={() => inputRef.current?.click()}
-        >
-          {loading ? 'PDF 분석·DB 저장 중…' : 'PDF 불러오기'}
-        </Button>
+    <Container style={compact ? undefined : { padding: 16 }}>
+      <Button type="button" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
+        {loading ? 'PDF 분석 중…' : 'PDF 불러오기'}
+      </Button>
 
-        <input
-            ref={inputRef}
-            hidden
-            type="file"
-            accept=".pdf,application/pdf"
-            disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
+      <input
+        ref={inputRef}
+        hidden
+        type="file"
+        accept=".pdf,application/pdf"
+        disabled={busy}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = '';
+          void handleUpload(file);
+        }}
+      />
 
-              // 같은 파일을 다시 선택할 수 있도록 입력값만 비운다.
-              event.target.value = '';
-
-              handleUpload(file);
-            }}
-        />
-
-        {message && <Notice role="status">{message}</Notice>}
-
-        {error && (
-            <ErrorMessage role="alert">
-              {error}
-            </ErrorMessage>
+      <StatusArea aria-live="polite">
+        {error ? (
+          <ErrorMessage role="alert">{error}</ErrorMessage>
+        ) : (
+          <span>{loading ? 'PDF를 분석하고 있습니다.' : message}</span>
         )}
+      </StatusArea>
 
-        {(uploadedFiles ?? []).map((file) => {
-          const transactionCount = (fileRows ?? []).filter(
-              (row) => row.sourceFileKey === file.key,
-          ).length;
+      {uploadedFiles.map((file) => {
+        const rows = fileRows.filter((row) => row.sourceFileKey === file.key);
 
-          const document = evidenceDocuments.find(
-              (entry) => entry.key === file.key,
-          );
+        const reviewRows = rows.filter((row) => row.needsReview === true || row.excluded === true);
 
-          const evidenceCount = document?.rows?.length ?? 0;
+        const savedCount = rows.filter((row) => row.persisted === true).length;
 
-          return (
-              <FileSection key={file.key}>
-                <FileHeader>
-                  <FileName>{file.name}</FileName>
+        const pendingCount = rows.filter(
+          (row) => row.persisted !== true && row.needsReview !== true && row.excluded !== true
+        ).length;
 
-                  <Button
-                      type="button"
-                      size="sm"
-                      disabled={busy}
-                      onClick={() => handleRemoveFile(file.key)}
-                  >
-                    파일 내역 제외
-                  </Button>
-                </FileHeader>
+        return (
+          <FileSection key={file.key}>
+            <FileHeader>
+              <FileName>{file.name}</FileName>
 
-                <Notice>
-                  일반 거래 {transactionCount}건
-                  {' · '}
-                  월별 증빙 {evidenceCount}건
-                </Notice>
+              <Button type="button" size="sm" disabled={busy} onClick={() => handleRemoveFile(file.key)}>
+                파일 내역 제외
+              </Button>
+            </FileHeader>
 
-                <Notice>
-                  카테고리 수정과 선택 삭제는 수입·지출 내역 확인
-                </Notice>
+            <Notice>
+              전체 {rows.length}건 · DB 저장 {savedCount}건{' · '}저장 대기 {pendingCount}건{' · '}검토{' '}
+              {reviewRows.length}건
+            </Notice>
 
-                {evidenceCount > 0 && (
-                    <Notice>
-                      공제대상금액은 실제 출금액이나 최종 세금 공제액이 아니며,
-                      수입·지출 합계에 포함하지 않습니다.
-                    </Notice>
-                )}
-              </FileSection>
-          );
-        })}
-      </div>
+            <Notice>PDF 불러오기는 분석만 수행합니다. 내역 확인·수정에서 결정하면 정상 거래를 저장합니다.</Notice>
+
+            {reviewRows.length > 0 && (
+              <details>
+                <summary>검토 사유 {reviewRows.length}건 확인</summary>
+
+                <ReviewList>
+                  {reviewRows.map((row) => (
+                    <li key={row.id}>
+                      {row.pageNumber ? `${row.pageNumber}페이지 · ` : ''}
+                      {row.date || '날짜 확인 필요'}
+                      {' · '}
+                      {row.memo || '설명 확인 필요'}
+                      {' — '}
+                      {row.failureReason || '거래 내용을 확인해주세요.'}
+                    </li>
+                  ))}
+                </ReviewList>
+              </details>
+            )}
+          </FileSection>
+        );
+      })}
+    </Container>
   );
 }
 
-// 기존 default import를 사용하는 파일과의 호환을 유지한다.
 export default FileUploader;

@@ -1,4 +1,4 @@
-"""PDF 내장 텍스트와 OCR 단어를 좌표 기반으로 병합한다."""
+"""PDF 내장 텍스트와 OCR 단어를 병합하고 행과 셀을 복원한다."""
 
 from __future__ import annotations
 
@@ -6,44 +6,93 @@ import math
 import re
 import statistics
 
+from dataclasses import dataclass
 from typing import Any
 
 
-def normalize(value: object) -> str:
-    """비교용 문자열을 만든다.
+@dataclass(frozen=True)
+class LayoutConfig:
+    """문서에 따라 조정할 수 있는 처리 기준이다."""
 
-    숫자의 의미가 달라지지 않도록
-    소수점, 부호, 백분율 기호는 보존한다.
-    """
+    coverage_threshold: float = 0.8
+    same_text_overlap: float = 0.35
 
-    source = str(
-        value if value is not None else ""
-    )
+    row_tolerance_factor: float = 0.4
+    min_row_tolerance: float = 2.0
+    min_vertical_overlap: float = 0.4
 
-    return re.sub(
-        r"\s+",
-        "",
-        source.casefold(),
-    )
+    cell_gap_factor: float = 2.0
+    min_cell_gap: float = 7.0
+
+    def __post_init__(self) -> None:
+        rules = {
+            "coverage_threshold": (0, 1, True),
+            "same_text_overlap": (0, 1, True),
+            "row_tolerance_factor": (0, 1, True),
+            "min_vertical_overlap": (0, 1, True),
+            "cell_gap_factor": (0, None, True),
+            "min_row_tolerance": (0, None, False),
+            "min_cell_gap": (0, None, False),
+        }
+
+        for name, (minimum, maximum, exclusive) in rules.items():
+            value = getattr(self, name)
+
+            invalid = (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            )
+
+            if not invalid:
+                invalid = (
+                    value <= minimum
+                    if exclusive
+                    else value < minimum
+                )
+
+            if not invalid and maximum is not None:
+                invalid = value > maximum
+
+            if invalid:
+                raise ValueError(
+                    f"{name}: 설정값이 허용 범위를 벗어났습니다."
+                )
+
+
+DEFAULT_CONFIG = LayoutConfig()
+
+
+def _normalize(value: str) -> str:
+    """숫자의 부호·소수점·백분율을 보존한다."""
+
+    return re.sub(r"\s+", "", value).casefold()
 
 
 def prepare_word(
     word: dict[str, Any],
-    *,
-    default_source: str = "UNKNOWN",
+    source: str = "UNKNOWN",
 ) -> dict[str, Any] | None:
-    """입력 단어의 좌표와 값을 표준 형식으로 변환한다."""
+    """좌표와 단어 값을 검증하고 좌표 이름을 통일한다."""
 
     if not isinstance(word, dict):
         return None
 
-    source_text = str(
+    value = str(
         word.get("text")
         if word.get("text") is not None
         else ""
     ).strip()
 
-    if not source_text:
+    if (
+        not value
+        or "\ufffd" in value
+        or any(
+            ord(character) < 32
+            and not character.isspace()
+            for character in value
+        )
+    ):
         return None
 
     try:
@@ -68,185 +117,101 @@ def prepare_word(
     ):
         return None
 
-    coordinates = (
-        left,
-        top,
-        right,
-        bottom,
-    )
-
-    if not all(
-        math.isfinite(value)
-        for value in coordinates
+    if (
+        not all(
+            math.isfinite(number)
+            for number in (left, top, right, bottom)
+        )
+        or right <= left
+        or bottom <= top
     ):
-        return None
-
-    if right <= left or bottom <= top:
         return None
 
     confidence = None
 
-    if word.get("confidence") is not None:
-        try:
-            candidate = float(
-                word["confidence"]
-            )
+    try:
+        if word.get("confidence") is not None:
+            candidate = float(word["confidence"])
 
             if math.isfinite(candidate):
                 confidence = candidate
 
-        except (
-            TypeError,
-            ValueError,
-            OverflowError,
-        ):
-            pass
+    except (TypeError, ValueError, OverflowError):
+        pass
 
-    source = str(
-        word.get("source")
-        or default_source
-    ).strip()
+    result = {
+        "text": value,
+        "left": left,
+        "top": top,
+        "right": right,
+        "bottom": bottom,
+        "source": str(word.get("source") or source),
+        "confidence": confidence,
+    }
 
-    result = dict(word)
-
-    # 좌표 키를 한 가지 형식으로 통일한다.
-    result.pop("x0", None)
-    result.pop("x1", None)
-
-    result.update(
-        {
-            "text": source_text,
-            "left": left,
-            "top": top,
-            "right": right,
-            "bottom": bottom,
-            "source": source or default_source,
-            "confidence": confidence,
-        }
-    )
-
-    return result
-
-
-def prepare_words(
-    words: list[dict[str, Any]],
-    *,
-    default_source: str = "UNKNOWN",
-) -> list[dict[str, Any]]:
-    result = []
-
-    for word in words:
-        prepared = prepare_word(
-            word,
-            default_source=default_source,
+    # 행 복원 단계에서도 병합 검토 사유를 유지한다.
+    if word.get("reviewReasons"):
+        result["reviewReasons"] = list(
+            word["reviewReasons"]
         )
 
-        if prepared is not None:
-            result.append(prepared)
-
     return result
 
 
-def has_broken_text(
-    value: object,
-) -> bool:
-    """명시적인 대체 문자와 비정상 제어 문자를 확인한다.
-
-    정상적인 문자로 잘못 추출된 경우까지
-    자동으로 판별하는 기능은 아니다.
-    """
-
-    source = str(
-        value if value is not None else ""
-    )
-
-    if "\ufffd" in source:
-        return True
-
-    return any(
-        ord(character) < 32
-        and not character.isspace()
-        for character in source
-    )
+def _prepare_words(
+    words: list[dict[str, Any]],
+    source: str,
+) -> list[dict[str, Any]]:
+    return [
+        prepared
+        for word in words
+        if (
+            prepared := prepare_word(word, source)
+        ) is not None
+    ]
 
 
-def word_area(
-    word: dict[str, Any],
+def _bounds(
+    words: list[dict[str, Any]],
+) -> list[float]:
+    return [
+        min(word["left"] for word in words),
+        min(word["top"] for word in words),
+        max(word["right"] for word in words),
+        max(word["bottom"] for word in words),
+    ]
+
+
+def _area(
+    rectangle: list[float] | tuple[float, ...],
 ) -> float:
-    width = max(
-        0.0,
-        word["right"] - word["left"],
-    )
-    height = max(
-        0.0,
-        word["bottom"] - word["top"],
-    )
-
-    return width * height
+    left, top, right, bottom = rectangle
+    return (right - left) * (bottom - top)
 
 
-def intersection_area(
+def _intersection(
     first: dict[str, Any],
     second: dict[str, Any],
-) -> float:
-    left = max(
-        first["left"],
-        second["left"],
+) -> tuple[float, float, float, float] | None:
+    rectangle = (
+        max(first["left"], second["left"]),
+        max(first["top"], second["top"]),
+        min(first["right"], second["right"]),
+        min(first["bottom"], second["bottom"]),
     )
-    top = max(
-        first["top"],
-        second["top"],
-    )
-    right = min(
-        first["right"],
-        second["right"],
-    )
-    bottom = min(
-        first["bottom"],
-        second["bottom"],
-    )
+
+    left, top, right, bottom = rectangle
 
     if right <= left or bottom <= top:
-        return 0.0
+        return None
 
-    return (
-        (right - left)
-        * (bottom - top)
-    )
+    return rectangle
 
 
-def overlap_ratio(
-    a: dict[str, Any],
-    b: dict[str, Any],
+def _union_area(
+    rectangles: list[tuple[float, float, float, float]],
 ) -> float:
-    """두 단어 중 작은 영역이 겹치는 비율을 반환한다."""
-
-    first = prepare_word(a)
-    second = prepare_word(b)
-
-    if first is None or second is None:
-        return 0.0
-
-    smaller_area = min(
-        word_area(first),
-        word_area(second),
-    )
-
-    if smaller_area <= 0:
-        return 0.0
-
-    return (
-        intersection_area(first, second)
-        / smaller_area
-    )
-
-
-def union_area(
-    rectangles: list[
-        tuple[float, float, float, float]
-    ],
-) -> float:
-    """겹치는 사각형의 면적을 중복 계산하지 않는다."""
+    """겹치는 영역의 면적을 중복 합산하지 않는다."""
 
     if not rectangles:
         return 0.0
@@ -261,13 +226,7 @@ def union_area(
 
     total = 0.0
 
-    for left, right in zip(
-        boundaries,
-        boundaries[1:],
-    ):
-        if right <= left:
-            continue
-
+    for left, right in zip(boundaries, boundaries[1:]):
         intervals = sorted(
             (top, bottom)
             for x0, top, x1, bottom in rectangles
@@ -278,158 +237,50 @@ def union_area(
             continue
 
         start, end = intervals[0]
-        covered_height = 0.0
+        height = 0.0
 
         for top, bottom in intervals[1:]:
             if top <= end:
                 end = max(end, bottom)
             else:
-                covered_height += end - start
+                height += end - start
                 start, end = top, bottom
-
-        covered_height += end - start
 
         total += (
             (right - left)
-            * covered_height
+            * (height + end - start)
         )
 
     return total
 
 
-def coverage_ratio(
-    word: dict[str, Any],
-    existing_words: list[dict[str, Any]],
-) -> float:
-    """입력 단어 영역이 기존 단어들에 덮인 비율을 계산한다."""
+def _mark_review(
+    words: list[dict[str, Any]],
+    reason: str,
+) -> None:
+    for word in words:
+        reasons = list(word.get("reviewReasons") or [])
 
-    area = word_area(word)
+        if reason not in reasons:
+            reasons.append(reason)
 
-    if area <= 0:
-        return 0.0
-
-    intersections = []
-
-    for existing in existing_words:
-        left = max(
-            word["left"],
-            existing["left"],
-        )
-        top = max(
-            word["top"],
-            existing["top"],
-        )
-        right = min(
-            word["right"],
-            existing["right"],
-        )
-        bottom = min(
-            word["bottom"],
-            existing["bottom"],
-        )
-
-        if right > left and bottom > top:
-            intersections.append(
-                (
-                    left,
-                    top,
-                    right,
-                    bottom,
-                )
-            )
-
-    return min(
-        1.0,
-        union_area(intersections) / area,
-    )
-
-
-def same_position_and_text(
-    first: dict[str, Any],
-    second: dict[str, Any],
-    *,
-    minimum_overlap: float = 0.35,
-) -> bool:
-    if (
-        normalize(first["text"])
-        != normalize(second["text"])
-    ):
-        return False
-
-    smaller_area = min(
-        word_area(first),
-        word_area(second),
-    )
-
-    if smaller_area <= 0:
-        return False
-
-    return (
-        intersection_area(first, second)
-        / smaller_area
-    ) >= minimum_overlap
+        word["reviewReasons"] = reasons
 
 
 def merge_words(
     native: list[dict[str, Any]],
     ocr: list[dict[str, Any]],
     *,
-    coverage_threshold: float = 0.8,
-    min_ocr_confidence: float | None = None,
+    config: LayoutConfig = DEFAULT_CONFIG,
 ) -> list[dict[str, Any]]:
-    """내장 텍스트를 우선하고 OCR로 누락 영역을 보완한다.
-
-    모든 입력 좌표는 같은 단위와 회전 방향이어야 한다.
-    키 이름은 변환하지만 픽셀과 PDF 좌표 간 변환은 하지 않는다.
-    """
-
-    if not 0 < coverage_threshold <= 1:
-        raise ValueError(
-            "중복 영역 기준은 0보다 크고 1 이하여야 합니다."
-        )
-
-    if (
-        min_ocr_confidence is not None
-        and (
-            not math.isfinite(min_ocr_confidence)
-            or not 0 <= min_ocr_confidence <= 100
-        )
-    ):
-        raise ValueError(
-            "OCR 최소 신뢰도는 0~100이어야 합니다."
-        )
-
-    native_words = prepare_words(
-        native,
-        default_source="PDF_TEXT",
-    )
-
-    ocr_words = prepare_words(
-        ocr,
-        default_source="OCR",
-    )
+    """내장 텍스트를 우선하고 OCR로 누락 영역을 보완한다."""
 
     result: list[dict[str, Any]] = []
 
-    # 정상 내장 텍스트끼리도 같은 위치의 중복을 제거한다.
-    for word in native_words:
-        if has_broken_text(word["text"]):
-            continue
+    native_words = _prepare_words(native, "PDF_TEXT")
 
-        if any(
-            same_position_and_text(
-                word,
-                existing,
-            )
-            for existing in result
-        ):
-            continue
-
-        result.append(word)
-
-    # 신뢰도가 높은 OCR 결과부터 처리한다.
-    ordered_ocr = sorted(
-        ocr_words,
+    ocr_words = sorted(
+        _prepare_words(ocr, "OCR"),
         key=lambda word: (
             word["confidence"]
             if word["confidence"] is not None
@@ -438,428 +289,256 @@ def merge_words(
         reverse=True,
     )
 
-    for word in ordered_ocr:
-        if has_broken_text(word["text"]):
-            continue
+    for is_ocr, words in (
+        (False, native_words),
+        (True, ocr_words),
+    ):
+        for word in words:
+            overlaps = []
 
-        confidence = word["confidence"]
+            for existing in result:
+                rectangle = _intersection(word, existing)
 
-        if min_ocr_confidence is not None:
-            if (
-                confidence is None
-                or confidence < min_ocr_confidence
-            ):
+                if rectangle is not None:
+                    overlaps.append((existing, rectangle))
+
+            duplicate = any(
+                _normalize(word["text"])
+                == _normalize(existing["text"])
+                and _area(rectangle)
+                / min(
+                    _area(_bounds([word])),
+                    _area(_bounds([existing])),
+                )
+                >= config.same_text_overlap
+                for existing, rectangle in overlaps
+            )
+
+            if duplicate:
                 continue
 
-        # 내장 텍스트뿐 아니라 이미 추가한 OCR과도 비교한다.
-        if any(
-            same_position_and_text(
-                word,
-                existing,
-            )
-            for existing in result
-        ):
-            continue
+            if not is_ocr or not overlaps:
+                result.append(word)
+                continue
 
-        overlapping = [
-            existing
-            for existing in result
-            if intersection_area(
-                word,
-                existing,
-            ) > 0
-        ]
+            existing_words = [
+                existing
+                for existing, _ in overlaps
+            ]
 
-        if (
-            coverage_ratio(
-                word,
-                overlapping,
-            )
-            >= coverage_threshold
-        ):
-            continue
-
-        candidate = dict(word)
-
-        # 일부만 겹치는 경우에는 단어를 자르거나 버리지 않는다.
-        # 대신 후속 단계에서 확인할 수 있도록 표시한다.
-        if overlapping:
-            candidate["mergeNeedsReview"] = True
-            candidate["mergeReason"] = (
-                "기존 단어와 일부 영역이 겹칩니다."
+            coverage = (
+                _union_area(
+                    [
+                        rectangle
+                        for _, rectangle in overlaps
+                    ]
+                )
+                / _area(_bounds([word]))
             )
 
-        result.append(candidate)
+            if coverage >= config.coverage_threshold:
+                combined_text = "".join(
+                    existing["text"]
+                    for existing in sorted(
+                        existing_words,
+                        key=lambda item: item["left"],
+                    )
+                )
+
+                if (
+                    _normalize(combined_text)
+                    != _normalize(word["text"])
+                ):
+                    _mark_review(
+                        existing_words,
+                        "같은 위치의 기존 텍스트와 "
+                        "OCR 결과가 일치하지 않습니다.",
+                    )
+
+                continue
+
+            _mark_review(
+                existing_words + [word],
+                "단어 영역이 일부 겹쳐 "
+                "중복 여부 확인이 필요합니다.",
+            )
+
+            result.append(word)
 
     return sorted(
         result,
         key=lambda word: (
-            (
-                word["top"]
-                + word["bottom"]
-            ) / 2,
+            (word["top"] + word["bottom"]) / 2,
             word["left"],
         ),
     )
 
 
-def row_statistics(
+def _row_statistics(
     words: list[dict[str, Any]],
 ) -> tuple[float, float, float, float]:
-    center = statistics.median(
-        (
-            word["top"]
-            + word["bottom"]
-        ) / 2
-        for word in words
-    )
-
-    height = statistics.median(
-        word["bottom"] - word["top"]
-        for word in words
-    )
-
-    top = statistics.median(
-        word["top"]
-        for word in words
-    )
-
-    bottom = statistics.median(
-        word["bottom"]
-        for word in words
-    )
-
-    return center, height, top, bottom
-
-
-def vertical_overlap_ratio(
-    word: dict[str, Any],
-    row_top: float,
-    row_bottom: float,
-) -> float:
-    intersection = max(
-        0.0,
-        min(
-            word["bottom"],
-            row_bottom,
-        )
-        - max(
-            word["top"],
-            row_top,
+    return (
+        statistics.median(
+            (word["top"] + word["bottom"]) / 2
+            for word in words
         ),
-    )
-
-    smaller_height = min(
-        word["bottom"] - word["top"],
-        row_bottom - row_top,
-    )
-
-    if smaller_height <= 0:
-        return 0.0
-
-    return intersection / smaller_height
-
-
-def group_words_into_rows(
-    words: list[dict[str, Any]],
-    *,
-    row_tolerance_factor: float,
-) -> list[list[dict[str, Any]]]:
-    """행과 단어의 높이를 비교해 같은 줄을 구성한다."""
-
-    rows: list[
-        list[dict[str, Any]]
-    ] = []
-
-    ordered = sorted(
-        words,
-        key=lambda word: (
-            (
-                word["top"]
-                + word["bottom"]
-            ) / 2,
-            word["left"],
+        statistics.median(
+            word["bottom"] - word["top"]
+            for word in words
         ),
-    )
-
-    for word in ordered:
-        center = (
+        statistics.median(
             word["top"]
-            + word["bottom"]
-        ) / 2
-
-        height = (
+            for word in words
+        ),
+        statistics.median(
             word["bottom"]
-            - word["top"]
-        )
+            for word in words
+        ),
+    )
 
-        best_row = None
+
+def _group_rows(
+    words: list[dict[str, Any]],
+    config: LayoutConfig,
+) -> list[list[dict[str, Any]]]:
+    rows: list[list[dict[str, Any]]] = []
+
+    for word in sorted(
+        words,
+        key=lambda item: (
+            (item["top"] + item["bottom"]) / 2,
+            item["left"],
+        ),
+    ):
+        center = (word["top"] + word["bottom"]) / 2
+        height = word["bottom"] - word["top"]
+
+        selected = None
         best_distance = float("inf")
 
         for row in rows:
-            (
-                row_center,
-                row_height,
-                row_top,
-                row_bottom,
-            ) = row_statistics(row)
+            row_center, row_height, top, bottom = (
+                _row_statistics(row)
+            )
 
             tolerance = max(
-                2.0,
-                min(
-                    height,
-                    row_height,
-                ) * row_tolerance_factor,
+                config.min_row_tolerance,
+                min(height, row_height)
+                * config.row_tolerance_factor,
             )
 
-            distance = abs(
-                center - row_center
-            )
+            overlap = max(
+                0.0,
+                min(word["bottom"], bottom)
+                - max(word["top"], top),
+            ) / min(height, bottom - top)
 
-            overlap = vertical_overlap_ratio(
-                word,
-                row_top,
-                row_bottom,
-            )
+            distance = abs(center - row_center)
 
             if (
                 distance <= tolerance
-                and overlap >= 0.4
+                and overlap >= config.min_vertical_overlap
                 and distance < best_distance
             ):
-                best_row = row
+                selected = row
                 best_distance = distance
 
-        if best_row is None:
+        if selected is None:
             rows.append([word])
         else:
-            best_row.append(word)
+            selected.append(word)
 
     for row in rows:
-        row.sort(
-            key=lambda word: word["left"]
-        )
+        row.sort(key=lambda word: word["left"])
 
-    rows.sort(
-        key=lambda row: row_statistics(row)[0]
+    return sorted(
+        rows,
+        key=lambda row: _row_statistics(row)[0],
     )
 
-    return rows
 
-
-def build_cells(
+def _build_cells(
     words: list[dict[str, Any]],
-    *,
-    cell_gap_factor: float,
-    min_cell_gap: float,
-) -> list[dict[str, Any]]:
-    """단어 간 간격으로 셀 후보를 구성한다."""
+    config: LayoutConfig,
+) -> list[str]:
+    """기존 글자 너비 기준으로 셀을 분리한다."""
 
-    if not words:
-        return []
-
-    character_widths = [
-        (
-            word["right"] - word["left"]
-        ) / max(
-            1,
-            len(
-                re.sub(
-                    r"\s+",
-                    "",
-                    word["text"],
-                )
-            ),
-        )
-        for word in words
-    ]
-
-    gap_threshold = max(
-        min_cell_gap,
+    threshold = max(
+        config.min_cell_gap,
         statistics.median(
-            character_widths
-        ) * cell_gap_factor,
+            (word["right"] - word["left"])
+            / max(1, len(_normalize(word["text"])))
+            for word in words
+        ) * config.cell_gap_factor,
     )
 
-    groups: list[
-        list[dict[str, Any]]
-    ] = []
-
-    current: list[
-        dict[str, Any]
-    ] = []
-
+    cells = []
+    current = []
     current_right = None
 
     for word in words:
         if (
             current
             and current_right is not None
-            and word["left"] - current_right
-            > gap_threshold
+            and word["left"] - current_right > threshold
         ):
-            groups.append(current)
+            cells.append(" ".join(current))
             current = []
             current_right = None
 
-        current.append(word)
+        current.append(word["text"])
 
         current_right = (
             word["right"]
             if current_right is None
-            else max(
-                current_right,
-                word["right"],
-            )
+            else max(current_right, word["right"])
         )
 
     if current:
-        groups.append(current)
+        cells.append(" ".join(current))
 
-    return [
-        {
-            "text": " ".join(
-                word["text"]
-                for word in group
-            ),
-            "bbox": [
-                min(
-                    word["left"]
-                    for word in group
-                ),
-                min(
-                    word["top"]
-                    for word in group
-                ),
-                max(
-                    word["right"]
-                    for word in group
-                ),
-                max(
-                    word["bottom"]
-                    for word in group
-                ),
-            ],
-            "words": [
-                dict(word)
-                for word in group
-            ],
-        }
-        for group in groups
-    ]
+    return cells
 
 
 def words_to_rows(
     words: list[dict[str, Any]],
     *,
-    row_tolerance_factor: float = 0.4,
-    cell_gap_factor: float = 2.0,
-    min_cell_gap: float = 7.0,
+    config: LayoutConfig = DEFAULT_CONFIG,
 ) -> list[dict[str, Any]]:
-    """단어 좌표에서 행과 셀 후보를 복원한다.
+    """단어를 행과 셀로 복원해 거래 파서에 전달한다."""
 
-    빈 컬럼이나 여러 줄 설명을 확정적으로 복원하지는 않는다.
-    셀 좌표와 단어 좌표를 함께 반환해 후속 검증에 사용한다.
-    """
-
-    if (
-        not math.isfinite(row_tolerance_factor)
-        or not 0 < row_tolerance_factor <= 1
-    ):
-        raise ValueError(
-            "행 허용 오차 배율은 0보다 크고 1 이하여야 합니다."
-        )
-
-    if (
-        not math.isfinite(cell_gap_factor)
-        or cell_gap_factor <= 0
-    ):
-        raise ValueError(
-            "셀 간격 배율은 0보다 커야 합니다."
-        )
-
-    if (
-        not math.isfinite(min_cell_gap)
-        or min_cell_gap < 0
-    ):
-        raise ValueError(
-            "최소 셀 간격은 0 이상이어야 합니다."
-        )
-
-    prepared = prepare_words(words)
+    prepared = _prepare_words(words, "UNKNOWN")
 
     if not prepared:
         return []
 
-    rows = group_words_into_rows(
-        prepared,
-        row_tolerance_factor=row_tolerance_factor,
-    )
+    result = []
 
-    output = []
+    for row in _group_rows(prepared, config):
+        cells = _build_cells(row, config)
 
-    for row in rows:
-        cell_details = build_cells(
-            row,
-            cell_gap_factor=cell_gap_factor,
-            min_cell_gap=min_cell_gap,
-        )
-
-        cells = [
-            cell["text"]
-            for cell in cell_details
-        ]
-
-        merge_reasons = sorted(
+        reasons = sorted(
             {
-                str(
-                    word.get("mergeReason")
-                    or "단어 중복 여부 확인 필요"
-                )
+                reason
                 for word in row
-                if word.get("mergeNeedsReview")
+                for reason in (
+                    word.get("reviewReasons") or []
+                )
             }
         )
 
-        output.append(
+        result.append(
             {
-                # 기존 파서와의 연결 형식을 유지한다.
                 "text": " | ".join(cells),
                 "cells": cells,
-                "bbox": [
-                    min(
-                        word["left"]
-                        for word in row
-                    ),
-                    min(
-                        word["top"]
-                        for word in row
-                    ),
-                    max(
-                        word["right"]
-                        for word in row
-                    ),
-                    max(
-                        word["bottom"]
-                        for word in row
-                    ),
-                ],
+                "bbox": _bounds(row),
+                "words": row,
                 "sources": sorted(
-                    {
-                        word["source"]
-                        for word in row
-                    }
+                    {word["source"] for word in row}
                 ),
-                "words": [
-                    dict(word)
-                    for word in row
-                ],
-                "cellDetails": cell_details,
-                "needsReview": bool(
-                    merge_reasons
-                ),
-                "reviewReasons": merge_reasons,
+                "needsReview": bool(reasons),
+                "reviewReasons": reasons,
             }
         )
 
-    return output
+    return result

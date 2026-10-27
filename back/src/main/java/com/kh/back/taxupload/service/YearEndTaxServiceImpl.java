@@ -31,11 +31,9 @@ import java.math.BigDecimal;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 
 @Slf4j
 @Service
@@ -56,18 +54,13 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             AccessContext access,
             TaxInputRequest request
     ) {
-        TaxInputRequest input = normalizeInput(
-                request,
-                null,
-                userId(access)
-        );
+        TaxInputRequest input =
+                normalizeInput(request, null, userId(access));
 
         taxValidator.validateInput(input);
 
         if ("SAVED".equals(input.getSaveStatus())) {
-            input.setUserId(
-                    taxValidator.requireLogin(access)
-            );
+            input.setUserId(taxValidator.requireLogin(access));
         }
 
         taxMapper.insertInput(input);
@@ -96,10 +89,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             taxValidator.validateTaxYear(taxYear);
         }
 
-        return taxMapper.findSavedInputs(
-                loginUserId,
-                taxYear
-        );
+        return taxMapper.findSavedInputs(loginUserId, taxYear);
     }
 
     @Override
@@ -123,13 +113,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         if (existing.getUserId() == null
                 && "SAVED".equals(updated.getSaveStatus())) {
 
-            Long loginUserId =
-                    taxValidator.requireLogin(access);
+            Long loginUserId = taxValidator.requireLogin(access);
 
             if (access.getGuestInputIds() == null
-                    || !access.getGuestInputIds()
-                    .contains(taxInputId)) {
-
+                    || !access.getGuestInputIds().contains(taxInputId)) {
                 throw new ApiException(
                         HttpStatus.FORBIDDEN,
                         "ACCESS_DENIED",
@@ -141,8 +128,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
 
         taxMapper.updateInput(updated);
-
-        // 기본정보가 달라졌으므로 이전 계산 결과를 무효화한다.
         taxMapper.deleteResult(taxInputId);
 
         return updated;
@@ -158,6 +143,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         taxMapper.deleteInput(taxInputId);
     }
 
+    /**
+     * 미저장 거래의 최초 저장에만 사용한다.
+     * 기존 거래의 수정·삭제는 개별 API로 처리한다.
+     */
     @Override
     @Transactional
     public List<TaxTransactionDto> saveTransactions(
@@ -165,7 +154,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long taxInputId,
             List<TaxTransactionDto> rows
     ) {
-        requireInput(access, taxInputId, true);
+        TaxInputRequest input =
+                requireInput(access, taxInputId, true);
 
         if (rows == null) {
             throw invalid(
@@ -184,13 +174,56 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 );
             }
 
-            // 실제 입출금액과 다른 자료가 저장 API로 들어오는 것을 막는다.
+            if (Boolean.TRUE.equals(source.getNeedsReview())
+                    || Boolean.TRUE.equals(source.getExcluded())) {
+                throw invalid(
+                        "rows",
+                        "검토 대상 또는 제외한 거래는 저장할 수 없습니다."
+                );
+            }
+
+            if (source.getTaxInputId() != null
+                    && !Objects.equals(
+                    source.getTaxInputId(),
+                    taxInputId
+            )) {
+                throw invalid(
+                        "taxInputId",
+                        "거래의 분석번호가 저장 대상과 다릅니다."
+                );
+            }
+
             requireCashTransaction(source);
 
             TaxTransactionDto row =
                     copyStoredTransaction(source, taxInputId);
 
+            if (source.getActualAmount() != null) {
+                row.setAmount(source.getActualAmount());
+            }
+
             validateStoredTransaction(row);
+
+            if (row.getTransactionDate() == null) {
+                throw invalid(
+                        "transactionDate",
+                        "날짜별 거래 내역만 저장할 수 있습니다."
+                );
+            }
+
+            int year = row.getTransactionDate().getYear();
+
+            taxValidator.validateTaxYear(year);
+
+            if (!Objects.equals(
+                    input.getTaxYear(),
+                    Integer.valueOf(year)
+            )) {
+                throw invalid(
+                        "transactionDate",
+                        "거래 날짜의 연도가 분석 귀속 연도와 다릅니다."
+                );
+            }
 
             requested.add(row);
         }
@@ -207,17 +240,31 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             return existing;
         }
 
-        /*
-         * 전달한 분석번호의 전체 목록을 교체한다.
-         * 원본을 보존하는 수정본은 새 분석번호를 만든 뒤 저장한다.
-         */
-        taxMapper.deleteTransactions(taxInputId);
+        // 기존 전체 거래를 삭제하거나 다시 저장하지 않는다.
+        if (!existing.isEmpty()) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "USE_TRANSACTION_CHANGE_API",
+                    "기존 거래는 개별 수정·삭제 API로 변경해주세요."
+            );
+        }
+
+        for (TaxTransactionDto source : rows) {
+            if (source.getTransactionId() != null) {
+                throw invalid(
+                        "transactionId",
+                        "저장된 거래는 개별 수정·삭제 API를 이용해주세요."
+                );
+            }
+        }
 
         for (TaxTransactionDto row : requested) {
             taxMapper.insertTransaction(row);
         }
 
-        invalidateAfterTransactionChange(taxInputId);
+        if (!requested.isEmpty()) {
+            invalidateAfterTransactionChange(taxInputId);
+        }
 
         return taxMapper.findTransactions(taxInputId);
     }
@@ -233,6 +280,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return taxMapper.findTransactions(taxInputId);
     }
 
+    /**
+     * 프론트에서 전달한 카테고리만 해당 거래에 반영한다.
+     * 신규 분석 생성, 전체 거래 저장, 변경 이력 저장은 하지 않는다.
+     */
     @Override
     @Transactional
     public void updateCategory(
@@ -243,38 +294,36 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     ) {
         requireInput(access, taxInputId, true);
 
+        taxValidator.validateCategory(category);
+
         TaxTransactionDto existing =
                 requireTransaction(taxInputId, transactionId);
 
-        taxValidator.validateCategory(category);
-
-        if (Objects.equals(
-                existing.getCategory(),
-                category
-        )) {
+        // 실제 변경이 없으면 UPDATE도 실행하지 않는다.
+        if (Objects.equals(existing.getCategory(), category)) {
             return;
         }
 
-        if (existing.getCategory() != null
-                && !existing.getCategory().isBlank()
-                && !"UNCLASSIFIED".equals(existing.getCategory())) {
-
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "CATEGORY_ALREADY_CLASSIFIED",
-                    "미분류 거래의 카테고리만 수정할 수 있습니다."
-            );
-        }
-
-        taxMapper.updateCategory(
+        int updated = taxMapper.updateCategory(
                 taxInputId,
                 transactionId,
                 category
         );
 
+        if (updated != 1) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "TRANSACTION_UPDATE_FAILED",
+                    "거래 수정 결과를 확인하지 못했습니다."
+            );
+        }
+
         invalidateAfterTransactionChange(taxInputId);
     }
 
+    /**
+     * 프론트에서 지정한 거래 한 건만 삭제한다.
+     */
     @Override
     @Transactional
     public void deleteTransaction(
@@ -285,10 +334,18 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         requireInput(access, taxInputId, true);
         requireTransaction(taxInputId, transactionId);
 
-        taxMapper.deleteTransaction(
+        int deleted = taxMapper.deleteTransaction(
                 taxInputId,
                 transactionId
         );
+
+        if (deleted != 1) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "TRANSACTION_DELETE_FAILED",
+                    "거래 삭제 결과를 확인하지 못했습니다."
+            );
+        }
 
         invalidateAfterTransactionChange(taxInputId);
     }
@@ -301,8 +358,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     ) {
         requireInput(access, taxInputId, false);
 
-        TaxResultRow row =
-                taxMapper.findResult(taxInputId);
+        TaxResultRow row = taxMapper.findResult(taxInputId);
 
         if (row == null) {
             throw new ApiException(
@@ -313,14 +369,11 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
 
         try {
-            Map<String, Object> detail =
-                    objectMapper.readValue(
-                            row.getResultDetail(),
-                            new TypeReference<Map<String, Object>>() {
-                            }
-                    );
+            Map<String, Object> detail = objectMapper.readValue(
+                    row.getResultDetail(),
+                    new TypeReference<Map<String, Object>>() {}
+            );
 
-            // 기존 DB의 계산 시각을 한국 시각으로 해석해 반환한다.
             String calculatedAt = row.getCalculatedAt() == null
                     ? null
                     : row.getCalculatedAt()
@@ -349,7 +402,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     ) {
         requireInput(access, taxInputId, false);
 
-        // 실제 계산 엔진 연결 전에는 임의의 세액을 생성하지 않는다.
         ApiException exception = new ApiException(
                 HttpStatus.SERVICE_UNAVAILABLE,
                 "CALCULATOR_NOT_CONFIGURED",
@@ -367,39 +419,35 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         throw exception;
     }
 
+    /**
+     * PDF 검증·OCR·파싱만 수행한다.
+     * DB 저장은 별도 최초 저장 요청에서 수행한다.
+     */
     @Override
     public PdfParseResponseDto parsePdf(
             AccessContext access,
             Long taxInputId,
             MultipartFile file
     ) throws IOException {
-
-        TaxInputRequest baseInput = taxInputId == null
-                ? null
-                : requireInput(access, taxInputId, false);
+        if (taxInputId != null) {
+            requireInput(access, taxInputId, false);
+        }
 
         try {
-            byte[] bytes =
-                    taxValidator.validatePdf(file);
+            byte[] bytes = taxValidator.validatePdf(file);
 
-            /*
-             * OCR과 Python 분석은 DB 트랜잭션 밖에서 처리한다.
-             * 분석이 끝난 뒤 DB 저장 구간만 트랜잭션으로 묶는다.
-             */
             List<PageOcrResultDto> pages =
                     taxOcrService.extractPages(bytes);
 
-            PdfParseResponseDto response =
-                    pythonPdfClient.analyze(
-                            bytes,
-                            file.getOriginalFilename(),
-                            pages
-                    );
+            PdfParseResponseDto response = pythonPdfClient.analyze(
+                    bytes,
+                    file.getOriginalFilename(),
+                    pages
+            );
 
             if (response == null
                     || response.getTransactions() == null
                     || response.getTransactions().isEmpty()) {
-
                 throw new ApiException(
                         HttpStatus.UNPROCESSABLE_ENTITY,
                         "PDF_TRANSACTIONS_NOT_FOUND",
@@ -407,63 +455,34 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 );
             }
 
-            Map<Integer, List<TaxTransactionDto>> groups =
+            List<TaxTransactionDto> transactions =
                     preparePdfTransactions(
-                            response.getTransactions(),
-                            baseInput
+                            response.getTransactions()
                     );
 
-            if (groups.isEmpty()) {
-                throw new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "PDF_CASH_TRANSACTIONS_NOT_FOUND",
-                        "현재 테이블에 저장할 실제 수입·지출 내역이 없습니다."
-                );
-            }
-
-            TransactionTemplate template =
-                    new TransactionTemplate(transactionManager);
-
-            template.setPropagationBehavior(
-                    TransactionDefinition.PROPAGATION_REQUIRES_NEW
-            );
-
-            // 이번 업로드의 모든 분석번호와 거래를 함께 저장한다.
-            template.executeWithoutResult(status ->
-                    savePdfSnapshot(
-                            access,
-                            baseInput,
-                            response,
-                            groups
+            long reviewCount = transactions.stream()
+                    .filter(row ->
+                            Boolean.TRUE.equals(row.getNeedsReview())
+                                    || Boolean.TRUE.equals(row.getExcluded())
                     )
-            );
+                    .count();
+
+            response.setTransactions(transactions);
+            response.setSavedCount(0);
+            response.setPersisted(false);
+            response.setTaxInputIdsByYear(new LinkedHashMap<>());
 
             log.info(
-                    "PDF DB 저장 완료. savedCount={}, inputCount={}",
-                    response.getSavedCount(),
-                    response.getTaxInputIdsByYear().size()
+                    "PDF 파싱 완료. 거래={}건, 검토={}건, DB 저장 없음",
+                    transactions.size(),
+                    reviewCount
             );
-
-            for (Long createdId
-                    : response.getTaxInputIdsByYear().values()) {
-
-                writeProcessLog(
-                        createdId,
-                        userId(access),
-                        "UPLOAD",
-                        "SUCCESS",
-                        null
-                );
-            }
 
             return response;
 
         } catch (IOException | RuntimeException exception) {
-            writeProcessLog(
-                    taxInputId,
-                    userId(access),
-                    "UPLOAD",
-                    "FAIL",
+            log.warn(
+                    "PDF 파싱 실패. 코드={}",
                     failureCode(exception)
             );
 
@@ -471,36 +490,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
     }
 
-    private Map<Integer, List<TaxTransactionDto>> preparePdfTransactions(
-            List<TaxTransactionDto> sources,
-            TaxInputRequest baseInput
+    private List<TaxTransactionDto> preparePdfTransactions(
+            List<TaxTransactionDto> sources
     ) {
-        Map<Integer, List<TaxTransactionDto>> groups =
-                new LinkedHashMap<>();
-
-        Set<Integer> knownYears = new LinkedHashSet<>();
-
-        // 날짜 없는 실제 거래의 분석 연도 확인에 사용할 근거를 수집한다.
-        for (TaxTransactionDto row : sources) {
-            if (row == null) {
-                continue;
-            }
-
-            if (row.getTransactionDate() != null) {
-                knownYears.add(
-                        row.getTransactionDate().getYear()
-                );
-
-            } else if (row.getDocumentYear() != null) {
-                knownYears.add(row.getDocumentYear());
-            }
-        }
-
-        Integer fallbackYear = baseInput != null
-                ? baseInput.getTaxYear()
-                : knownYears.size() == 1
-                ? knownYears.iterator().next()
-                : null;
+        List<TaxTransactionDto> result = new ArrayList<>();
 
         for (TaxTransactionDto source : sources) {
             if (source == null) {
@@ -510,189 +503,109 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 );
             }
 
-            /*
-             * 현재 AMOUNT는 실제 입출금액이다.
-             * 공제대상금액과 검산용 합계는 여기에 섞어 넣지 않는다.
-             */
-            if ("DEDUCTION_ELIGIBLE".equals(source.getAmountBasis())
-                    || "VALIDATION_TOTAL".equals(source.getValueKind())) {
-                continue;
-            }
+            source.setTaxInputId(null);
+            source.setTransactionId(null);
 
             if (!Boolean.TRUE.equals(source.getParseSuccess())
-                    || Boolean.TRUE.equals(source.getNeedsReview())) {
+                    || Boolean.TRUE.equals(source.getNeedsReview())
+                    || Boolean.TRUE.equals(source.getExcluded())) {
 
-                throw new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "PDF_REVIEW_REQUIRED",
-                        "금액·항목·기간 확인이 필요한 거래가 있습니다."
+                String reason = source.getFailureReason();
+
+                markPdfReview(
+                        source,
+                        reason == null || reason.isBlank()
+                                ? "추출한 거래 내용을 확인해주세요."
+                                : reason
                 );
-            }
 
-            if (Boolean.TRUE.equals(source.getExcluded())) {
+                result.add(source);
                 continue;
             }
 
-            requireCashTransaction(source);
+            TaxTransactionDto row;
 
-            Integer year = source.getTransactionDate() != null
-                    ? source.getTransactionDate().getYear()
-                    : source.getDocumentYear() != null
-                    ? source.getDocumentYear()
-                    : fallbackYear;
+            try {
+                requireCashTransaction(source);
 
-            if (year == null) {
-                throw invalid(
-                        "taxYear",
-                        "날짜 없는 거래의 분석 연도를 확인해주세요."
+                if (source.getTransactionDate() == null) {
+                    throw invalid(
+                            "transactionDate",
+                            "날짜별 상세 거래 내역이 필요합니다."
+                    );
+                }
+
+                taxValidator.validateTaxYear(
+                        source.getTransactionDate().getYear()
                 );
+
+                row = copyStoredTransaction(source, null);
+
+                if (source.getActualAmount() != null) {
+                    row.setAmount(source.getActualAmount());
+                }
+
+                validateStoredTransaction(row);
+                taxValidator.validateTransactions(List.of(row));
+
+            } catch (ApiException exception) {
+                String reason = exception.getMessage();
+
+                markPdfReview(
+                        source,
+                        reason == null || reason.isBlank()
+                                ? "거래 내용을 확인해주세요."
+                                : reason
+                );
+
+                result.add(source);
+                continue;
             }
 
-            taxValidator.validateTaxYear(year);
-
-            TaxTransactionDto row =
-                    copyStoredTransaction(source, null);
-
-            // 실제 입금액이 따로 제공되면 해당 금액을 우선 저장한다.
-            if (source.getActualAmount() != null) {
-                row.setAmount(source.getActualAmount());
-            }
-
-            validateStoredTransaction(row);
-
-            /*
-             * 다음 필드는 DB 컬럼에 넣지 않는다.
-             * 분석 응답에 원래 정보를 연결하기 위해 메모리에만 보관한다.
-             */
+            row.setActualAmount(row.getAmount());
             row.setPageNumber(source.getPageNumber());
             row.setRawText(source.getRawText());
-            row.setTransactionMonth(source.getTransactionMonth());
-            row.setDocumentYear(source.getDocumentYear());
             row.setValueKind(source.getValueKind());
             row.setAmountBasis(source.getAmountBasis());
             row.setTaxDeducted(source.getTaxDeducted());
+            row.setDocumentYear(source.getDocumentYear());
 
-            groups.computeIfAbsent(
-                    year,
-                    ignored -> new ArrayList<>()
-            ).add(row);
+            row.setParseSuccess(true);
+            row.setNeedsReview(false);
+            row.setExcluded(false);
+            row.setFailureReason(null);
+
+            result.add(row);
         }
 
-        for (List<TaxTransactionDto> rows : groups.values()) {
-            taxValidator.validateTransactions(rows);
-        }
-
-        return groups;
+        return result;
     }
 
-    private void savePdfSnapshot(
-            AccessContext access,
-            TaxInputRequest baseInput,
-            PdfParseResponseDto response,
-            Map<Integer, List<TaxTransactionDto>> groups
+    private void markPdfReview(
+            TaxTransactionDto row,
+            String reason
     ) {
-        Map<Integer, Long> inputIds =
-                new LinkedHashMap<>();
+        row.setNeedsReview(true);
+        row.setExcluded(true);
 
-        List<TaxTransactionDto> savedRows =
-                new ArrayList<>();
+        String current = row.getFailureReason();
 
-        for (Map.Entry<Integer, List<TaxTransactionDto>> entry
-                : groups.entrySet()) {
+        if (current == null || current.isBlank()) {
+            row.setFailureReason(reason);
+            return;
+        }
 
-            TaxInputRequest sourceInput = baseInput == null
-                    ? TaxInputRequest.builder().build()
-                    : baseInput;
+        if (current.equals(reason)) {
+            return;
+        }
 
-            TaxInputRequest input = normalizeInput(
-                    sourceInput,
-                    null,
-                    userId(access)
-            );
-
-            input.setTaxYear(entry.getKey());
-
-            // TEMP도 실제 DB 저장이며 비회원 사용을 허용한다.
-            input.setSaveStatus("TEMP");
-
-            taxValidator.validateInput(input);
-            taxMapper.insertInput(input);
-
-            Long createdId = input.getTaxInputId();
-
-            if (createdId == null) {
-                throw saveFailure(
-                        "분석번호를 생성하지 못했습니다."
-                );
-            }
-
-            inputIds.put(entry.getKey(), createdId);
-
-            Map<Long, TaxTransactionDto> sourceById =
-                    new LinkedHashMap<>();
-
-            for (TaxTransactionDto source : entry.getValue()) {
-                TaxTransactionDto inserted =
-                        copyStoredTransaction(source, createdId);
-
-                taxMapper.insertTransaction(inserted);
-
-                if (inserted.getTransactionId() == null) {
-                    throw saveFailure(
-                            "거래번호를 생성하지 못했습니다."
-                    );
-                }
-
-                sourceById.put(
-                        inserted.getTransactionId(),
-                        source
-                );
-            }
-
-            // 화면에는 DB에서 실제로 다시 조회한 값을 전달한다.
-            List<TaxTransactionDto> queried =
-                    taxMapper.findTransactions(createdId);
-
-            if (queried.size() != sourceById.size()) {
-                throw saveFailure(
-                        "거래 저장 건수와 조회 건수가 다릅니다."
-                );
-            }
-
-            for (TaxTransactionDto row : queried) {
-                TaxTransactionDto source =
-                        sourceById.get(row.getTransactionId());
-
-                if (source == null) {
-                    throw saveFailure(
-                            "저장한 거래를 조회 결과에서 찾지 못했습니다."
-                    );
-                }
-
-                row.setActualAmount(row.getAmount());
-
-                // 분석용 필드는 응답에만 복원한다.
-                row.setPageNumber(source.getPageNumber());
-                row.setRawText(source.getRawText());
-                row.setTransactionMonth(source.getTransactionMonth());
-                row.setDocumentYear(source.getDocumentYear());
-                row.setValueKind(source.getValueKind());
-                row.setAmountBasis(source.getAmountBasis());
-                row.setTaxDeducted(source.getTaxDeducted());
-
-                row.setParseSuccess(true);
-                row.setNeedsReview(false);
-                row.setExcluded(false);
-                row.setFailureReason(null);
-
-                savedRows.add(row);
+        for (String existing : current.split(" / ")) {
+            if (existing.equals(reason)) {
+                return;
             }
         }
 
-        response.setTransactions(savedRows);
-        response.setTaxInputIdsByYear(inputIds);
-        response.setSavedCount(savedRows.size());
-        response.setPersisted(true);
+        row.setFailureReason(current + " / " + reason);
     }
 
     private TaxTransactionDto copyStoredTransaction(
@@ -711,10 +624,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             category = "UNCLASSIFIED";
         }
 
-        /*
-         * 실제 DB 컬럼에 대응하는 필드만 복사한다.
-         * 이전 transactionId는 복사하지 않아 새 거래번호를 생성한다.
-         */
         return TaxTransactionDto.builder()
                 .taxInputId(taxInputId)
                 .transactionType(type)
@@ -727,9 +636,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 .build();
     }
 
-    private void requireCashTransaction(
-            TaxTransactionDto row
-    ) {
+    private void requireCashTransaction(TaxTransactionDto row) {
         if ("DEDUCTION_ELIGIBLE".equals(row.getAmountBasis())) {
             throw invalid(
                     "amount",
@@ -746,7 +653,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
         if ("GROSS".equals(row.getAmountBasis())
                 && row.getActualAmount() == null) {
-
             throw invalid(
                     "actualAmount",
                     "세전 금액만 있는 거래는 실제 입금액 확인이 필요합니다."
@@ -754,12 +660,9 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
     }
 
-    private void validateStoredTransaction(
-            TaxTransactionDto row
-    ) {
+    private void validateStoredTransaction(TaxTransactionDto row) {
         if (row.getDescription() == null
                 || row.getDescription().isBlank()) {
-
             throw invalid(
                     "description",
                     "거래 설명이 필요합니다."
@@ -817,10 +720,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long taxInputId,
             boolean lock
     ) {
-        taxValidator.validateId(
-                taxInputId,
-                "taxInputId"
-        );
+        taxValidator.validateId(taxInputId, "taxInputId");
 
         TaxInputRequest input = lock
                 ? taxMapper.lockInput(taxInputId)
@@ -840,11 +740,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 "transactionId"
         );
 
-        TaxTransactionDto row =
-                taxMapper.findTransaction(
-                        taxInputId,
-                        transactionId
-                );
+        TaxTransactionDto row = taxMapper.findTransaction(
+                taxInputId,
+                transactionId
+        );
 
         if (row == null) {
             throw new ApiException(
@@ -876,11 +775,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             TaxTransactionDto left = existing.get(index);
             TaxTransactionDto right = requested.get(index);
 
-            /*
-             * DB에 저장되는 컬럼만 비교한다.
-             * DB에 없는 월·자료 종류 등을 비교해 항상 변경으로
-             * 판단하던 문제를 방지한다.
-             */
             if (!Objects.equals(
                     left.getTransactionType(),
                     right.getTransactionType()
@@ -922,9 +816,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     }
 
     private Long userId(AccessContext access) {
-        return access == null
-                ? null
-                : access.getUserId();
+        return access == null ? null : access.getUserId();
     }
 
     private ApiException invalid(
@@ -939,19 +831,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         );
     }
 
-    private ApiException saveFailure(
-            String message
-    ) {
-        return new ApiException(
-                HttpStatus.INTERNAL_SERVER_ERROR,
-                "PDF_SAVE_FAILED",
-                message
-        );
-    }
-
-    private String failureCode(
-            Exception exception
-    ) {
+    private String failureCode(Exception exception) {
         if (exception instanceof ApiException apiException) {
             return apiException.getCode();
         }
@@ -961,6 +841,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 : "PDF_PROCESSING_FAILED";
     }
 
+    // 기존 계산 처리 로그이며 거래 변경 이력과는 별개다.
     private void writeProcessLog(
             Long taxInputId,
             Long userId,
@@ -987,9 +868,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             );
 
         } catch (RuntimeException exception) {
-            // 로그 기록 실패가 완료된 거래 저장을 실패로 바꾸지 않게 한다.
             log.error(
-                    "처리 이력 저장 실패. type={}, status={}, exceptionType={}",
+                    "처리 이력 저장 실패. 유형={}, 상태={}, 예외={}",
                     processType,
                     status,
                     exception.getClass().getName()

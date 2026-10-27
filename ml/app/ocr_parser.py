@@ -1,4 +1,4 @@
-"""PDF 내장 텍스트와 OCR 결과를 결합해 기존 거래 파서에 전달한다."""
+"""단어 좌표의 정규화, 중복 제거, 행과 셀 복원을 담당한다."""
 
 from __future__ import annotations
 
@@ -6,523 +6,488 @@ import math
 import re
 import statistics
 
-from pathlib import Path
-from typing import Any, Callable
-
-import fitz
-import pytesseract
-
-from PIL import Image
-from pytesseract import Output
+from dataclasses import dataclass, replace
+from typing import Any
 
 
-MAX_PAGES = 50
+@dataclass(frozen=True)
+class LayoutConfig:
+    coverage_threshold: float = 0.8
+    same_text_overlap: float = 0.35
 
-DEFAULT_DPI = 300
-DEFAULT_LANGUAGE = "eng+kor"
+    row_tolerance_factor: float = 0.4
+    min_row_tolerance: float = 2.0
+    min_vertical_overlap: float = 0.4
 
-DEFAULT_MIN_CONFIDENCE = 20.0
-DEFAULT_OCR_TIMEOUT = 120.0
+    cell_gap_factor: float = 0.7
+    min_cell_gap: float = 6.0
 
-# 페이지 크기에 따른 과도한 이미지 생성을 제한한다.
-MAX_RENDER_PIXELS = 40_000_000
+    def __post_init__(self) -> None:
+        bounded = {
+            "coverage_threshold",
+            "same_text_overlap",
+            "row_tolerance_factor",
+            "min_vertical_overlap",
+        }
 
-DEFAULT_TESSDATA_DIR = (
-    Path(__file__).resolve().parent / "tessdata"
-)
+        positive = bounded | {
+            "cell_gap_factor",
+        }
 
-CategoryResolver = Callable[
-    [dict[str, Any]],
-    str | None,
-]
+        for name in (
+            *bounded,
+            "cell_gap_factor",
+            "min_cell_gap",
+            "min_row_tolerance",
+        ):
+            value = getattr(self, name)
+
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+            ):
+                raise ValueError(
+                    f"{name}: 유한한 숫자를 입력해 주세요."
+                )
+
+            if name in positive and value <= 0:
+                raise ValueError(
+                    f"{name}: 0보다 커야 합니다."
+                )
+
+            if name not in positive and value < 0:
+                raise ValueError(
+                    f"{name}: 0 이상이어야 합니다."
+                )
+
+            if name in bounded and value > 1:
+                raise ValueError(
+                    f"{name}: 1 이하여야 합니다."
+                )
 
 
-def text(value: object) -> str:
-    return str(
-        value if value is not None else ""
+def normalized_text(value: object) -> str:
+    return re.sub(
+        r"\s+",
+        "",
+        str(value if value is not None else ""),
+    ).casefold()
+
+
+def prepare_word(
+    word: dict[str, Any],
+    source: str = "UNKNOWN",
+) -> dict[str, Any] | None:
+    if not isinstance(word, dict):
+        return None
+
+    value = str(
+        word.get("text")
+        if word.get("text") is not None
+        else ""
     ).strip()
 
-
-def validate_pdf_bytes(pdf_bytes: bytes) -> None:
     if (
-        not isinstance(pdf_bytes, bytes)
-        or not pdf_bytes.startswith(b"%PDF-")
+        not value
+        or "\ufffd" in value
+        or any(
+            ord(character) < 32
+            and not character.isspace()
+            for character in value
+        )
     ):
-        raise ValueError(
-            "올바른 PDF 파일이 아닙니다."
+        return None
+
+    try:
+        left = float(
+            word["left"]
+            if "left" in word
+            else word["x0"]
         )
+        top = float(word["top"])
+        right = float(
+            word["right"]
+            if "right" in word
+            else word["x1"]
+        )
+        bottom = float(word["bottom"])
 
-
-def resolve_tessdata_dir(
-    tessdata_dir: str | Path | None,
-    language: str,
-) -> Path:
-    """언어 학습 데이터 경로와 필요한 파일을 확인한다."""
-
-    if not re.fullmatch(
-        r"[A-Za-z0-9_]+(?:\+[A-Za-z0-9_]+)*",
-        language,
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+        OverflowError,
     ):
-        raise ValueError(
-            "OCR 언어 설정이 올바르지 않습니다."
+        return None
+
+    if (
+        not all(
+            math.isfinite(number)
+            for number in (left, top, right, bottom)
         )
-
-    directory = (
-        Path(tessdata_dir).expanduser()
-        if tessdata_dir is not None
-        else DEFAULT_TESSDATA_DIR
-    ).resolve()
-
-    if not directory.is_dir():
-        raise ValueError(
-            f"tessdata 폴더를 찾을 수 없습니다: {directory}"
-        )
-
-    missing = [
-        f"{name}.traineddata"
-        for name in language.split("+")
-        if not (
-            directory / f"{name}.traineddata"
-        ).is_file()
-    ]
-
-    if missing:
-        raise ValueError(
-            "OCR 언어 학습 데이터가 없습니다: "
-            + ", ".join(missing)
-        )
-
-    return directory
-
-
-def native_words(
-    page: fitz.Page,
-) -> list[dict[str, Any]]:
-    """PDF에 저장된 단어와 좌표를 가져온다."""
-
-    result = []
-
-    for entry in page.get_text(
-        "words",
-        sort=True,
+        or right <= left
+        or bottom <= top
     ):
-        if len(entry) < 5:
-            continue
+        return None
 
-        source = text(entry[4])
+    confidence = None
 
-        if not source:
-            continue
+    try:
+        if word.get("confidence") is not None:
+            candidate = float(word["confidence"])
 
-        # 깨진 문자 데이터는 OCR로 보완하도록 제외한다.
-        if "\ufffd" in source:
-            continue
+            if math.isfinite(candidate):
+                confidence = candidate
 
-        rectangle = fitz.Rect(
-            float(entry[0]),
-            float(entry[1]),
-            float(entry[2]),
-            float(entry[3]),
-        )
+    except (TypeError, ValueError, OverflowError):
+        pass
 
-        # 내장 텍스트 좌표를 렌더링 이미지의 회전 방향에 맞춘다.
-        rectangle = (
-            rectangle * page.rotation_matrix
-        )
+    result = dict(word)
+    result.pop("x0", None)
+    result.pop("x1", None)
 
-        if (
-            rectangle.width <= 0
-            or rectangle.height <= 0
-        ):
-            continue
-
-        result.append(
-            {
-                "text": source,
-                "x0": float(rectangle.x0),
-                "top": float(rectangle.y0),
-                "x1": float(rectangle.x1),
-                "bottom": float(rectangle.y1),
-                "source": "PDF_TEXT",
-                "confidence": None,
-            }
-        )
+    result.update(
+        text=value,
+        left=left,
+        top=top,
+        right=right,
+        bottom=bottom,
+        source=str(word.get("source") or source),
+        confidence=confidence,
+    )
 
     return result
 
 
-def render_page(
-    page: fitz.Page,
-    dpi: int,
-) -> Image.Image:
-    """페이지를 OCR용 이미지로 변환한다."""
-
-    width = float(page.rect.width)
-    height = float(page.rect.height)
-
-    if width <= 0 or height <= 0:
-        raise ValueError(
-            "PDF 페이지 크기가 올바르지 않습니다."
-        )
-
-    scale = dpi / 72.0
-
-    estimated_width = math.ceil(
-        width * scale
-    )
-    estimated_height = math.ceil(
-        height * scale
-    )
-
-    estimated_pixels = (
-        estimated_width * estimated_height
-    )
-
-    if estimated_pixels > MAX_RENDER_PIXELS:
-        scale *= math.sqrt(
-            MAX_RENDER_PIXELS
-            / estimated_pixels
-        )
-
-    pixmap = page.get_pixmap(
-        matrix=fitz.Matrix(scale, scale),
-        colorspace=fitz.csRGB,
-        alpha=False,
-    )
-
-    return Image.frombytes(
-        "RGB",
-        (pixmap.width, pixmap.height),
-        pixmap.samples,
-    )
-
-
-def ocr_words(
-    page: fitz.Page,
-    *,
-    tessdata_dir: Path,
-    language: str,
-    dpi: int,
-    min_confidence: float,
-    timeout: float,
-    psm: int,
+def prepare_words(
+    words: list[dict[str, Any]],
+    source: str = "UNKNOWN",
 ) -> list[dict[str, Any]]:
-    """페이지 전체를 OCR하고 이미지 좌표를 PDF 좌표로 변환한다."""
-
-    image = render_page(
-        page,
-        dpi,
-    )
-
-    try:
-        config = (
-            f'--tessdata-dir "{tessdata_dir}" '
-            f"--psm {psm}"
-        )
-
-        data = pytesseract.image_to_data(
-            image,
-            lang=language,
-            config=config,
-            output_type=Output.DICT,
-            timeout=timeout,
-        )
-
-        # DPI로만 역산하지 않고 실제 이미지 크기를 사용한다.
-        # 렌더링 크기 제한이나 반올림이 있어도 좌표가 일치한다.
-        scale_x = (
-            float(page.rect.width)
-            / image.width
-        )
-        scale_y = (
-            float(page.rect.height)
-            / image.height
-        )
-
-        result = []
-
-        for index, value in enumerate(
-            data.get("text", [])
-        ):
-            source = text(value)
-
-            if not source:
-                continue
-
-            try:
-                confidence = float(
-                    data["conf"][index]
-                )
-
-                left = float(
-                    data["left"][index]
-                )
-                top = float(
-                    data["top"][index]
-                )
-                width = float(
-                    data["width"][index]
-                )
-                height = float(
-                    data["height"][index]
-                )
-            except (
-                KeyError,
-                IndexError,
-                TypeError,
-                ValueError,
-            ):
-                continue
-
-            if (
-                not math.isfinite(confidence)
-                or confidence < min_confidence
-                or width <= 0
-                or height <= 0
-            ):
-                continue
-
-            result.append(
-                {
-                    "text": source,
-                    "x0": left * scale_x,
-                    "top": top * scale_y,
-                    "x1": (
-                        left + width
-                    ) * scale_x,
-                    "bottom": (
-                        top + height
-                    ) * scale_y,
-                    "source": "OCR",
-                    "confidence": confidence,
-                }
-            )
-
-        return result
-
-    finally:
-        image.close()
+    return [
+        prepared
+        for word in words
+        if (
+            prepared := prepare_word(word, source)
+        ) is not None
+    ]
 
 
-def word_area(
-    word: dict[str, Any],
-) -> float:
-    width = max(
-        0.0,
-        float(word["x1"])
-        - float(word["x0"]),
-    )
-
-    height = max(
-        0.0,
-        float(word["bottom"])
-        - float(word["top"]),
-    )
-
-    return width * height
+def bounds(
+    words: list[dict[str, Any]],
+) -> list[float]:
+    return [
+        min(word["left"] for word in words),
+        min(word["top"] for word in words),
+        max(word["right"] for word in words),
+        max(word["bottom"] for word in words),
+    ]
 
 
-def intersection_area(
-    first: dict[str, Any],
-    second: dict[str, Any],
-) -> float:
-    width = max(
-        0.0,
-        min(
-            float(first["x1"]),
-            float(second["x1"]),
-        )
-        - max(
-            float(first["x0"]),
-            float(second["x0"]),
-        ),
-    )
-
-    height = max(
-        0.0,
-        min(
-            float(first["bottom"]),
-            float(second["bottom"]),
-        )
-        - max(
-            float(first["top"]),
-            float(second["top"]),
-        ),
-    )
-
-    return width * height
-
-
-def normalized_word(
-    value: object,
-) -> str:
-    return re.sub(
-        r"\s+",
-        "",
-        text(value),
-    ).casefold()
-
-
-def is_duplicate_word(
-    first: dict[str, Any],
-    second: dict[str, Any],
-) -> bool:
-    """단어의 위치와 문자열을 함께 확인한다."""
-
-    first_area = word_area(first)
-    second_area = word_area(second)
-
-    if first_area <= 0 or second_area <= 0:
-        return False
-
-    intersection = intersection_area(
-        first,
-        second,
-    )
-
-    if intersection <= 0:
-        return False
-
-    smaller_area = min(
-        first_area,
-        second_area,
-    )
-
-    overlap = (
-        intersection / smaller_area
-    )
-
-    if overlap >= 0.65:
-        return True
-
-    # 같은 문자가 거의 같은 위치에 있으면
-    # 박스 크기에 차이가 있어도 중복으로 판단한다.
+def area(word: dict[str, Any]) -> float:
     return (
-        overlap >= 0.35
-        and normalized_word(
-            first["text"]
-        )
-        == normalized_word(
-            second["text"]
-        )
+        (word["right"] - word["left"])
+        * (word["bottom"] - word["top"])
     )
+
+
+def intersection(
+    first: dict[str, Any],
+    second: dict[str, Any],
+) -> tuple[float, float, float, float] | None:
+    rectangle = (
+        max(first["left"], second["left"]),
+        max(first["top"], second["top"]),
+        min(first["right"], second["right"]),
+        min(first["bottom"], second["bottom"]),
+    )
+
+    left, top, right, bottom = rectangle
+
+    if right <= left or bottom <= top:
+        return None
+
+    return rectangle
+
+
+def rectangle_area(
+    rectangle: tuple[float, float, float, float],
+) -> float:
+    left, top, right, bottom = rectangle
+    return (right - left) * (bottom - top)
+
+
+def union_area(
+    rectangles: list[
+        tuple[float, float, float, float]
+    ],
+) -> float:
+    if not rectangles:
+        return 0.0
+
+    boundaries = sorted(
+        {
+            coordinate
+            for left, _, right, _ in rectangles
+            for coordinate in (left, right)
+        }
+    )
+
+    total = 0.0
+
+    for left, right in zip(
+        boundaries,
+        boundaries[1:],
+    ):
+        intervals = sorted(
+            (top, bottom)
+            for x0, top, x1, bottom in rectangles
+            if x0 < right and x1 > left
+        )
+
+        if not intervals:
+            continue
+
+        start, end = intervals[0]
+        height = 0.0
+
+        for top, bottom in intervals[1:]:
+            if top <= end:
+                end = max(end, bottom)
+            else:
+                height += end - start
+                start, end = top, bottom
+
+        total += (
+            (right - left)
+            * (height + end - start)
+        )
+
+    return total
+
+
+def mark_review(
+    word: dict[str, Any],
+    reason: str,
+    alternative: dict[str, Any] | None = None,
+) -> None:
+    reasons = list(
+        word.get("mergeReviewReasons") or []
+    )
+
+    if reason not in reasons:
+        reasons.append(reason)
+
+    word["mergeNeedsReview"] = True
+    word["mergeReviewReasons"] = reasons
+
+    if alternative is not None:
+        alternatives = list(
+            word.get("ocrAlternatives") or []
+        )
+
+        entry = {
+            "text": alternative["text"],
+            "confidence": alternative.get("confidence"),
+            "bbox": bounds([alternative]),
+        }
+
+        if entry not in alternatives:
+            alternatives.append(entry)
+
+        word["ocrAlternatives"] = alternatives
 
 
 def merge_words(
-    embedded: list[dict[str, Any]],
-    scanned: list[dict[str, Any]],
+    native: list[dict[str, Any]],
+    ocr: list[dict[str, Any]],
+    *,
+    config: LayoutConfig | None = None,
+    **options: Any,
 ) -> list[dict[str, Any]]:
-    """내장 텍스트를 우선하고 비어 있는 위치를 OCR로 보완한다."""
+    settings = replace(
+        config or LayoutConfig(),
+        **options,
+    )
 
-    merged = [
-        dict(word)
-        for word in embedded
-    ]
+    native_words = prepare_words(native, "PDF_TEXT")
 
-    # 신뢰도가 높은 OCR 단어부터 비교한다.
-    ordered_scanned = sorted(
-        scanned,
-        key=lambda word: float(
-            word.get("confidence") or 0
+    ocr_words = sorted(
+        prepare_words(ocr, "OCR"),
+        key=lambda word: (
+            word["confidence"]
+            if word["confidence"] is not None
+            else -1.0
         ),
         reverse=True,
     )
 
-    for word in ordered_scanned:
-        if any(
-            is_duplicate_word(
-                word,
-                existing,
-            )
-            for existing in merged
-        ):
+    result: list[dict[str, Any]] = []
+
+    for word in native_words + ocr_words:
+        overlaps = []
+
+        for existing in result:
+            rectangle = intersection(word, existing)
+
+            if rectangle is not None:
+                overlaps.append(
+                    (existing, rectangle)
+                )
+
+        same_word = any(
+            normalized_text(word["text"])
+            == normalized_text(existing["text"])
+            and rectangle_area(rectangle)
+            / min(area(word), area(existing))
+            >= settings.same_text_overlap
+            for existing, rectangle in overlaps
+        )
+
+        if same_word:
             continue
 
-        merged.append(dict(word))
+        # 내장 텍스트끼리는 문자열이 다른 경우 보존한다.
+        if word["source"] == "PDF_TEXT":
+            result.append(word)
+            continue
+
+        coverage = (
+            union_area(
+                [
+                    rectangle
+                    for _, rectangle in overlaps
+                ]
+            ) / area(word)
+        )
+
+        if coverage >= settings.coverage_threshold:
+            existing_text = "".join(
+                existing["text"]
+                for existing, _ in sorted(
+                    overlaps,
+                    key=lambda pair: (
+                        pair[0]["top"],
+                        pair[0]["left"],
+                    ),
+                )
+            )
+
+            if (
+                normalized_text(existing_text)
+                != normalized_text(word["text"])
+            ):
+                for existing, _ in overlaps:
+                    mark_review(
+                        existing,
+                        "같은 위치의 내장 텍스트 또는 기존 OCR과 "
+                        "추가 OCR 결과가 일치하지 않습니다.",
+                        word,
+                    )
+
+            continue
+
+        if overlaps:
+            reason = (
+                "단어 영역이 일부 겹쳐 중복 여부 확인이 필요합니다."
+            )
+
+            mark_review(word, reason)
+
+            for existing, _ in overlaps:
+                mark_review(existing, reason, word)
+
+        result.append(word)
 
     return sorted(
-        merged,
+        result,
         key=lambda word: (
-            float(word["top"]),
-            float(word["x0"]),
+            (word["top"] + word["bottom"]) / 2,
+            word["left"],
         ),
     )
+
+
+def line_statistics(
+    words: list[dict[str, Any]],
+) -> tuple[float, float, float, float]:
+    top = statistics.median(
+        word["top"] for word in words
+    )
+    bottom = statistics.median(
+        word["bottom"] for word in words
+    )
+    center = statistics.median(
+        (word["top"] + word["bottom"]) / 2
+        for word in words
+    )
+    height = statistics.median(
+        word["bottom"] - word["top"]
+        for word in words
+    )
+
+    return center, height, top, bottom
 
 
 def group_lines(
     words: list[dict[str, Any]],
+    config: LayoutConfig,
 ) -> list[list[dict[str, Any]]]:
-    """단어의 세로 중심을 기준으로 같은 행을 묶는다."""
+    lines: list[list[dict[str, Any]]] = []
 
-    lines: list[
-        list[dict[str, Any]]
-    ] = []
-
-    ordered = sorted(
+    for word in sorted(
         words,
-        key=lambda word: (
-            (
-                float(word["top"])
-                + float(word["bottom"])
-            ) / 2,
-            float(word["x0"]),
+        key=lambda item: (
+            (item["top"] + item["bottom"]) / 2,
+            item["left"],
         ),
-    )
-
-    for word in ordered:
+    ):
         center = (
-            float(word["top"])
-            + float(word["bottom"])
+            word["top"] + word["bottom"]
         ) / 2
-
-        height = (
-            float(word["bottom"])
-            - float(word["top"])
-        )
+        height = word["bottom"] - word["top"]
 
         selected = None
-        smallest_distance = None
+        best_distance = float("inf")
 
-        for line in reversed(lines):
-            line_center = statistics.median(
-                (
-                    float(item["top"])
-                    + float(item["bottom"])
-                ) / 2
-                for item in line
-            )
-
-            line_height = statistics.median(
-                float(item["bottom"])
-                - float(item["top"])
-                for item in line
+        for line in lines:
+            row_center, row_height, top, bottom = (
+                line_statistics(line)
             )
 
             tolerance = max(
-                2.0,
-                min(
-                    height,
-                    line_height,
-                ) * 0.4,
+                config.min_row_tolerance,
+                min(height, row_height)
+                * config.row_tolerance_factor,
             )
 
-            distance = abs(
-                center - line_center
+            overlap_height = max(
+                0.0,
+                min(word["bottom"], bottom)
+                - max(word["top"], top),
             )
 
-            if distance <= tolerance:
-                if (
-                    smallest_distance is None
-                    or distance < smallest_distance
-                ):
-                    selected = line
-                    smallest_distance = distance
-
-            if line_center < center - max(
+            smaller_height = min(
                 height,
-                line_height,
-            ) * 2:
-                break
+                bottom - top,
+            )
+
+            vertical_overlap = (
+                overlap_height / smaller_height
+                if smaller_height > 0
+                else 0.0
+            )
+
+            distance = abs(center - row_center)
+
+            if (
+                distance <= tolerance
+                and vertical_overlap
+                >= config.min_vertical_overlap
+                and distance < best_distance
+            ):
+                selected = line
+                best_distance = distance
 
         if selected is None:
             lines.append([word])
@@ -530,343 +495,111 @@ def group_lines(
             selected.append(word)
 
     for line in lines:
-        line.sort(
-            key=lambda word: float(
-                word["x0"]
-            )
-        )
+        line.sort(key=lambda word: word["left"])
 
-    lines.sort(
-        key=lambda line: statistics.median(
-            float(word["top"])
-            for word in line
-        )
+    return sorted(
+        lines,
+        key=lambda line: line_statistics(line)[0],
     )
 
-    return lines
 
-
-def line_to_cells(
+def build_cells(
     words: list[dict[str, Any]],
-    *,
-    cell_gap_factor: float,
-) -> list[str]:
-    """단어 사이의 큰 간격을 이용해 셀 후보를 나눈다."""
-
-    if not words:
-        return []
-
-    heights = [
-        float(word["bottom"])
-        - float(word["top"])
-        for word in words
-    ]
-
+    config: LayoutConfig,
+) -> list[dict[str, Any]]:
     threshold = max(
-        6.0,
-        statistics.median(heights)
-        * cell_gap_factor,
+        config.min_cell_gap,
+        statistics.median(
+            word["bottom"] - word["top"]
+            for word in words
+        ) * config.cell_gap_factor,
     )
 
-    cells = []
-    current = [
-        text(words[0]["text"])
-    ]
+    groups: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    right = None
 
-    for previous, word in zip(
-        words,
-        words[1:],
-    ):
-        gap = (
-            float(word["x0"])
-            - float(previous["x1"])
+    for word in words:
+        if (
+            current
+            and right is not None
+            and word["left"] - right > threshold
+        ):
+            groups.append(current)
+            current = []
+            right = None
+
+        current.append(word)
+
+        right = (
+            word["right"]
+            if right is None
+            else max(right, word["right"])
         )
 
-        if gap > threshold:
-            cells.append(
-                " ".join(current)
-            )
-            current = [
-                text(word["text"])
-            ]
-        else:
-            current.append(
-                text(word["text"])
-            )
+    if current:
+        groups.append(current)
 
-    cells.append(
-        " ".join(current)
-    )
-
-    return cells
+    return [
+        {
+            "text": " ".join(
+                word["text"] for word in group
+            ),
+            "bbox": bounds(group),
+            "words": [dict(word) for word in group],
+        }
+        for group in groups
+    ]
 
 
 def words_to_rows(
     words: list[dict[str, Any]],
     *,
-    cell_gap_factor: float = 0.7,
+    config: LayoutConfig | None = None,
+    **options: Any,
 ) -> list[dict[str, Any]]:
-    """단어 좌표로 행과 셀 후보를 복원한다."""
+    settings = replace(
+        config or LayoutConfig(),
+        **options,
+    )
 
-    rows = []
+    prepared = prepare_words(words)
 
-    for line in group_lines(words):
-        cells = line_to_cells(
-            line,
-            cell_gap_factor=cell_gap_factor,
-        )
+    if not prepared:
+        return []
 
-        source = " ".join(
-            text(word["text"])
-            for word in line
-        )
+    result = []
 
-        if not source:
-            continue
+    for line in group_lines(prepared, settings):
+        details = build_cells(line, settings)
 
-        rows.append(
+        reasons = sorted(
             {
-                "text": source,
-                "cells": cells,
-                "x0": min(
-                    float(word["x0"])
-                    for word in line
-                ),
-                "top": min(
-                    float(word["top"])
-                    for word in line
-                ),
-                "x1": max(
-                    float(word["x1"])
-                    for word in line
-                ),
-                "bottom": max(
-                    float(word["bottom"])
-                    for word in line
-                ),
-                # 추후 정밀한 컬럼 복원에 사용할 수 있도록
-                # 개별 단어 좌표도 보존한다.
-                "words": [
-                    dict(word)
-                    for word in line
-                ],
+                reason
+                for word in line
+                for reason in (
+                    word.get("mergeReviewReasons") or []
+                )
             }
         )
 
-    return rows
-
-
-def extract_pdf_layout(
-    pdf_bytes: bytes,
-    *,
-    tessdata_dir: str | Path | None = None,
-    language: str = DEFAULT_LANGUAGE,
-    dpi: int = DEFAULT_DPI,
-    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
-    timeout: float = DEFAULT_OCR_TIMEOUT,
-    psm: int = 3,
-    cell_gap_factor: float = 0.7,
-) -> dict[str, Any]:
-    """전체 페이지를 OCR하고 PDF 텍스트와 결합한다."""
-
-    validate_pdf_bytes(pdf_bytes)
-
-    if (
-        type(dpi) is not int
-        or not 72 <= dpi <= 600
-    ):
-        raise ValueError(
-            "OCR 해상도는 72~600 DPI여야 합니다."
+        result.append(
+            {
+                "text": " ".join(
+                    word["text"] for word in line
+                ),
+                "cells": [
+                    detail["text"] for detail in details
+                ],
+                "bbox": bounds(line),
+                "words": [dict(word) for word in line],
+                "cellDetails": details,
+                "sources": sorted(
+                    {word["source"] for word in line}
+                ),
+                "needsReview": bool(reasons),
+                "reviewReasons": reasons,
+            }
         )
-
-    if (
-        not math.isfinite(min_confidence)
-        or not 0 <= min_confidence <= 100
-    ):
-        raise ValueError(
-            "OCR 신뢰도는 0~100이어야 합니다."
-        )
-
-    if (
-        not math.isfinite(timeout)
-        or timeout <= 0
-    ):
-        raise ValueError(
-            "OCR 제한 시간은 0보다 커야 합니다."
-        )
-
-    # 단어 위치가 필요한 모드만 허용한다.
-    if (
-        type(psm) is not int
-        or psm not in {
-            3, 4, 5, 6, 7, 8,
-            9, 10, 11, 12, 13,
-        }
-    ):
-        raise ValueError(
-            "지원하지 않는 OCR 페이지 분석 모드입니다."
-        )
-
-    if (
-        not math.isfinite(cell_gap_factor)
-        or cell_gap_factor <= 0
-    ):
-        raise ValueError(
-            "셀 간격 배율은 0보다 커야 합니다."
-        )
-
-    pages = []
-
-    with fitz.open(
-        stream=pdf_bytes,
-        filetype="pdf",
-    ) as document:
-        if (
-            document.needs_pass
-            or document.is_encrypted
-        ):
-            raise ValueError(
-                "암호화된 PDF는 지원하지 않습니다."
-            )
-
-        if len(document) > MAX_PAGES:
-            raise ValueError(
-                "PDF 페이지 수가 제한을 초과했습니다."
-            )
-
-        data_directory = resolve_tessdata_dir(
-            tessdata_dir,
-            language,
-        )
-
-        for index, page in enumerate(document):
-            page_number = index + 1
-
-            # 내장 텍스트와 OCR 단어를
-            # 동일한 좌표 기준으로 추출한다.
-            embedded = native_words(page)
-
-            try:
-                scanned = ocr_words(
-                    page,
-                    tessdata_dir=data_directory,
-                    language=language,
-                    dpi=dpi,
-                    min_confidence=min_confidence,
-                    timeout=timeout,
-                    psm=psm,
-                )
-            except pytesseract.TesseractNotFoundError as exc:
-                raise RuntimeError(
-                    "Tesseract 실행 파일을 찾을 수 없습니다. "
-                    "설치 경로와 PATH 설정을 확인해 주세요."
-                ) from exc
-            except pytesseract.TesseractError as exc:
-                raise RuntimeError(
-                    f"{page_number}페이지 OCR 실행에 실패했습니다: "
-                    f"{exc}"
-                ) from exc
-            except RuntimeError as exc:
-                raise RuntimeError(
-                    f"{page_number}페이지 OCR 처리에 실패했습니다: "
-                    f"{exc}"
-                ) from exc
-
-            merged = merge_words(
-                embedded,
-                scanned,
-            )
-
-            rows = words_to_rows(
-                merged,
-                cell_gap_factor=cell_gap_factor,
-            )
-
-            pages.append(
-                {
-                    "pageNumber": page_number,
-                    "method": "PDF_TEXT_AND_OCR",
-                    "ocrUsed": True,
-                    "text": "\n".join(
-                        row["text"]
-                        for row in rows
-                    ),
-                    "rows": rows,
-                    "nativeWordCount": len(
-                        embedded
-                    ),
-                    "ocrWordCount": len(
-                        scanned
-                    ),
-                    "mergedWordCount": len(
-                        merged
-                    ),
-                }
-            )
-
-    return {
-        "totalPages": len(pages),
-        "ocrPages": pages,
-    }
-
-
-def analyze_pdf_with_ocr(
-    pdf_bytes: bytes,
-    *,
-    tessdata_dir: str | Path | None = None,
-    language: str = DEFAULT_LANGUAGE,
-    dpi: int = DEFAULT_DPI,
-    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
-    timeout: float = DEFAULT_OCR_TIMEOUT,
-    psm: int = 3,
-    cell_gap_factor: float = 0.7,
-    header_aliases: dict[
-        str,
-        list[str],
-    ] | None = None,
-    category_resolver: CategoryResolver | None = None,
-) -> dict[str, Any]:
-    """복원한 PDF 구조를 기존 거래 파서에 전달한다."""
-
-    from .pdf_parser import extract_transactions
-
-    layout = extract_pdf_layout(
-        pdf_bytes,
-        tessdata_dir=tessdata_dir,
-        language=language,
-        dpi=dpi,
-        min_confidence=min_confidence,
-        timeout=timeout,
-        psm=psm,
-        cell_gap_factor=cell_gap_factor,
-    )
-
-    # 앞서 제시한 범용 파서의 인자 구조에 맞춘 연동이다.
-    result = extract_transactions(
-        pdf_bytes,
-        ocr_pages=layout["ocrPages"],
-        header_aliases=header_aliases,
-        category_resolver=category_resolver,
-    )
-
-    # 거래 추출 결과와 별개로
-    # 실제 OCR 수행 내역을 제공한다.
-    result["ocrPageResults"] = [
-        {
-            "pageNumber": page["pageNumber"],
-            "method": page["method"],
-            "ocrUsed": page["ocrUsed"],
-            "nativeWordCount": page[
-                "nativeWordCount"
-            ],
-            "ocrWordCount": page[
-                "ocrWordCount"
-            ],
-            "mergedWordCount": page[
-                "mergedWordCount"
-            ],
-        }
-        for page in layout["ocrPages"]
-    ]
 
     return result

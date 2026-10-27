@@ -6,9 +6,7 @@ async function request(config) {
     const body = response.data;
 
     if (body?.success === false) {
-      const error = new Error(
-          body.error?.message ?? '요청 처리에 실패했습니다.',
-      );
+      const error = new Error(body.error?.message ?? '요청 처리에 실패했습니다.');
 
       error.code = body.error?.code;
       error.status = response.status;
@@ -19,22 +17,17 @@ async function request(config) {
 
     return body;
   } catch (cause) {
-    if (
-        cause.code === 'ERR_CANCELED'
-        || cause.name === 'CanceledError'
-    ) {
+    if (cause?.code === 'ERR_CANCELED' || cause?.name === 'CanceledError') {
       throw cause;
     }
 
-    const detail = cause.response?.data?.error;
+    const detail = cause?.response?.data?.error;
 
-    const error = new Error(
-        detail?.message ?? cause.message ?? '서버 요청에 실패했습니다.',
-    );
+    const error = new Error(detail?.message ?? cause?.message ?? '서버 요청에 실패했습니다.');
 
-    error.code = detail?.code ?? cause.code;
-    error.status = cause.response?.status ?? cause.status;
-    error.fields = detail?.fields ?? cause.fields;
+    error.code = detail?.code ?? cause?.code;
+    error.status = cause?.response?.status ?? cause?.status;
+    error.fields = detail?.fields ?? cause?.fields;
 
     throw error;
   }
@@ -58,33 +51,124 @@ function validateYear(value) {
   return year;
 }
 
+function validateCategory(value) {
+  if (typeof value !== 'string' || !/^[A-Z][A-Z0-9_]{0,49}$/.test(value)) {
+    throw new Error('카테고리 코드를 확인해주세요.');
+  }
+
+  return value;
+}
+
+function optionalNumber(value, label, fallback = null) {
+  if (value == null || String(value).trim() === '') {
+    return fallback;
+  }
+
+  const number = Number(String(value).replace(/,/g, '').trim());
+
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(`${label}를 확인해주세요.`);
+  }
+
+  return number;
+}
+
+function optionalInteger(value, label, fallback = null) {
+  const number = optionalNumber(value, label, fallback);
+
+  if (number !== null && !Number.isSafeInteger(number)) {
+    throw new Error(`${label}는 정수로 입력해주세요.`);
+  }
+
+  return number;
+}
+
+function normalizeTaxInput(input) {
+  if (!input || typeof input !== 'object') {
+    throw new Error('분석 기본정보가 필요합니다.');
+  }
+
+  const region = String(input.businessRegion ?? '').trim();
+
+  return {
+    ...input,
+    taxYear: validateYear(input.taxYear),
+    businessRegion: region || null,
+
+    age: optionalInteger(input.age, '만 나이'),
+
+    dependentCount: optionalInteger(input.dependentCount, '부양가족 수', 0),
+
+    donationAmount: optionalNumber(input.donationAmount, '기부금', 0),
+  };
+}
+
 function inputPath(taxInputId) {
   validateId(taxInputId, '분석번호');
+
   return `/tax/inputs/${taxInputId}`;
 }
 
 function transactionPath(taxInputId, transactionId) {
   validateId(transactionId, '거래번호');
+
   return `${inputPath(taxInputId)}/transactions/${transactionId}`;
 }
 
-export async function createTaxInput(input) {
-  validateYear(input?.taxYear);
+function dateText(value) {
+  if (Array.isArray(value) && value.length === 3) {
+    return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
+  }
 
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function validateTransactionDate(value) {
+  const date = dateText(value);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('날짜별 거래 내역이 필요합니다.');
+  }
+
+  const parsed = new Date(`${date}T00:00:00Z`);
+
+  if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    throw new Error('유효한 거래 날짜를 입력해주세요.');
+  }
+
+  validateYear(date.slice(0, 4));
+
+  return date;
+}
+
+function transactionKey(row) {
+  return JSON.stringify([
+    row.transactionType,
+    dateText(row.transactionDate),
+    row.description,
+    row.category,
+    Number(row.amount),
+
+    row.preTaxIncome == null ? null : Number(row.preTaxIncome),
+
+    row.deductedTaxRate == null ? null : Number(row.deductedTaxRate),
+  ]);
+}
+
+// 신규 거래 최초 저장 시에만 사용한다.
+export async function createTaxInput(input) {
   return request({
     url: '/tax/inputs/create',
     method: 'POST',
-    data: input,
+    data: normalizeTaxInput(input),
   });
 }
 
 export async function updateTaxInput(taxInputId, input) {
-  validateYear(input?.taxYear);
-
   return request({
     url: `${inputPath(taxInputId)}/update`,
     method: 'POST',
-    data: input,
+    data: normalizeTaxInput(input),
   });
 }
 
@@ -96,12 +180,12 @@ export async function getTaxInput(taxInputId) {
 }
 
 export async function getSavedTaxInputs(taxYear = null) {
-  if (taxYear !== null) validateYear(taxYear);
+  const year = taxYear === null ? null : validateYear(taxYear);
 
   return request({
     url: '/tax/inputs/list',
     method: 'POST',
-    params: taxYear === null ? {} : { taxYear },
+    params: year === null ? {} : { taxYear: year },
   });
 }
 
@@ -112,6 +196,8 @@ export async function deleteTaxInput(taxInputId) {
   });
 }
 
+// 기존 거래 편집에서는 호출하지 않는다.
+// 미저장 거래의 최초 저장에만 사용한다.
 export async function saveTransactions(taxInputId, rows) {
   if (!Array.isArray(rows)) {
     throw new Error('저장할 거래 목록이 필요합니다.');
@@ -131,11 +217,9 @@ export async function getTransactions(taxInputId) {
   });
 }
 
-export async function updateTransaction(
-    taxInputId,
-    transactionId,
-    category,
-) {
+// 변경된 카테고리 한 건만 전송한다.
+// 분석번호와 거래번호는 URL로 전달한다.
+export async function updateTransaction(taxInputId, transactionId, category) {
   validateCategory(category);
 
   return request({
@@ -145,6 +229,7 @@ export async function updateTransaction(
   });
 }
 
+// 삭제할 거래의 식별자만 전송한다.
 export async function deleteTransaction(taxInputId, transactionId) {
   return request({
     url: `${transactionPath(taxInputId, transactionId)}/delete`,
@@ -166,10 +251,8 @@ export async function calculateTaxInput(taxInputId) {
   });
 }
 
-export async function parsePdf(
-    file,
-    { signal, taxInputId = null } = {},
-) {
+// 파싱 요청만 수행하며 거래를 저장하지 않는다.
+export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   if (!file) {
     throw new Error('PDF 파일을 선택해주세요.');
   }
@@ -195,447 +278,422 @@ export async function uploadTaxPdfApi(file, options = {}) {
   const response = await parsePdf(file, options);
   const result = response?.data;
 
-  if (
-      !result
-      || typeof result !== 'object'
-      || Array.isArray(result)
-      || !Array.isArray(result.transactions)
-  ) {
+  if (!result || typeof result !== 'object' || !Array.isArray(result.transactions)) {
     throw new Error('PDF 분석 응답 형식이 올바르지 않습니다.');
   }
 
-  if (result.persisted !== true) {
-    throw new Error('PDF 분석은 완료됐지만 DB 저장이 확인되지 않았습니다.');
-  }
-
   if (
-      !Number.isSafeInteger(result.savedCount)
-      || result.savedCount !== result.transactions.length
-      || result.savedCount <= 0
+    result.persisted === true ||
+    result.savedCount > 0 ||
+    result.transactions.some((row) => row?.transactionId != null)
   ) {
-    throw new Error('PDF 저장 건수와 응답 건수가 일치하지 않습니다.');
+    throw new Error('파싱 API에서 저장 결과가 반환됐습니다. 서버 적용 상태를 확인해주세요.');
   }
 
-  const inputIds = result.taxInputIdsByYear;
-
-  if (!inputIds || typeof inputIds !== 'object' || Array.isArray(inputIds)) {
-    throw new Error('저장된 연도별 분석번호가 없습니다.');
-  }
-
-  const groupedRows = new Map();
-  const seenIds = new Set();
-
-  for (const [year, inputId] of Object.entries(inputIds)) {
-    validateYear(year);
-    validateId(inputId, '저장된 분석번호');
-    groupedRows.set(inputId, []);
-  }
-
-  for (const row of result.transactions) {
-    validateId(row?.transactionId, '저장된 거래번호');
-    validateId(row?.taxInputId, '저장된 분석번호');
-
-    if (seenIds.has(row.transactionId)) {
-      throw new Error('응답에 중복 거래번호가 있습니다.');
+  const transactions = result.transactions.map((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new Error('PDF 응답에 잘못된 거래가 있습니다.');
     }
 
-    seenIds.add(row.transactionId);
+    const needsReview = row.parseSuccess !== true || row.needsReview === true || row.excluded === true;
 
-    const rows = groupedRows.get(row.taxInputId);
+    return {
+      ...row,
+      transactionId: null,
+      taxInputId: null,
+      persisted: false,
+      needsReview,
+      excluded: needsReview,
+      failureReason: needsReview ? row.failureReason || '거래 내용을 확인해주세요.' : null,
+    };
+  });
 
-    if (!rows) {
-      throw new Error('거래의 분석번호가 저장 결과와 일치하지 않습니다.');
-    }
-
-    rows.push(row);
-  }
-
-  /*
-   * 서비스가 DB에서 다시 조회한 거래를 연도별 화면 목록으로 묶는다.
-   * 이 단계에서 추가 저장 요청을 보내지 않는다.
-   */
-  const snapshots = Object.entries(inputIds).map(([year, taxInputId]) => ({
-    taxYear: Number(year),
-    taxInputId,
-    rows: groupedRows.get(taxInputId),
-  }));
+  const reviewRows = transactions.filter((row) => row.needsReview);
 
   return {
     ...result,
+    transactions,
+    savedRows: [],
+    reviewRows,
+    reviewCount: reviewRows.length,
+    savedCount: 0,
+    persisted: false,
+    taxInputIdsByYear: {},
+    snapshots: [],
     originalFileName: result.fileName ?? file.name,
     fileId: result.fileId ?? null,
-    persisted: true,
-    snapshots,
   };
-}
-
-function validateCategory(value) {
-  if (
-      typeof value !== 'string'
-      || !/^[A-Z][A-Z0-9_]{0,49}$/.test(value)
-  ) {
-    throw new Error('카테고리 코드를 확인해주세요.');
-  }
-
-  return value;
-}
-
-function snapshotCategory(value) {
-  return validateCategory(
-      String(value || 'UNCLASSIFIED').trim(),
-  );
-}
-
-function snapshotAmount(value) {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  const cleaned = String(value)
-      .replace(/,/g, '')
-      .replace(/원/g, '')
-      .replace(/\s/g, '');
-
-  if (!cleaned) return null;
-
-  const amount = Number(cleaned);
-
-  return Number.isSafeInteger(amount) && amount >= 0
-      ? amount
-      : null;
-}
-
-function snapshotRate(value) {
-  if (value === null || value === undefined || value === '') {
-    return null;
-  }
-
-  const rate = Number(value);
-
-  if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
-    throw new Error('차감 세율을 확인해주세요.');
-  }
-
-  return rate;
-}
-
-function dateText(value) {
-  if (Array.isArray(value) && value.length === 3) {
-    return value.map((part, index) => (
-        index === 0
-            ? String(part).padStart(4, '0')
-            : String(part).padStart(2, '0')
-    )).join('-');
-  }
-
-  return value ? String(value).trim() : null;
-}
-
-function snapshotPeriod(dateValue, monthValue, yearValue) {
-  const date = dateText(dateValue);
-  const month = monthValue ? String(monthValue).trim() : null;
-
-  if (date) {
-    const parsed = new Date(`${date}T00:00:00Z`);
-
-    if (
-        !/^\d{4}-\d{2}-\d{2}$/.test(date)
-        || Number.isNaN(parsed.getTime())
-        || parsed.toISOString().slice(0, 10) !== date
-    ) {
-      throw new Error('거래 날짜를 확인해주세요.');
-    }
-  }
-
-  if (month && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-    throw new Error('거래 월은 YYYY-MM 형식이어야 합니다.');
-  }
-
-  if (date && month && date.slice(0, 7) !== month) {
-    throw new Error('거래 날짜와 거래 월이 다릅니다.');
-  }
-
-  const year = validateYear(
-      date ? date.slice(0, 4) : month ? month.slice(0, 4) : yearValue,
-  );
-
-  if (
-      yearValue !== null
-      && yearValue !== undefined
-      && yearValue !== ''
-      && validateYear(yearValue) !== year
-  ) {
-    throw new Error('문서 귀속 연도와 거래 연도가 다릅니다.');
-  }
-
-  return { date, month, year };
 }
 
 export function getTaxReviewSignature(state) {
   function inputOnly(row) {
-    const {
-      transactionId,
-      taxInputId,
-      persisted,
-      ...input
-    } = row;
+    const { transactionId, taxInputId, persisted, ...input } = row;
 
     return input;
   }
 
-  // DB 식별자와 저장 표시는 사용자의 입력 변경 비교에서 제외한다.
   return JSON.stringify({
     manualRows: (state.manualRows ?? []).map(inputOnly),
     fileRows: (state.fileRows ?? []).map(inputOnly),
+
     evidenceDocuments: (state.evidenceDocuments ?? []).map((document) => ({
       key: document.key,
       name: document.name,
       rows: (document.rows ?? []).map(inputOnly),
     })),
+
     profile: state.profile,
   });
 }
 
-export async function saveTaxReview(
-    state,
-    { onPendingChange } = {},
-) {
-  const groups = new Map();
-  const profile = state.profile ?? {};
+/**
+ * 프론트에서 변경 전후를 비교한다.
+ *
+ * 서버에 보내는 내용:
+ * - 카테고리 변경: 해당 거래의 변경된 카테고리
+ * - 삭제: 해당 거래의 분석번호와 거래번호
+ *
+ * 전체 거래 목록, 수정 전 값, 변경 이력은 전송하지 않는다.
+ * 변경 이력은 서버에서 DB 원본을 조회해 저장한다.
+ */
+export async function saveTaxReview(proposed, { originalState, onOperationSuccess } = {}) {
+  if (!originalState || !proposed) {
+    throw new Error('변경 전후 거래 목록이 필요합니다.');
+  }
 
-  function append(sourceKey, row, evidence = false) {
-    const period = snapshotPeriod(
-        evidence ? row.transactionDate : row.date,
-        evidence ? row.transactionMonth : row.month,
-        evidence
-            ? row.documentYear
-            : row.documentYear
-            ?? row.year
-            ?? (
-                row.date || row.month
-                    ? null
-                    : profile.taxYear
-            ),
-    );
+  function collect(state) {
+    const result = new Map();
 
-    const description = String(
-        evidence ? row.description ?? '' : row.memo ?? '',
-    ).trim();
+    function add(rows, source, evidence = false) {
+      for (const row of rows ?? []) {
+        const key = `${source}:${row.id}`;
 
-    if (!description || Array.from(description).length > 255) {
-      throw new Error('거래 설명은 1자 이상 255자 이하여야 합니다.');
+        if (result.has(key)) {
+          throw new Error('화면 거래 번호가 중복됩니다.');
+        }
+
+        result.set(key, {
+          key,
+          source,
+          rowId: row.id,
+          row,
+
+          category: String(evidence ? (row.category ?? 'UNCLASSIFIED') : (row.cat ?? 'UNCLASSIFIED')).trim(),
+        });
+      }
     }
 
-    const amount = snapshotAmount(
-        evidence
-            ? row.amount
-            : row.actualAmount
-            ?? (row.amountBasis === 'GROSS' ? null : row.amt),
-    );
+    add(state.manualRows, 'manual');
+    add(state.fileRows, 'file');
 
-    if (amount === null) {
-      throw new Error(`${description}: 금액을 확인해주세요.`);
+    for (const document of state.evidenceDocuments ?? []) {
+      add(document.rows, 'evidence', true);
     }
 
-    if (row.needsReview === true) {
-      throw new Error(
-          `${description}: ${row.failureReason ?? '확인이 필요합니다.'}`,
+    return result;
+  }
+
+  const before = collect(originalState);
+  const after = collect(proposed);
+
+  const operations = [];
+  const serverTargets = new Set();
+
+  // 현재 화면은 카테고리 수정과 거래 삭제만 지원한다.
+  const fixedFields = [
+    'kind',
+    'date',
+    'month',
+    'year',
+    'documentYear',
+    'memo',
+    'amt',
+    'actualAmount',
+    'preTaxIncome',
+    'deductedTaxRate',
+    'deductionRate',
+    'taxDeducted',
+    'transactionDate',
+    'transactionMonth',
+    'description',
+    'amount',
+  ];
+
+  for (const key of after.keys()) {
+    if (!before.has(key)) {
+      throw new Error('새 거래는 거래 추가 기능을 이용해주세요.');
+    }
+  }
+
+  // 비교 작업은 프론트 안에서만 수행한다.
+  for (const [key, previous] of before) {
+    const next = after.get(key);
+    const removing = !next;
+
+    if (!removing) {
+      if (next.row.transactionId !== previous.row.transactionId || next.row.taxInputId !== previous.row.taxInputId) {
+        throw new Error('기존 분석번호와 거래번호를 변경할 수 없습니다.');
+      }
+
+      const unsupportedChange = fixedFields.some(
+        (field) => JSON.stringify(previous.row[field]) !== JSON.stringify(next.row[field])
       );
-    }
 
-    const kind = String(row.kind ?? '').trim().toUpperCase();
-
-    const transactionType = evidence
-        ? 'EXPENSE'
-        : ['IN', 'INCOME', '수입'].includes(kind)
-            ? 'INCOME'
-            : ['OUT', 'EXPENSE', '지출'].includes(kind)
-                ? 'EXPENSE'
-                : 'UNKNOWN';
-
-    const amountBasis = evidence
-        ? 'DEDUCTION_ELIGIBLE'
-        : row.amountBasis === 'GROSS' && row.actualAmount != null
-            ? 'ACTUAL'
-            : row.amountBasis ?? 'UNSPECIFIED';
-
-    const entries = groups.get(period.year) ?? [];
-
-    entries.push({
-      sourceKey,
-      payload: {
-        // 수정본은 새 분석번호로 저장하므로 이전 거래번호를 보내지 않는다.
-        transactionType,
-        transactionDate: period.date,
-        transactionMonth: period.month,
-        documentYear: period.year,
-        description,
-        category: snapshotCategory(evidence ? row.category : row.cat),
-        amount,
-        preTaxIncome: transactionType === 'INCOME'
-            ? snapshotAmount(row.preTaxIncome)
-            : null,
-        deductedTaxRate: evidence
-            ? null
-            : snapshotRate(row.deductedTaxRate),
-        valueKind: row.valueKind ?? (
-            period.date
-                ? 'DETAIL'
-                : period.month
-                    ? 'MONTHLY_AGGREGATE'
-                    : 'ANNUAL_TOTAL'
-        ),
-        amountBasis,
-      },
-    });
-
-    groups.set(period.year, entries);
-  }
-
-  // 화면 필터나 카테고리 분류 여부와 관계없이 거래 전체를 저장한다.
-  for (const row of state.manualRows ?? []) {
-    append(`manual:${row.id}`, row);
-  }
-
-  for (const row of state.fileRows ?? []) {
-    if (row.excluded !== true) {
-      append(`file:${row.id}`, row);
-    }
-  }
-
-  for (const document of state.evidenceDocuments ?? []) {
-    for (const row of document.rows ?? []) {
-      append(`evidence:${row.id}`, row, true);
-    }
-  }
-
-  // 한 연도의 거래를 전부 삭제한 경우에도 빈 수정본을 남긴다.
-  for (const key of Object.keys(state.taxInputIdsByYear ?? {})) {
-    const year = validateYear(key);
-
-    if (!groups.has(year)) groups.set(year, []);
-  }
-
-  if (!groups.size) {
-    throw new Error('저장할 내역이 없습니다.');
-  }
-
-  const dependentCount = snapshotAmount(profile.dependentCount ?? 0);
-  const donationAmount = snapshotAmount(profile.donationAmount ?? 0);
-
-  if (dependentCount === null || donationAmount === null) {
-    throw new Error('가족 수와 기부금 입력값을 확인해주세요.');
-  }
-
-  const hasAge = profile.age !== ''
-      && profile.age !== null
-      && profile.age !== undefined;
-
-  const age = hasAge ? snapshotAmount(profile.age) : null;
-
-  if (hasAge && age === null) {
-    throw new Error('나이 입력값을 확인해주세요.');
-  }
-
-  const signature = getTaxReviewSignature(state);
-
-  // 같은 입력의 실패 재시도에만 미완료 분석번호를 재사용한다.
-  const pending = state.taxPendingSnapshot?.signature === signature
-      ? {
-        signature,
-        inputIds: { ...state.taxPendingSnapshot.inputIds },
-      }
-      : { signature, inputIds: {} };
-
-  function reportPending() {
-    onPendingChange?.({
-      signature,
-      inputIds: { ...pending.inputIds },
-    });
-  }
-
-  reportPending();
-
-  const savedRows = new Map();
-  const snapshots = [];
-
-  for (const [year, entries] of groups) {
-    let taxInputId = pending.inputIds[year];
-
-    if (!taxInputId) {
-      const created = await createTaxInput({
-        taxYear: year,
-        businessRegistered: profile.businessRegistered,
-        age,
-        dependentCount,
-        donationAmount,
-        startupReliefApplied: profile.startupReliefApplied,
-        businessRegion: profile.businessRegion || null,
-        saveStatus: 'TEMP',
-      });
-
-      taxInputId = created.data?.taxInputId;
-
-      validateId(taxInputId, '새 분석번호');
-
-      pending.inputIds[year] = taxInputId;
-      reportPending();
-    } else {
-      validateId(taxInputId, '재시도 분석번호');
-    }
-
-    // 업로드 원본을 덮어쓰지 않고 새 수정본에 전체 목록을 저장한다.
-    const saved = await saveTransactions(
-        taxInputId,
-        entries.map((entry) => entry.payload),
-    );
-
-    if (
-        !Array.isArray(saved.data)
-        || saved.data.length !== entries.length
-    ) {
-      throw new Error(`${year}년 저장 응답이 올바르지 않습니다.`);
-    }
-
-    const queried = await getTransactions(taxInputId);
-
-    if (
-        !Array.isArray(queried.data)
-        || queried.data.length !== entries.length
-    ) {
-      throw new Error(`${year}년 저장 내역을 조회하지 못했습니다.`);
-    }
-
-    const queriedIds = new Set(
-        queried.data.map((row) => row.transactionId),
-    );
-
-    entries.forEach((entry, index) => {
-      const transactionId = saved.data[index].transactionId;
-
-      validateId(transactionId, '저장된 거래번호');
-
-      if (!queriedIds.has(transactionId)) {
-        throw new Error('저장한 거래를 조회 결과에서 찾지 못했습니다.');
+      if (unsupportedChange) {
+        throw new Error('현재 편집창에서는 카테고리 수정과 거래 삭제만 지원합니다.');
       }
 
-      savedRows.set(entry.sourceKey, {
-        transactionId,
-        taxInputId,
-        persisted: true,
-      });
-    });
+      // 변경 없는 거래는 요청 목록에 넣지 않는다.
+      if (next.category === previous.category) {
+        continue;
+      }
 
-    snapshots.push({
-      taxYear: year,
+      validateCategory(next.category);
+    }
+
+    const transactionId = previous.row.transactionId ?? null;
+
+    const taxInputId = previous.row.taxInputId ?? null;
+
+    const persisted = transactionId !== null;
+
+    if (persisted) {
+      validateId(transactionId, '기존 거래번호');
+      validateId(taxInputId, '기존 분석번호');
+
+      const target = `${taxInputId}:${transactionId}`;
+
+      if (serverTargets.has(target)) {
+        throw new Error('동일한 저장 거래가 중복되어 있습니다.');
+      }
+
+      serverTargets.add(target);
+    }
+
+    operations.push({
+      key,
+      source: previous.source,
+      rowId: previous.rowId,
+      type: removing ? 'delete' : 'update',
+      category: removing ? null : next.category,
       taxInputId,
-      rows: queried.data,
+      transactionId,
+      persisted,
     });
+  }
+
+  const completedOperations = [];
+
+  try {
+    // 서버에는 operations에 포함된 변경 거래만 보낸다.
+    for (const operation of operations) {
+      if (operation.persisted) {
+        if (operation.type === 'delete') {
+          try {
+            await deleteTransaction(operation.taxInputId, operation.transactionId);
+          } catch (error) {
+            const alreadyDeleted = error.status === 404 && error.code === 'TRANSACTION_NOT_FOUND';
+
+            if (!alreadyDeleted) {
+              throw error;
+            }
+          }
+        } else {
+          await updateTransaction(operation.taxInputId, operation.transactionId, operation.category);
+        }
+      }
+
+      // 미저장 거래의 편집은 서버 요청 없이 화면만 반영한다.
+      completedOperations.push(operation);
+
+      // 저장된 거래는 서버 성공 응답을 받은 뒤 화면을 갱신한다.
+      await onOperationSuccess?.(operation);
+    }
+  } catch (error) {
+    error.completedOperations = completedOperations;
+    throw error;
   }
 
   return {
-    inputIds: { ...pending.inputIds },
-    savedRows,
-    snapshots,
+    operations: completedOperations,
+
+    updatedCount: completedOperations.filter((item) => item.persisted && item.type === 'update').length,
+
+    deletedCount: completedOperations.filter((item) => item.persisted && item.type === 'delete').length,
+
+    localCount: completedOperations.filter((item) => !item.persisted).length,
   };
+}
+
+/**
+ * 미저장 정상 거래의 최초 저장 전용이다.
+ * 기존 거래의 수정·삭제 버튼에서는 호출하지 않는다.
+ */
+export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved } = {}) {
+  if (typeof onInputCreated !== 'function' || typeof onGroupSaved !== 'function') {
+    throw new Error('최초 저장 결과를 반영할 함수가 필요합니다.');
+  }
+
+  const groups = new Map();
+
+  function collect(rows, source) {
+    for (const row of rows ?? []) {
+      if (row.transactionId != null || row.needsReview === true || row.excluded === true || row.selected === false) {
+        continue;
+      }
+
+      const date = validateTransactionDate(row.date);
+      const year = validateYear(date.slice(0, 4));
+
+      const kind = String(row.kind ?? '')
+        .trim()
+        .toUpperCase();
+
+      const transactionType = ['IN', 'INCOME', '수입'].includes(kind)
+        ? 'INCOME'
+        : ['OUT', 'EXPENSE', '지출'].includes(kind)
+          ? 'EXPENSE'
+          : null;
+
+      if (!transactionType) {
+        throw new Error(`${row.memo || '거래'}: 수입·지출 구분을 확인해주세요.`);
+      }
+
+      const amount = optionalInteger(row.actualAmount ?? row.amt, '실제 입출금액');
+
+      if (amount === null) {
+        throw new Error('실제 입출금액이 필요합니다.');
+      }
+
+      const description = String(row.memo ?? '').trim();
+
+      if (!description) {
+        throw new Error('거래 설명을 입력해주세요.');
+      }
+
+      const category = validateCategory(String(row.cat || 'UNCLASSIFIED').trim());
+
+      const payload = {
+        transactionType,
+        transactionDate: date,
+        description,
+        category,
+        amount,
+        actualAmount: amount,
+
+        preTaxIncome: optionalNumber(row.preTaxIncome, '세전 금액'),
+
+        deductedTaxRate: optionalNumber(row.deductedTaxRate, '차감 세율'),
+
+        amountBasis: row.amountBasis ?? 'UNSPECIFIED',
+        valueKind: row.valueKind ?? 'DETAIL',
+        needsReview: false,
+        excluded: false,
+      };
+
+      if (!groups.has(year)) {
+        groups.set(year, []);
+      }
+
+      groups.get(year).push({
+        source,
+        rowId: row.id,
+        payload,
+      });
+    }
+  }
+
+  collect(state.manualRows, 'manual');
+  collect(state.fileRows, 'file');
+
+  if (groups.size === 0) {
+    return { savedCount: 0 };
+  }
+
+  const profile = normalizeTaxInput({
+    ...state.profile,
+    taxYear: groups.keys().next().value,
+  });
+
+  let savedCount = 0;
+
+  for (const [year, entries] of groups) {
+    let taxInputId = state.taxPendingInputIdsByYear?.[year] ?? null;
+
+    if (taxInputId == null) {
+      const response = await createTaxInput({
+        ...profile,
+        taxYear: year,
+        saveStatus: 'TEMP',
+      });
+
+      taxInputId = response?.data?.taxInputId;
+
+      validateId(taxInputId, '생성된 분석번호');
+
+      await onInputCreated({
+        taxYear: year,
+        taxInputId,
+      });
+    } else {
+      validateId(taxInputId, '최초 저장 분석번호');
+    }
+
+    const response = await saveTransactions(
+      taxInputId,
+      entries.map(({ payload }) => payload)
+    );
+
+    const savedRows = response?.data;
+
+    if (!Array.isArray(savedRows) || savedRows.length !== entries.length) {
+      throw new Error('최초 저장 결과의 거래 건수가 다릅니다.');
+    }
+
+    const buckets = new Map();
+    const seenIds = new Set();
+
+    for (const row of savedRows) {
+      validateId(row.transactionId, '저장된 거래번호');
+
+      if (row.taxInputId !== taxInputId || seenIds.has(row.transactionId)) {
+        throw new Error('저장 결과의 식별자가 올바르지 않습니다.');
+      }
+
+      seenIds.add(row.transactionId);
+
+      const key = transactionKey(row);
+
+      if (!buckets.has(key)) {
+        buckets.set(key, []);
+      }
+
+      buckets.get(key).push(row);
+    }
+
+    const bindings = entries.map((entry) => {
+      const saved = buckets.get(transactionKey(entry.payload))?.shift();
+
+      if (!saved) {
+        throw new Error('저장 결과를 화면 거래와 연결하지 못했습니다.');
+      }
+
+      return {
+        source: entry.source,
+        rowId: entry.rowId,
+        saved,
+      };
+    });
+
+    await onGroupSaved({
+      taxYear: year,
+      taxInputId,
+      rows: savedRows,
+      bindings,
+    });
+
+    savedCount += savedRows.length;
+  }
+
+  return { savedCount };
 }

@@ -2,1099 +2,841 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import styled from 'styled-components';
 
 import { Button, Card } from '../common/index';
 
-import {
-    getTaxReviewSignature,
-    saveTaxReview,
-} from '../../api/taxApi';
+import { getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
+
+import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
+
+import { getTransactionCashAmount } from '../../utils/taxInputSummary';
 
 import {
-    normalizeTaxKind,
-    parseTaxAmount,
-    useTaxStore,
-} from '../../store/useTaxStore';
-
-import {
-    getTransactionCashAmount,
-} from '../../utils/taxInputSummary';
-
-import {
-    INCOME_TRANSACTION_CATEGORIES,
-    EXPENSE_TRANSACTION_CATEGORIES,
+  INCOME_TRANSACTION_CATEGORIES,
+  EXPENSE_TRANSACTION_CATEGORIES,
+  getTransactionCategoryLabel,
 } from '../../data/transactionCategories';
 
-const Toolbar = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-`;
-
-const InlineActions = styled.div`
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-`;
-
-const Notice = styled.p`
-  margin: 12px 0;
-  color: #536476;
-  font-size: 13px;
-  line-height: 1.6;
-`;
-
-const Dialog = styled.dialog`
-  width: min(1150px, calc(100vw - 40px));
-  max-height: 85vh;
-  overflow: auto;
-  padding: 24px;
-  border: 0;
-  border-radius: 16px;
-  background: #fff;
-  color: #172033;
-
-  &::backdrop {
-    background: rgba(15, 23, 42, 0.45);
-  }
-
-  h2 {
-    margin-top: 0;
-  }
-
-  select {
-    min-width: 150px;
-    padding: 8px;
-    border: 1px solid #dce3ed;
-    border-radius: 7px;
-    background: #fff;
-    font: inherit;
-  }
-`;
-
-const BulkArea = styled.div`
-  margin: 16px 0;
-  padding: 14px;
-  border: 1px solid #e1e5f0;
-  border-radius: 10px;
-  background: #f7f8fc;
-`;
-
-const TableArea = styled.div`
-  max-height: 480px;
-  overflow: auto;
-  margin-top: 12px;
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-
-  th,
-  td {
-    padding: 12px 10px;
-    border-bottom: 1px solid #e5eaf1;
-    text-align: left;
-    vertical-align: middle;
-  }
-
-  th {
-    position: sticky;
-    top: 0;
-    z-index: 1;
-    background: #f5f7fb;
-    white-space: nowrap;
-  }
-
-  .amount {
-    text-align: right;
-    white-space: nowrap;
-  }
-`;
-
-const ReviewRow = styled.tr`
-  background: ${({ $deleted }) => (
-    $deleted ? '#fff1ef' : 'transparent'
-)};
-
-  .description {
-    text-decoration: ${({ $deleted }) => (
-    $deleted ? 'line-through' : 'none'
-)};
-  }
-`;
-
-const Footer = styled(Toolbar)`
-  position: sticky;
-  bottom: -24px;
-  z-index: 2;
-  padding: 16px 0;
-  margin-top: 16px;
-  border-top: 1px solid #e5eaf1;
-  background: #fff;
-`;
-
-const Badge = styled.span`
-  display: inline-block;
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: ${({ $unclassified }) => (
-    $unclassified ? '#fff3db' : '#f0f3f8'
-)};
-  color: ${({ $unclassified }) => (
-    $unclassified ? '#805300' : '#536476'
-)};
-  font-size: 12px;
-  white-space: nowrap;
-`;
-
-function unique(items) {
-    return [
-        ...new Map(
-            items.map((item) => [item.value, item]),
-        ).values(),
-    ];
-}
-
-const INCOME_CATEGORIES = unique([
-    ...INCOME_TRANSACTION_CATEGORIES,
-    { value: 'OTHER', label: '기타' },
-]);
-
-const EXPENSE_CATEGORIES = unique([
-    ...EXPENSE_TRANSACTION_CATEGORIES,
-    { value: 'MEDICAL_EXPENSE', label: '의료비' },
-    { value: 'EDUCATION_EXPENSE', label: '교육비' },
-    { value: 'INSURANCE_PREMIUM', label: '보험료' },
-    { value: 'DONATION', label: '기부금' },
-    { value: 'OTHER', label: '기타' },
-]);
-
-const ALL_CATEGORIES = unique([
-    ...INCOME_CATEGORIES,
-    ...EXPENSE_CATEGORIES,
-]);
-
-function isUnclassified(value) {
-    const category = String(value ?? '').trim();
-
-    return !category || category === 'UNCLASSIFIED';
-}
-
-function categoryLabel(value) {
-    if (isUnclassified(value)) return '미분류';
-
-    return ALL_CATEGORIES.find(
-        (item) => item.value === value,
-    )?.label ?? value;
-}
+const ALL_CATEGORIES = [
+  ...new Map(
+    [...INCOME_TRANSACTION_CATEGORIES, ...EXPENSE_TRANSACTION_CATEGORIES].map((item) => [item.value, item])
+  ).values(),
+];
 
 function categoriesFor(kind) {
-    const categories = kind === 'in'
-        ? INCOME_CATEGORIES
-        : kind === 'out'
-            ? EXPENSE_CATEGORIES
-            : ALL_CATEGORIES;
+  if (kind === 'in') {
+    return INCOME_TRANSACTION_CATEGORIES;
+  }
 
-    return categories.filter(
-        (item) => item.value !== 'UNCLASSIFIED',
-    );
+  if (kind === 'out') {
+    return EXPENSE_TRANSACTION_CATEGORIES;
+  }
+
+  return ALL_CATEGORIES;
 }
 
-function kindLabel(value) {
-    const kind = normalizeTaxKind(value);
+function formatDate(value) {
+  if (Array.isArray(value) && value.length === 3) {
+    return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
+  }
 
-    if (kind === 'in') return '수입';
-    if (kind === 'out') return '지출';
-
-    return '구분 미확인';
+  return String(value || '날짜 미확인');
 }
 
-function money(value) {
-    const amount = parseTaxAmount(value);
+function formatMoney(value) {
+  const amount = parseTaxAmount(value);
 
-    return amount === null
-        ? '금액 미확인'
-        : `${amount.toLocaleString('ko-KR')}원`;
+  return amount === null ? '금액 미확인' : `${amount.toLocaleString('ko-KR')}원`;
 }
 
-function periodText(value) {
-    if (Array.isArray(value)) {
-        return value.map((part, index) => (
-            index === 0
-                ? String(part)
-                : String(part).padStart(2, '0')
-        )).join('-');
-    }
+function kindLabel(kind) {
+  if (kind === 'in') return '수입';
+  if (kind === 'out') return '지출';
 
-    return value == null ? '미기재' : String(value);
+  return '미확인';
 }
 
 function collectRows(state) {
-    function normalRow(row, source) {
-        return {
-            key: `${source}:${row.id}`,
-            sourceId: row.id,
-            source,
-            kind: normalizeTaxKind(row.kind),
-            period: periodText(
-                row.date || row.month || row.year,
-            ),
-            description: row.memo || '내용 미기재',
-            category: row.cat || 'UNCLASSIFIED',
-            amount: getTransactionCashAmount(row),
-            evidence: false,
-        };
+  const result = [];
+
+  function add(items, source) {
+    for (const row of items ?? []) {
+      result.push({
+        key: `${source}:${row.id}`,
+        rowId: row.id,
+        source,
+        kind: normalizeTaxKind(row.kind),
+        date: formatDate(row.date),
+        description: row.memo || '설명 미기재',
+        category: row.cat || 'UNCLASSIFIED',
+        amount: getTransactionCashAmount(row),
+
+        // 식별자는 화면에 표시하지 않는다.
+        taxInputId: row.taxInputId ?? null,
+        transactionId: row.transactionId ?? null,
+
+        persisted: Number.isSafeInteger(row.transactionId) && row.transactionId > 0,
+
+        needsReview: row.needsReview === true || row.excluded === true,
+
+        selected: row.selected !== false,
+      });
     }
+  }
 
-    return [
-        ...state.manualRows.map(
-            (row) => normalRow(row, 'manual'),
-        ),
+  add(state.manualRows, 'manual');
+  add(state.fileRows, 'file');
 
-        ...state.fileRows.map(
-            (row) => normalRow(row, 'file'),
-        ),
-
-        ...(state.evidenceDocuments ?? []).flatMap(
-            (document) => document.rows.map((row) => ({
-                key: `evidence:${row.id}`,
-                sourceId: row.id,
-                source: 'evidence',
-
-                // 현재 증빙 목록은 카드 지출 공제대상금액 자료다.
-                kind: 'out',
-
-                period: periodText(
-                    row.transactionMonth
-                    || row.transactionDate
-                    || row.documentYear,
-                ),
-
-                description: row.description || '항목 미기재',
-                category: row.category || 'UNCLASSIFIED',
-                amount: row.amount,
-                evidence: true,
-            })),
-        ),
-    ];
+  return result;
 }
 
-function attachSavedIds(state, savedRows) {
-    function updateRows(rows, source) {
-        return rows.map((row) => ({
-            ...row,
-            ...(savedRows.get(`${source}:${row.id}`) ?? {}),
-        }));
-    }
+function hasPendingRows(state) {
+  return collectRows(state).some((row) => !row.persisted && !row.needsReview && row.selected);
+}
 
-    return {
-        ...state,
-        manualRows: updateRows(state.manualRows, 'manual'),
-        fileRows: updateRows(state.fileRows, 'file'),
+// 서버에서 성공한 거래만 화면 상태에 반영한다.
+function applyOperation(state, operation) {
+  function change(items, source) {
+    return (items ?? []).flatMap((row) => {
+      if (source !== operation.source || row.id !== operation.rowId) {
+        return [row];
+      }
 
-        evidenceDocuments: (
-            state.evidenceDocuments ?? []
-        ).map((document) => ({
-            ...document,
-            persisted: true,
-            rows: updateRows(document.rows, 'evidence'),
-        })),
-    };
+      return operation.type === 'delete' ? [] : [{ ...row, cat: operation.category }];
+    });
+  }
+
+  const taxSavedSnapshots = (state.taxSavedSnapshots ?? []).map((snapshot) => ({
+    ...snapshot,
+    rows: (snapshot.rows ?? []).flatMap((row) => {
+      const matching =
+        operation.persisted && row.taxInputId === operation.taxInputId && row.transactionId === operation.transactionId;
+
+      if (!matching) return [row];
+
+      return operation.type === 'delete' ? [] : [{ ...row, category: operation.category }];
+    }),
+  }));
+
+  return {
+    manualRows: change(state.manualRows, 'manual'),
+    fileRows: change(state.fileRows, 'file'),
+    taxSavedSnapshots,
+    taxLastSavedSignature: null,
+    calculated: false,
+  };
 }
 
 export function EntryTable() {
-    const state = useTaxStore();
+  const state = useTaxStore();
 
-    const dialogRef = useRef(null);
-    const previousKeysRef = useRef(new Set());
-    const savingRef = useRef(false);
+  const dialogRef = useRef(null);
+  const workingRef = useRef(false);
+  const previousKeysRef = useRef(new Set());
 
-    const [open, setOpen] = useState(false);
-    const [categoryDrafts, setCategoryDrafts] = useState({});
-    const [editingKeys, setEditingKeys] = useState([]);
-    const [deletedKeys, setDeletedKeys] = useState([]);
-    const [checkedKeys, setCheckedKeys] = useState([]);
-    const [onlyUnclassified, setOnlyUnclassified] = useState(false);
-    const [bulkCategory, setBulkCategory] = useState('');
-    const [error, setError] = useState('');
-    const [message, setMessage] = useState('');
+  const [open, setOpen] = useState(false);
+  const [drafts, setDrafts] = useState({});
+  const [deletedKeys, setDeletedKeys] = useState([]);
+  const [checkedKeys, setCheckedKeys] = useState([]);
+  const [onlyUnclassified, setOnlyUnclassified] = useState(false);
+  const [bulkCategory, setBulkCategory] = useState('');
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
 
-    const busy = state.taxSaveBusy === true;
-    const allRows = collectRows(state);
-    const snapshots = state.taxSavedSnapshots ?? [];
+  const busy = state.taxSaveBusy === true;
 
-    const editingSet = new Set(editingKeys);
-    const deletedSet = new Set(deletedKeys);
-    const checkedSet = new Set(checkedKeys);
+  const rows = collectRows(state);
+  const deleted = new Set(deletedKeys);
+  const checked = new Set(checkedKeys);
 
-    const visibleRows = onlyUnclassified
-        ? allRows.filter((row) => isUnclassified(row.category))
-        : allRows;
+  const visibleRows = onlyUnclassified ? rows.filter((row) => row.category === 'UNCLASSIFIED') : rows;
 
-    const selectableRows = visibleRows.filter(
-        (row) => !deletedSet.has(row.key),
+  const selectableRows = visibleRows.filter((row) => !deleted.has(row.key));
+
+  const selectedRows = rows.filter((row) => checked.has(row.key) && !deleted.has(row.key));
+
+  const changedRows = rows.filter(
+    (row) => !deleted.has(row.key) && drafts[row.key] !== undefined && drafts[row.key] !== row.category
+  );
+
+  const removingRows = rows.filter((row) => deleted.has(row.key));
+
+  const pendingRows = rows.filter((row) => !row.persisted && !row.needsReview && row.selected);
+
+  const hasChanges = changedRows.length > 0 || removingRows.length > 0;
+
+  const bulkOptions = ALL_CATEGORIES.filter(
+    (option) =>
+      selectedRows.length > 0 &&
+      selectedRows.every((row) => categoriesFor(row.kind).some((item) => item.value === option.value))
+  );
+
+  const selectedBulk = bulkOptions.some((item) => item.value === bulkCategory) ? bulkCategory : '';
+
+  const rowKeys = JSON.stringify(rows.map((row) => row.key).sort());
+
+  // 새로운 거래가 추가됐을 때만 팝업을 자동으로 연다.
+  // 최초 저장 후 거래번호만 갱신되면 다시 열리지 않는다.
+  useEffect(() => {
+    if (busy) return;
+
+    const keys = new Set(JSON.parse(rowKeys));
+
+    const added = [...keys].some((key) => !previousKeysRef.current.has(key));
+
+    previousKeysRef.current = keys;
+
+    if (added) {
+      setOpen(true);
+    }
+  }, [rowKeys, busy]);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+
+    if (open && !dialog.open) {
+      dialog.showModal();
+    }
+
+    if (!open && dialog.open) {
+      dialog.close();
+    }
+
+    if (!open) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [open]);
+
+  function clearStatus() {
+    setError('');
+    setMessage('');
+  }
+
+  function resetDrafts() {
+    setDrafts({});
+    setDeletedKeys([]);
+    setCheckedKeys([]);
+    setBulkCategory('');
+  }
+
+  function openEditor() {
+    if (busy || workingRef.current) return;
+
+    resetDrafts();
+    setOnlyUnclassified(false);
+    clearStatus();
+    setOpen(true);
+  }
+
+  function closeEditor() {
+    if (busy || workingRef.current) return;
+
+    resetDrafts();
+    setError('');
+    setOpen(false);
+  }
+
+  function undoChanges() {
+    if (busy || workingRef.current) return;
+
+    resetDrafts();
+    setError('');
+    setMessage('아직 반영하지 않은 변경을 되돌렸습니다.');
+  }
+
+  function resetCategory(key) {
+    setDrafts((previous) => {
+      const next = { ...previous };
+      delete next[key];
+      return next;
+    });
+  }
+
+  function toggleCheck(key, enabled) {
+    setCheckedKeys((previous) =>
+      enabled ? [...new Set([...previous, key])] : previous.filter((value) => value !== key)
     );
 
-    const allChecked = selectableRows.length > 0
-        && selectableRows.every(
-            (row) => checkedSet.has(row.key),
-        );
+    setBulkCategory('');
+  }
 
-    const bulkTargetRows = allRows.filter((row) => (
-        checkedSet.has(row.key)
-        && !deletedSet.has(row.key)
-        && isUnclassified(row.category)
-    ));
+  function toggleDelete(key) {
+    clearStatus();
 
-    // 선택한 모든 행에 사용할 수 있는 카테고리만 제안한다.
-    // 수입에 지출 전용 카테고리가 적용되는 것을 막는다.
-    const bulkCategories = ALL_CATEGORIES.filter((category) => (
-        category.value !== 'UNCLASSIFIED'
-        && bulkTargetRows.length > 0
-        && bulkTargetRows.every((row) => (
-            categoriesFor(row.kind).some(
-                (item) => item.value === category.value,
-            )
-        ))
-    ));
-
-    const validBulkCategory = bulkCategories.some(
-        (item) => item.value === bulkCategory,
-    ) ? bulkCategory : '';
-
-    const changeCount = allRows.filter((row) => (
-        !deletedSet.has(row.key)
-        && isUnclassified(row.category)
-        && categoryDrafts[row.key]
-        && categoryDrafts[row.key] !== 'UNCLASSIFIED'
-    )).length;
-
-    const deleteCount = allRows.filter(
-        (row) => deletedSet.has(row.key),
-    ).length;
-
-    const keySignature = JSON.stringify(
-        allRows.map((row) => row.key).sort(),
+    setDeletedKeys((previous) =>
+      previous.includes(key) ? previous.filter((value) => value !== key) : [...previous, key]
     );
 
-    useEffect(() => {
-        if (busy) return;
+    setCheckedKeys((previous) => previous.filter((value) => value !== key));
 
-        const keys = new Set(JSON.parse(keySignature));
+    setBulkCategory('');
+  }
 
-        const added = [...keys].some(
-            (key) => !previousKeysRef.current.has(key),
-        );
+  function deleteSelected() {
+    clearStatus();
 
-        previousKeysRef.current = keys;
+    setDeletedKeys((previous) => [...new Set([...previous, ...selectedRows.map((row) => row.key)])]);
 
-        if (added) {
-            setError('');
-            setOpen(true);
-        }
-    }, [keySignature, busy]);
+    setCheckedKeys([]);
+    setBulkCategory('');
+  }
 
-    useEffect(() => {
-        const dialog = dialogRef.current;
+  function applyBulkCategory() {
+    if (!selectedBulk) return;
 
-        if (!dialog) return;
+    clearStatus();
 
-        if (open && !dialog.open) dialog.showModal();
-        if (!open && dialog.open) dialog.close();
-    }, [open]);
+    setDrafts((previous) => ({
+      ...previous,
+      ...Object.fromEntries(selectedRows.map((row) => [row.key, selectedBulk])),
+    }));
 
-    function resetDrafts() {
-        setCategoryDrafts({});
-        setEditingKeys([]);
-        setDeletedKeys([]);
-        setCheckedKeys([]);
-        setOnlyUnclassified(false);
-        setBulkCategory('');
-        setError('');
+    setBulkCategory('');
+  }
+
+  function commitOperation(operation) {
+    useTaxStore.setState((current) => applyOperation(current, operation));
+
+    // 성공한 항목의 초안만 제거한다.
+    resetCategory(operation.key);
+
+    if (operation.type === 'delete') {
+      setDeletedKeys((previous) => previous.filter((key) => key !== operation.key));
     }
 
-    function handleCancel() {
-        if (busy || savingRef.current) return;
+    setCheckedKeys((previous) => previous.filter((key) => key !== operation.key));
+  }
 
-        resetDrafts();
-        setOpen(false);
+  function updateSavedSignature(initial, completedKeys) {
+    useTaxStore.setState((current) => {
+      const remainingChanges = collectRows(current).some((row) => {
+        if (completedKeys.has(row.key)) return false;
+
+        return deletedKeys.includes(row.key) || (drafts[row.key] !== undefined && drafts[row.key] !== row.category);
+      });
+
+      return {
+        taxLastSavedSignature:
+          !remainingChanges &&
+          !hasPendingRows(current) &&
+          JSON.stringify(current.profile) === JSON.stringify(initial.profile)
+            ? getTaxReviewSignature(current)
+            : null,
+      };
+    });
+  }
+
+  // 수정과 삭제는 선택한 작업만 각각 전송한다.
+  async function submitChanges(action) {
+    if (workingRef.current || useTaxStore.getState().taxSaveBusy) {
+      return;
     }
 
-    function handleStartCategoryEdit(row) {
-        if (
-            busy
-            || deletedSet.has(row.key)
-            || !isUnclassified(row.category)
-        ) {
-            return;
-        }
+    clearStatus();
 
-        setEditingKeys((previous) => [
-            ...new Set([...previous, row.key]),
-        ]);
+    const initial = useTaxStore.getState();
+    const removing = new Set(deletedKeys);
+    const changes = new Map();
 
-        setCategoryDrafts((previous) => ({
-            ...previous,
-            [row.key]: previous[row.key] ?? 'UNCLASSIFIED',
-        }));
-    }
+    if (action === 'update') {
+      for (const row of collectRows(initial)) {
+        const category = drafts[row.key];
 
-    function handleCancelCategoryEdit(key) {
-        if (busy) return;
-
-        setEditingKeys((previous) => previous.filter(
-            (value) => value !== key,
-        ));
-
-        setCategoryDrafts((previous) => {
-            const next = { ...previous };
-            delete next[key];
-            return next;
-        });
-    }
-
-    function handleCheck(key, checked) {
-        setCheckedKeys((previous) => (
-            checked
-                ? [...new Set([...previous, key])]
-                : previous.filter((value) => value !== key)
-        ));
-
-        setBulkCategory('');
-        setError('');
-    }
-
-    function handleCheckAll(checked) {
-        const keys = new Set(
-            selectableRows.map((row) => row.key),
-        );
-
-        setCheckedKeys((previous) => (
-            checked
-                ? [...new Set([...previous, ...keys])]
-                : previous.filter((key) => !keys.has(key))
-        ));
-
-        setBulkCategory('');
-        setError('');
-    }
-
-    function handleSelectUnclassified(kind) {
-        // 수입 또는 지출의 미분류를 한 번에 선택할 수 있다.
-        const keys = allRows
-            .filter((row) => (
-                row.kind === kind
-                && isUnclassified(row.category)
-                && !deletedSet.has(row.key)
-            ))
-            .map((row) => row.key);
-
-        setCheckedKeys(keys);
-        setBulkCategory('');
-        setError('');
-    }
-
-    function handleBulkCategoryApply() {
-        if (busy) return;
-
-        if (bulkTargetRows.length === 0) {
-            setError('수정할 미분류 내역을 체크해주세요.');
-            return;
+        if (removing.has(row.key) || category === undefined || category === row.category) {
+          continue;
         }
 
-        if (!validBulkCategory) {
-            setError('일괄 적용할 카테고리를 선택해주세요.');
-            return;
+        if (!categoriesFor(row.kind).some((item) => item.value === category)) {
+          setError(`${row.description}: 카테고리를 확인해주세요.`);
+          return;
         }
 
-        // 선택한 미분류 행의 임시 카테고리를 한 번에 변경한다.
-        setCategoryDrafts((previous) => {
-            const next = { ...previous };
+        changes.set(row.key, category);
+      }
 
-            for (const row of bulkTargetRows) {
-                next[row.key] = validBulkCategory;
-            }
-
-            return next;
-        });
-
-        setEditingKeys((previous) => [
-            ...new Set([
-                ...previous,
-                ...bulkTargetRows.map((row) => row.key),
-            ]),
-        ]);
-
-        setBulkCategory('');
-        setError('');
+      if (changes.size === 0) {
+        setMessage('반영할 카테고리 변경이 없습니다.');
+        return;
+      }
     }
 
-    function handleToggleDelete(key) {
-        if (busy) return;
-
-        setDeletedKeys((previous) => (
-            previous.includes(key)
-                ? previous.filter((value) => value !== key)
-                : [...previous, key]
-        ));
-
-        setCheckedKeys((previous) => previous.filter(
-            (value) => value !== key,
-        ));
-
-        setBulkCategory('');
+    if (action === 'delete' && !collectRows(initial).some((row) => removing.has(row.key))) {
+      setMessage('삭제 예정 거래가 없습니다.');
+      return;
     }
 
-    async function handleDecide() {
-        if (
-            savingRef.current
-            || useTaxStore.getState().taxSaveBusy
-        ) {
-            return;
+    function proposedRows(items, source) {
+      return (items ?? []).flatMap((row) => {
+        const key = `${source}:${row.id}`;
+
+        if (action === 'delete') {
+          return removing.has(key) ? [] : [row];
         }
 
-        setError('');
-        setMessage('');
+        const category = changes.get(key);
 
-        const initial = useTaxStore.getState();
-        const initialSignature = getTaxReviewSignature(initial);
+        return [category === undefined ? row : { ...row, cat: category }];
+      });
+    }
 
-        const deletes = new Set(deletedKeys);
-        const changes = new Map();
+    const proposed = {
+      ...initial,
+      manualRows: proposedRows(initial.manualRows, 'manual'),
+      fileRows: proposedRows(initial.fileRows, 'file'),
+    };
 
-        for (const row of collectRows(initial)) {
-            if (
-                deletes.has(row.key)
-                || !isUnclassified(row.category)
-            ) {
-                continue;
-            }
+    workingRef.current = true;
+    useTaxStore.setState({ taxSaveBusy: true });
 
-            const category = categoryDrafts[row.key];
+    try {
+      // 신규 분석 생성·전체 거래 저장은 호출하지 않는다.
+      const result = await saveTaxReview(proposed, {
+        originalState: initial,
+        onOperationSuccess: commitOperation,
+      });
 
-            if (!category || category === 'UNCLASSIFIED') {
-                continue;
-            }
+      const completedKeys = new Set(result.operations.map((operation) => operation.key));
 
-            if (!categoriesFor(row.kind).some(
-                (item) => item.value === category,
-            )) {
-                setError(
-                    `${row.description}: 카테고리를 확인해주세요.`,
-                );
-                return;
-            }
+      updateSavedSignature(initial, completedKeys);
 
-            changes.set(row.key, category);
-        }
+      setMessage(
+        action === 'update'
+          ? `DB 거래 수정 ${result.updatedCount}건` + ` · 미저장 목록 수정 ${result.localCount}건을 반영했습니다.`
+          : `DB 거래 삭제 ${result.deletedCount}건` + ` · 미저장 목록 제거 ${result.localCount}건을 반영했습니다.`
+      );
+    } catch (cause) {
+      const completed = cause.completedOperations?.length ?? 0;
 
-        function updateTransactions(rows, source) {
-            return rows
-                .filter(
-                    (row) => !deletes.has(`${source}:${row.id}`),
-                )
-                .map((row) => {
-                    const category = changes.get(
-                        `${source}:${row.id}`,
-                    );
+      setError(
+        (cause.message ?? '변경 반영에 실패했습니다.') +
+          (completed > 0 ? ` 성공한 변경 ${completed}건은 유지됩니다. 남은 항목을 확인해주세요.` : '')
+      );
+    } finally {
+      workingRef.current = false;
+      useTaxStore.setState({ taxSaveBusy: false });
+    }
+  }
 
-                    // 수입·지출, 날짜, 설명, 금액은 그대로 유지한다.
-                    return category && isUnclassified(row.cat)
-                        ? { ...row, cat: category }
-                        : row;
-                });
-        }
+  function rememberCreatedInput({ taxYear, taxInputId }) {
+    useTaxStore.setState((current) => ({
+      taxPendingInputIdsByYear: {
+        ...(current.taxPendingInputIdsByYear ?? {}),
+        [taxYear]: taxInputId,
+      },
+    }));
+  }
 
-        const proposed = {
-            ...initial,
+  function commitInitialGroup({ taxYear, taxInputId, rows: savedRows, bindings }) {
+    const savedByKey = new Map(bindings.map((binding) => [`${binding.source}:${binding.rowId}`, binding.saved]));
 
-            manualRows: updateTransactions(
-                initial.manualRows,
-                'manual',
-            ),
+    function applySaved(items, source) {
+      return (items ?? []).map((row) => {
+        const saved = savedByKey.get(`${source}:${row.id}`);
 
-            fileRows: updateTransactions(
-                initial.fileRows,
-                'file',
-            ),
+        if (!saved) return row;
 
-            evidenceDocuments: (
-                initial.evidenceDocuments ?? []
-            )
-                .map((document) => ({
-                    ...document,
-
-                    rows: document.rows
-                        .filter(
-                            (row) => !deletes.has(`evidence:${row.id}`),
-                        )
-                        .map((row) => {
-                            const category = changes.get(
-                                `evidence:${row.id}`,
-                            );
-
-                            return category && isUnclassified(row.category)
-                                ? { ...row, category }
-                                : row;
-                        }),
-                }))
-                .filter((document) => document.rows.length > 0),
+        // 화면 행의 id는 유지해 팝업이 다시 열리지 않도록 한다.
+        return {
+          ...row,
+          taxInputId: saved.taxInputId,
+          transactionId: saved.transactionId,
+          persisted: true,
+          needsReview: false,
+          excluded: false,
+          selected: true,
+          failureReason: null,
         };
-
-        savingRef.current = true;
-        useTaxStore.setState({ taxSaveBusy: true });
-
-        try {
-            const result = await saveTaxReview(proposed, {
-                onPendingChange(pending) {
-                    useTaxStore.setState({
-                        taxPendingSnapshot: pending,
-                    });
-                },
-            });
-
-            if (
-                getTaxReviewSignature(useTaxStore.getState())
-                !== initialSignature
-            ) {
-                throw new Error(
-                    '저장 중 입력이 변경됐습니다. '
-                    + '새 분석 묶음이 저장됐으므로 내용을 확인해주세요.',
-                );
-            }
-
-            const committed = attachSavedIds(
-                proposed,
-                result.savedRows,
-            );
-
-            // 저장 성공 후 수정 결과와 DB 재조회 목록을 함께 반영한다.
-            useTaxStore.setState({
-                manualRows: committed.manualRows,
-                fileRows: committed.fileRows,
-                evidenceDocuments: committed.evidenceDocuments,
-                taxInputIdsByYear: result.inputIds,
-                taxSavedSnapshots: result.snapshots,
-                taxPendingSnapshot: null,
-                taxLastSavedSignature: getTaxReviewSignature(committed),
-                calculated: false,
-            });
-
-            resetDrafts();
-            setOpen(false);
-
-            setMessage(
-                '카테고리 변경·삭제 내용을 새 분석번호로 저장했습니다.',
-            );
-        } catch (cause) {
-            setError(
-                cause.message ?? '저장에 실패했습니다.',
-            );
-
-            dialogRef.current?.scrollTo({
-                top: 0,
-                behavior: 'smooth',
-            });
-        } finally {
-            savingRef.current = false;
-            useTaxStore.setState({ taxSaveBusy: false });
-        }
+      });
     }
 
-    return (
-        <Card title="수입·지출 내역">
-            <Toolbar>
+    useTaxStore.setState((current) => {
+      const pending = {
+        ...(current.taxPendingInputIdsByYear ?? {}),
+      };
+
+      delete pending[taxYear];
+
+      return {
+        manualRows: applySaved(current.manualRows, 'manual'),
+        fileRows: applySaved(current.fileRows, 'file'),
+
+        taxInputIdsByYear: {
+          ...(current.taxInputIdsByYear ?? {}),
+          [taxYear]: taxInputId,
+        },
+
+        taxPendingInputIdsByYear: pending,
+
+        taxSavedSnapshots: [
+          ...(current.taxSavedSnapshots ?? []).filter((snapshot) => snapshot.taxInputId !== taxInputId),
+          {
+            taxYear,
+            taxInputId,
+            rows: savedRows,
+          },
+        ],
+
+        taxLastSavedSignature: null,
+        calculated: false,
+      };
+    });
+  }
+
+  async function savePendingRows() {
+    if (workingRef.current || useTaxStore.getState().taxSaveBusy) {
+      return;
+    }
+
+    clearStatus();
+
+    if (hasChanges) {
+      setError('수정·삭제 예정 내용을 먼저 반영하거나 되돌린 뒤 최초 저장해주세요.');
+      return;
+    }
+
+    const initial = useTaxStore.getState();
+
+    if (!hasPendingRows(initial)) {
+      setMessage('최초 저장할 거래가 없습니다.');
+      return;
+    }
+
+    workingRef.current = true;
+    useTaxStore.setState({ taxSaveBusy: true });
+
+    let completedCount = 0;
+
+    try {
+      const result = await saveInitialTaxRows(initial, {
+        onInputCreated: rememberCreatedInput,
+
+        onGroupSaved: (group) => {
+          commitInitialGroup(group);
+          completedCount += group.rows.length;
+        },
+      });
+
+      useTaxStore.setState((current) => ({
+        taxLastSavedSignature:
+          !hasPendingRows(current) && JSON.stringify(current.profile) === JSON.stringify(initial.profile)
+            ? getTaxReviewSignature(current)
+            : null,
+      }));
+
+      setMessage(`미저장 거래 ${result.savedCount}건을 최초 저장했습니다.`);
+
+      // 최초 저장 요청이 모두 성공했을 때만 팝업을 닫는다.
+      resetDrafts();
+      setOpen(false);
+    } catch (cause) {
+      setError(
+        (cause.message ?? '최초 저장에 실패했습니다.') +
+          (completedCount > 0 ? ` 앞서 저장한 ${completedCount}건은 유지됩니다. 남은 거래를 확인해주세요.` : '')
+      );
+
+      // 실패하면 팝업을 유지해 오류 확인과 재시도를 허용한다.
+    } finally {
+      workingRef.current = false;
+      useTaxStore.setState({ taxSaveBusy: false });
+    }
+  }
+
+  return (
+    <Card title="수입·지출 내역" className="tax-entry-card">
+      <div className="tax-toolbar">
         <span>
-          전체 {allRows.length}건
-            {' · '}수입 {
-            allRows.filter((row) => row.kind === 'in').length
-        }건
-            {' · '}지출 {
-            allRows.filter((row) => row.kind === 'out').length
-        }건
+          전체 {rows.length}건{' · '}수입 {rows.filter((row) => row.kind === 'in').length}건{' · '}지출{' '}
+          {rows.filter((row) => row.kind === 'out').length}건
         </span>
 
-                <Button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => {
-                        resetDrafts();
-                        setOpen(true);
-                    }}
-                >
-                    내역 확인·수정
-                </Button>
-            </Toolbar>
+        <Button disabled={busy} onClick={openEditor}>
+          내역 확인·수정
+        </Button>
+      </div>
 
-            <Notice>
-                미분류 카테고리를 개별 또는 일괄 수정할 수 있습니다.
-                결정하면 새 분석번호로 전체 내역을 저장합니다.
-            </Notice>
+      <p className="tax-notice">수정·삭제는 팝업에서 각각 반영합니다. 기존 분석번호와 거래번호는 유지됩니다.</p>
 
-            {message && (
-                <Notice role="status">{message}</Notice>
-            )}
+      <div className="tax-status" aria-live="polite">
+        {message}
+      </div>
 
-            {snapshots.map((snapshot) => (
-                <section key={snapshot.taxInputId}>
-                    <h3>
-                        DB 저장 내역 · {snapshot.taxYear}년
-                        {' · '}분석번호 {snapshot.taxInputId}
-                    </h3>
+      <div className="tax-table-area tax-read-area">
+        <table className="tax-table tax-read-table">
+          <colgroup>
+            <col className="tax-col-kind" />
+            <col className="tax-col-date" />
+            <col />
+            <col className="tax-col-amount" />
+            <col className="tax-col-category-read" />
+          </colgroup>
 
-                    <Notice>
-                        에서 다시 조회한 {snapshot.rows.length}건입니다.
-                    </Notice>
+          <thead>
+            <tr>
+              <th>구분</th>
+              <th>날짜</th>
+              <th>설명</th>
+              <th className="tax-amount">금액</th>
+              <th>카테고리</th>
+            </tr>
+          </thead>
 
-                    {snapshot.rows.length === 0 ? (
-                        <Notice>빈 분석 묶음으로 저장됐습니다.</Notice>
-                    ) : (
-                        <TableArea>
-                            <table>
-                                <thead>
-                                <tr>
-                                    <th>거래번호</th>
-                                    <th>구분</th>
-                                    <th>기간</th>
-                                    <th>설명</th>
-                                    <th className="amount">금액</th>
-                                    <th>카테고리</th>
-                                </tr>
-                                </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key}>
+                <td>{kindLabel(row.kind)}</td>
+                <td>{row.date}</td>
 
-                                <tbody>
-                                {snapshot.rows.map((row) => (
-                                    <tr key={row.transactionId}>
-                                        <td>{row.transactionId}</td>
-                                        <td>{kindLabel(row.transactionType)}</td>
-                                        <td>
-                                            {periodText(
-                                                row.transactionDate
-                                                || row.transactionMonth
-                                                || row.documentYear,
-                                            )}
-                                        </td>
-                                        <td>
-                                            {row.description}
+                <td title={row.description}>
+                  {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
+                  {row.description}
+                </td>
 
-                                            {row.amountBasis === 'DEDUCTION_ELIGIBLE' && (
-                                                <div>
-                                                    <Badge>공제대상금액</Badge>
-                                                </div>
-                                            )}
-                                        </td>
-                                        <td className="amount">{money(row.amount)}</td>
-                                        <td>{categoryLabel(row.category)}</td>
-                                    </tr>
-                                ))}
-                                </tbody>
-                            </table>
-                        </TableArea>
-                    )}
-                </section>
+                <td className="tax-amount">{formatMoney(row.amount)}</td>
+
+                <td>{getTransactionCategoryLabel(row.category)}</td>
+              </tr>
             ))}
 
-            {createPortal(
-                <Dialog
-                    ref={dialogRef}
-                    aria-labelledby="review-title"
-                    onCancel={(event) => {
-                        event.preventDefault();
-                        handleCancel();
-                    }}
-                >
-                    <h2 id="review-title">
-                        수입·지출 내역 확인
-                    </h2>
-
-                    <Notice>
-                        여러 미분류 내역을 체크하고 카테고리를 한 번에 적용할 수 있습니다.
-                        결정 버튼을 눌러야 DB에 저장됩니다.
-                    </Notice>
-
-                    {error && <p role="alert">{error}</p>}
-
-                    <Toolbar>
-                        <label>
-                            <input
-                                type="checkbox"
-                                checked={onlyUnclassified}
-                                disabled={busy}
-                                onChange={(event) => {
-                                    setOnlyUnclassified(event.target.checked);
-                                    setCheckedKeys([]);
-                                    setBulkCategory('');
-                                    setError('');
-                                }}
-                            />{' '}
-                            미분류만 보기
-                        </label>
-
-                        <Button
-                            type="button"
-                            size="sm"
-                            disabled={busy || checkedKeys.length === 0}
-                            onClick={() => {
-                                setDeletedKeys((previous) => [
-                                    ...new Set([...previous, ...checkedKeys]),
-                                ]);
-                                setCheckedKeys([]);
-                                setBulkCategory('');
-                            }}
-                        >
-                            선택 삭제 ({checkedKeys.length}건)
-                        </Button>
-                    </Toolbar>
-
-                    <BulkArea>
-                        <InlineActions>
-                            <Button
-                                type="button"
-                                size="sm"
-                                disabled={busy}
-                                onClick={() => handleSelectUnclassified('in')}
-                            >
-                                수입 미분류 전체 선택
-                            </Button>
-
-                            <Button
-                                type="button"
-                                size="sm"
-                                disabled={busy}
-                                onClick={() => handleSelectUnclassified('out')}
-                            >
-                                지출 미분류 전체 선택
-                            </Button>
-
-                            <span>
-                선택한 미분류 {bulkTargetRows.length}건
-              </span>
-                        </InlineActions>
-
-                        <InlineActions style={{ marginTop: 12 }}>
-                            <select
-                                value={validBulkCategory}
-                                disabled={busy || bulkTargetRows.length === 0}
-                                aria-label="일괄 적용할 카테고리"
-                                onChange={(event) => setBulkCategory(event.target.value)}
-                            >
-                                <option value="">
-                                    일괄 적용할 카테고리
-                                </option>
-
-                                {bulkCategories.map((item) => (
-                                    <option key={item.value} value={item.value}>
-                                        {item.label}
-                                    </option>
-                                ))}
-                            </select>
-
-                            <Button
-                                type="button"
-                                disabled={
-                                    busy
-                                    || bulkTargetRows.length === 0
-                                    || !validBulkCategory
-                                }
-                                onClick={handleBulkCategoryApply}
-                            >
-                                선택 내역 일괄 적용
-                            </Button>
-                        </InlineActions>
-
-                        <Notice>
-                            분류 완료된 내역은 변경하지 않습니다.
-                            수입·지출을 함께 선택하면 공통 카테고리만 표시합니다.
-                        </Notice>
-                    </BulkArea>
-
-                    <TableArea>
-                        <table>
-                            <thead>
-                            <tr>
-                                <th>
-                                    <input
-                                        type="checkbox"
-                                        aria-label="현재 목록 전체 선택"
-                                        checked={allChecked}
-                                        disabled={busy || selectableRows.length === 0}
-                                        onChange={(event) => handleCheckAll(
-                                            event.target.checked,
-                                        )}
-                                    />
-                                </th>
-                                <th>구분</th>
-                                <th>기간</th>
-                                <th>설명</th>
-                                <th className="amount">금액</th>
-                                <th>카테고리</th>
-                                <th>삭제</th>
-                            </tr>
-                            </thead>
-
-                            <tbody>
-                            {visibleRows.map((row) => {
-                                const removing = deletedSet.has(row.key);
-                                const editing = editingSet.has(row.key);
-                                const editable = isUnclassified(row.category);
-
-                                return (
-                                    <ReviewRow key={row.key} $deleted={removing}>
-                                        <td>
-                                            <input
-                                                type="checkbox"
-                                                checked={checkedSet.has(row.key)}
-                                                disabled={busy || removing}
-                                                aria-label={`${row.description} 선택`}
-                                                onChange={(event) => handleCheck(
-                                                    row.key,
-                                                    event.target.checked,
-                                                )}
-                                            />
-                                        </td>
-
-                                        <td>{kindLabel(row.kind)}</td>
-                                        <td>{row.period}</td>
-
-                                        <td className="description">
-                                            {row.description}
-
-                                            {row.evidence && (
-                                                <div>
-                                                    <Badge>공제대상금액</Badge>
-                                                </div>
-                                            )}
-
-                                            {removing && (
-                                                <div>
-                                                    <Badge>이번 저장에서 제외</Badge>
-                                                </div>
-                                            )}
-                                        </td>
-
-                                        <td className="amount">
-                                            {money(row.amount)}
-                                        </td>
-
-                                        <td>
-                                            {!editable ? (
-                                                <Badge>
-                                                    {categoryLabel(row.category)}
-                                                </Badge>
-                                            ) : editing ? (
-                                                <InlineActions>
-                                                    <select
-                                                        disabled={busy || removing}
-                                                        value={
-                                                            categoryDrafts[row.key]
-                                                            ?? 'UNCLASSIFIED'
-                                                        }
-                                                        aria-label={`${row.description} 카테고리`}
-                                                        onChange={(event) => {
-                                                            const category = event.target.value;
-
-                                                            setCategoryDrafts((previous) => ({
-                                                                ...previous,
-                                                                [row.key]: category,
-                                                            }));
-                                                        }}
-                                                    >
-                                                        <option value="UNCLASSIFIED">
-                                                            미분류 유지
-                                                        </option>
-
-                                                        {categoriesFor(row.kind).map((item) => (
-                                                            <option
-                                                                key={item.value}
-                                                                value={item.value}
-                                                            >
-                                                                {item.label}
-                                                            </option>
-                                                        ))}
-                                                    </select>
-
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        disabled={busy || removing}
-                                                        onClick={() => handleCancelCategoryEdit(row.key)}
-                                                    >
-                                                        수정 취소
-                                                    </Button>
-                                                </InlineActions>
-                                            ) : (
-                                                <InlineActions>
-                                                    <Badge $unclassified>
-                                                        미분류
-                                                    </Badge>
-
-                                                    <Button
-                                                        type="button"
-                                                        size="sm"
-                                                        disabled={busy || removing}
-                                                        onClick={() => handleStartCategoryEdit(row)}
-                                                    >
-                                                        카테고리 수정
-                                                    </Button>
-                                                </InlineActions>
-                                            )}
-                                        </td>
-
-                                        <td>
-                                            <Button
-                                                type="button"
-                                                size="sm"
-                                                disabled={busy}
-                                                onClick={() => handleToggleDelete(row.key)}
-                                            >
-                                                {removing ? '삭제 취소' : '삭제'}
-                                            </Button>
-                                        </td>
-                                    </ReviewRow>
-                                );
-                            })}
-                            </tbody>
-                        </table>
-                    </TableArea>
-
-                    {visibleRows.length === 0 && (
-                        <Notice>표시할 내역이 없습니다.</Notice>
-                    )}
-
-                    <Footer>
-            <span>
-              카테고리 변경 {changeCount}건
-                {' · '}제외 예정 {deleteCount}건
-            </span>
-
-                        <InlineActions>
-                            <Button
-                                type="button"
-                                disabled={busy}
-                                onClick={handleCancel}
-                            >
-                                취소
-                            </Button>
-
-                            <Button
-                                type="button"
-                                variant="primary"
-                                disabled={busy}
-                                onClick={handleDecide}
-                            >
-                                {busy ? 'DB 저장 중…' : '결정'}
-                            </Button>
-                        </InlineActions>
-                    </Footer>
-                </Dialog>,
-                document.body,
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={5}>표시할 거래가 없습니다.</td>
+              </tr>
             )}
-        </Card>
-    );
+          </tbody>
+        </table>
+      </div>
+
+      {createPortal(
+        <dialog
+          ref={dialogRef}
+          className="tax-review-dialog"
+          aria-labelledby="tax-review-title"
+          onCancel={(event) => {
+            event.preventDefault();
+            closeEditor();
+          }}
+        >
+          <header className="tax-toolbar">
+            <h2 id="tax-review-title">수입·지출 내역 수정</h2>
+
+            <Button disabled={busy} onClick={closeEditor}>
+              닫기
+            </Button>
+          </header>
+
+          <div className="tax-status" aria-live="polite">
+            {error ? (
+              <span role="alert">{error}</span>
+            ) : (
+              <span>{message || '수정·삭제는 각각 반영합니다. 검토 거래는 최초 저장에서 제외됩니다.'}</span>
+            )}
+          </div>
+
+          <div className="tax-toolbar tax-editor-tools">
+            <label>
+              <input
+                type="checkbox"
+                checked={onlyUnclassified}
+                disabled={busy}
+                onChange={(event) => {
+                  setOnlyUnclassified(event.target.checked);
+                  setCheckedKeys([]);
+                  setBulkCategory('');
+                }}
+              />{' '}
+              미분류만 보기
+            </label>
+
+            <select
+              className="tax-bulk-select"
+              aria-label="일괄 적용할 카테고리"
+              value={selectedBulk}
+              disabled={busy || selectedRows.length === 0}
+              onChange={(event) => setBulkCategory(event.target.value)}
+            >
+              <option value="">일괄 적용할 카테고리</option>
+
+              {bulkOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+
+            <Button disabled={busy || !selectedBulk} onClick={applyBulkCategory}>
+              일괄 적용
+            </Button>
+
+            <Button disabled={busy || selectedRows.length === 0} onClick={deleteSelected}>
+              선택 삭제 예정
+            </Button>
+          </div>
+
+          <div className="tax-table-area tax-edit-area">
+            <table className="tax-table tax-edit-table">
+              <colgroup>
+                <col className="tax-col-check" />
+                <col className="tax-col-kind" />
+                <col className="tax-col-date" />
+                <col />
+                <col className="tax-col-amount" />
+                <col className="tax-col-category-edit" />
+                <col className="tax-col-delete" />
+              </colgroup>
+
+              <thead>
+                <tr>
+                  <th>
+                    <input
+                      type="checkbox"
+                      aria-label="현재 목록 전체 선택"
+                      disabled={busy || selectableRows.length === 0}
+                      checked={selectableRows.length > 0 && selectableRows.every((row) => checked.has(row.key))}
+                      onChange={(event) => {
+                        const keys = new Set(selectableRows.map((row) => row.key));
+
+                        setCheckedKeys((previous) =>
+                          event.target.checked
+                            ? [...new Set([...previous, ...keys])]
+                            : previous.filter((key) => !keys.has(key))
+                        );
+
+                        setBulkCategory('');
+                      }}
+                    />
+                  </th>
+                  <th>구분</th>
+                  <th>날짜</th>
+                  <th>설명</th>
+                  <th className="tax-amount">금액</th>
+                  <th>카테고리</th>
+                  <th>삭제</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {visibleRows.map((row) => {
+                  const removing = deleted.has(row.key);
+                  const options = categoriesFor(row.kind);
+                  const value = drafts[row.key] ?? row.category;
+
+                  return (
+                    <tr key={row.key} className={removing ? 'tax-row-deleting' : ''}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          aria-label={`${row.description} 선택`}
+                          disabled={busy || removing}
+                          checked={checked.has(row.key)}
+                          onChange={(event) => toggleCheck(row.key, event.target.checked)}
+                        />
+                      </td>
+
+                      <td>{kindLabel(row.kind)}</td>
+                      <td>{row.date}</td>
+
+                      <td className="tax-description" title={row.description}>
+                        {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
+                        {row.description}
+                      </td>
+
+                      <td className="tax-amount">{formatMoney(row.amount)}</td>
+
+                      <td>
+                        <div className="tax-category-control">
+                          <select
+                            aria-label={`${row.description} 카테고리`}
+                            value={value}
+                            disabled={busy || removing}
+                            onChange={(event) => {
+                              clearStatus();
+
+                              setDrafts((previous) => ({
+                                ...previous,
+                                [row.key]: event.target.value,
+                              }));
+                            }}
+                          >
+                            {!options.some((item) => item.value === value) && (
+                              <option value={value}>{getTransactionCategoryLabel(value)}</option>
+                            )}
+
+                            {options.map((item) => (
+                              <option key={item.value} value={item.value}>
+                                {item.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <Button
+                            size="sm"
+                            disabled={busy || removing || drafts[row.key] === undefined}
+                            onClick={() => resetCategory(row.key)}
+                          >
+                            되돌림
+                          </Button>
+                        </div>
+                      </td>
+
+                      <td>
+                        <Button size="sm" disabled={busy} onClick={() => toggleDelete(row.key)}>
+                          {removing ? '삭제 취소' : '삭제 예정'}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {visibleRows.length === 0 && (
+                  <tr>
+                    <td colSpan={7}>표시할 거래가 없습니다.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          <footer className="tax-editor-footer">
+            <p className="tax-change-count">
+              수정 {changedRows.length}건{' · '}삭제 예정 {removingRows.length}건{' · '}최초 저장 대기{' '}
+              {pendingRows.length}건
+            </p>
+
+            <div className="tax-separated-actions">
+              <Button
+                variant="primary"
+                disabled={busy || changedRows.length === 0}
+                onClick={() => void submitChanges('update')}
+              >
+                수정 반영
+              </Button>
+
+              <Button
+                variant="danger"
+                disabled={busy || removingRows.length === 0}
+                onClick={() => void submitChanges('delete')}
+              >
+                삭제 반영
+              </Button>
+
+              <Button disabled={busy || !hasChanges} onClick={undoChanges}>
+                변경 되돌리기
+              </Button>
+
+              <Button disabled={busy || hasChanges || pendingRows.length === 0} onClick={() => void savePendingRows()}>
+                최초 저장
+              </Button>
+            </div>
+          </footer>
+        </dialog>,
+        document.body
+      )}
+    </Card>
+  );
 }

@@ -135,7 +135,6 @@ public class PythonPdfClientImpl implements PythonPdfClient {
 
         return mapper;
     }
-
     @Override
     public PdfParseResponseDto analyze(
             byte[] pdfBytes,
@@ -164,10 +163,6 @@ public class PythonPdfClientImpl implements PythonPdfClient {
         String responseBody;
 
         try {
-            /*
-             * HTTP 응답 수신과 DTO 변환을 분리한다.
-             * 기본 HTTP 메시지 변환기의 날짜 설정에 의존하지 않는다.
-             */
             responseBody = client.post()
                     .uri("/api/pdf/analyze")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
@@ -177,16 +172,58 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                     .body(String.class);
 
         } catch (RestClientResponseException exception) {
-            int status =
-                    exception.getStatusCode().value();
+            int status = exception.getStatusCode().value();
 
-            // 응답 본문에는 거래 원문이 포함될 수 있어 기록하지 않는다.
             log.warn(
                     "Python PDF 서버 HTTP 오류. status={}",
                     status
             );
 
             if (status == 400 || status == 422) {
+                String code = null;
+
+                try {
+                    JsonNode root = objectMapper.readTree(
+                            exception.getResponseBodyAsString()
+                    );
+
+                    if (root != null) {
+                        code = root.path("detail")
+                                .path("code")
+                                .asText(null);
+                    }
+
+                } catch (JsonProcessingException ignored) {
+                    // 응답을 해석하지 못하면 아래 공통 오류로 처리한다.
+                }
+
+                if ("PDF_DAILY_DETAILS_REQUIRED".equals(code)) {
+                    throw new ApiException(
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            code,
+                            "날짜별 상세 내역을 업로드해주세요. "
+                                    + "월별·지출처별 합계는 일별 거래로 저장하지 않습니다."
+                    );
+                }
+
+                if ("PDF_OCR_REQUIRED".equals(code)) {
+                    throw new ApiException(
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            code,
+                            "이미지형 PDF의 OCR 결과가 전달되지 않았습니다. "
+                                    + "서버의 OCR 처리와 전달 결과를 확인해주세요."
+                    );
+                }
+
+                if ("PDF_TRANSACTIONS_NOT_FOUND".equals(code)) {
+                    throw new ApiException(
+                            HttpStatus.UNPROCESSABLE_ENTITY,
+                            code,
+                            "날짜별 거래 내역을 찾지 못했습니다. "
+                                    + "상세 내역 또는 OCR 인식 결과를 확인해주세요."
+                    );
+                }
+
                 throw new ApiException(
                         HttpStatus.BAD_REQUEST,
                         "PDF_ANALYSIS_INPUT_INVALID",
@@ -209,12 +246,14 @@ public class PythonPdfClientImpl implements PythonPdfClient {
             );
 
         } catch (ResourceAccessException exception) {
+            boolean timeout = hasTimeoutCause(exception);
+
             log.warn(
                     "Python PDF 서버 통신 실패. timeout={}",
-                    hasTimeoutCause(exception)
+                    timeout
             );
 
-            if (hasTimeoutCause(exception)) {
+            if (timeout) {
                 throw new ApiException(
                         HttpStatus.GATEWAY_TIMEOUT,
                         "PDF_ANALYSIS_TIMEOUT",
@@ -229,15 +268,9 @@ public class PythonPdfClientImpl implements PythonPdfClient {
             );
 
         } catch (RestClientException exception) {
-            // 원문 대신 예외 종류와 발생 위치만 기록한다.
             log.error(
                     "Python PDF 응답 수신 실패. exceptionType={}",
                     exception.getClass().getName()
-            );
-
-            log.debug(
-                    "Python PDF 응답 수신 실패 위치={}",
-                    (Object) exception.getStackTrace()
             );
 
             throw new ApiException(
@@ -249,9 +282,9 @@ public class PythonPdfClientImpl implements PythonPdfClient {
 
         return parseResponse(responseBody);
     }
-
     private PdfParseResponseDto parseResponse(
             String responseBody
+
     ) {
         if (responseBody == null
                 || responseBody.isBlank()) {
