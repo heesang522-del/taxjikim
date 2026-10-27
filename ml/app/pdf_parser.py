@@ -1,13 +1,15 @@
-"""일별 거래와 카드 월별 집계를 자동 추출한다."""
+"""PDF에서 일별 거래와 월별 집계를 추출한다."""
 
 from __future__ import annotations
 
 import re
+import statistics
 
+from collections import Counter
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
-from typing import Any
+from typing import Any, Callable
 
 import pdfplumber
 
@@ -15,6 +17,7 @@ import pdfplumber
 MAX_PAGES = 50
 MAX_SAFE_INTEGER = 9_007_199_254_740_991
 
+# 헤더 이름이 아닌 데이터 형식을 확인한다.
 DATE_PATTERN = re.compile(
     r"(?<!\d)"
     r"((?:19|20)\d{2})"
@@ -29,14 +32,16 @@ YEAR_PATTERN = re.compile(
     r"(?<!\d)((?:19|20)\d{2})\s*년\s*귀속"
 )
 
-MONTH_PATTERN = re.compile(r"^(0?[1-9]|1[0-2])월$")
+MONTH_PATTERN = re.compile(
+    r"^(0?[1-9]|1[0-2])\s*월$"
+)
 
 NUMBER_PATTERN = re.compile(
     r"[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
 )
 
-SUMMARY_PATTERN = re.compile(
-    r"합계|소계|총계|총액|금액계|납입액계"
+RATE_PATTERN = re.compile(
+    r"^([+-]?\d+(?:\.\d+)?)\s*%$"
 )
 
 IDENTIFIER_PATTERN = re.compile(
@@ -46,7 +51,17 @@ IDENTIFIER_PATTERN = re.compile(
     r")(?!\d)"
 )
 
-DIRECTIONS = {
+EMPTY_VALUES = {
+    "",
+    "-",
+    "—",
+    "–",
+    "없음",
+    "해당없음",
+}
+
+# 거래 방향은 문서 종류가 아닌 반환 데이터의 표준 값이다.
+DIRECTION_VALUES = {
     "수입": "INCOME",
     "입금": "INCOME",
     "INCOME": "INCOME",
@@ -55,49 +70,60 @@ DIRECTIONS = {
     "EXPENSE": "EXPENSE",
 }
 
-DOCUMENT_CATEGORIES = {
-    "의료비": "MEDICAL_EXPENSE",
-    "교육비": "EDUCATION_EXPENSE",
-    "보험료": "INSURANCE_PREMIUM",
-    "기부금": "DONATION",
+SUPPORTED_ROLES = {
+    "date",
+    "type",
+    "description",
+    "amount",
+    "net",
+    "gross",
+    "tax",
+    "tax_rate",
+    "category",
+    "sequence",
 }
 
-HEADER_PATTERNS = {
-    "date": re.compile(
-        r"^(?:날짜|일자|거래일자?|사용일자?|지출일자?|납입일자?|date)$"
-    ),
-    "sequence": re.compile(
-        r"^(?:번호|순번|연번|no\.?)$"
-    ),
-    "type": re.compile(
-        r"^(?:구분|유형|거래구분|입출금|type)$"
-    ),
-    "description": re.compile(
-        r"^(?:상호(?:\(사업자번호\))?|항목|내용|거래내용|거래설명|"
-        r"적요|내역|.*기관명|.*회사명|.*학교명|description)$"
-    ),
-    "net": re.compile(
-        r"^(?:실제입금액|실입금액|실수령액|입금액|actualamount|netamount)$"
-    ),
-    "gross": re.compile(
-        r"^(?:세전금액|세전수입|총수입|지급총액|pretaxincome|grossamount)$"
-    ),
-    "tax": re.compile(
-        r"^(?:차감액|차감세액|원천징수액|공제세액|taxdeducted)$"
-    ),
-    "amount": re.compile(
-        r"^(?:금액|지출금액계?|사용금액|거래금액|결제금액|"
-        r"납입금액|납입액|기부금액|amount)$"
-    ),
-}
+CategoryResolver = Callable[
+    [dict[str, Any]],
+    str | None,
+]
 
 
 def text(value: object) -> str:
-    return str(value if value is not None else "").strip()
+    return str(
+        value if value is not None else ""
+    ).strip()
 
 
 def compact(value: object) -> str:
-    return re.sub(r"\s+", "", text(value))
+    return re.sub(
+        r"\s+",
+        "",
+        text(value),
+    )
+
+
+def normalize_text(value: object) -> str:
+    source = text(value)
+
+    source = re.sub(
+        r"[\u2010-\u2015\u2212]",
+        "-",
+        source,
+    )
+
+    return source
+
+
+def normalize_header(value: object) -> str:
+    source = compact(value).casefold()
+
+    # 단위 표기를 제거하되 헤더 이름 자체는 보존한다.
+    return re.sub(
+        r"[\(\[（](?:원|₩|krw|%)[\)\]）]",
+        "",
+        source,
+    )
 
 
 def mask_text(value: object) -> str:
@@ -107,31 +133,40 @@ def mask_text(value: object) -> str:
     )
 
 
-def parse_date(value: object) -> str | None:
-    source = re.sub(
-        r"[\u2010-\u2015\u2212]",
-        "-",
-        text(value),
-    )
+def is_empty(value: object) -> bool:
+    return compact(value) in EMPTY_VALUES
 
+
+def parse_date(value: object) -> str | None:
+    source = normalize_text(value)
     found = set()
 
     for match in DATE_PATTERN.finditer(source):
         try:
-            found.add(date(
-                int(match[1]),
-                int(match[2]),
-                int(match[3]),
-            ).isoformat())
+            found.add(
+                date(
+                    int(match[1]),
+                    int(match[2]),
+                    int(match[3]),
+                ).isoformat()
+            )
         except ValueError:
             continue
 
-    return next(iter(found)) if len(found) == 1 else None
+    if len(found) != 1:
+        return None
+
+    return next(iter(found))
 
 
 def parse_amount(value: object) -> int | None:
-    source = text(value)
-    source = re.sub(r",\s+(?=\d)", ",", source)
+    source = normalize_text(value)
+
+    source = re.sub(
+        r",\s+(?=\d)",
+        ",",
+        source,
+    )
 
     source = re.sub(
         r"^(?:₩|KRW)\s*",
@@ -139,6 +174,7 @@ def parse_amount(value: object) -> int | None:
         source,
         flags=re.IGNORECASE,
     )
+
     source = re.sub(
         r"\s*(?:원|₩|KRW)$",
         "",
@@ -150,7 +186,9 @@ def parse_amount(value: object) -> int | None:
         return None
 
     try:
-        number = Decimal(source.replace(",", ""))
+        number = Decimal(
+            source.replace(",", "")
+        )
     except InvalidOperation:
         return None
 
@@ -165,83 +203,119 @@ def parse_amount(value: object) -> int | None:
     return int(number)
 
 
+def parse_rate(value: object) -> Decimal | None:
+    source = normalize_text(value)
+    match = RATE_PATTERN.fullmatch(source)
+
+    if not match:
+        return None
+
+    try:
+        rate = Decimal(match[1])
+    except InvalidOperation:
+        return None
+
+    if (
+        not rate.is_finite()
+        or rate < 0
+        or rate > 100
+    ):
+        return None
+
+    return rate
+
+
 def direction(value: object) -> str:
-    return DIRECTIONS.get(
+    return DIRECTION_VALUES.get(
         compact(value).upper(),
         "UNKNOWN",
     )
 
 
-def header_role(value: object) -> str | None:
-    source = compact(value).lower()
-
-    source = re.sub(
-        r"[\(\[（](?:원|₩|krw)[\)\]）]",
-        "",
-        source,
-    )
-
-    for name, pattern in HEADER_PATTERNS.items():
-        if pattern.fullmatch(source):
-            return name
-
-    return None
-
-
-def normalize_rows(rows: list[dict]) -> list[list[str]]:
-    result = []
-
-    for row in rows:
-        cells = row.get("cells")
-
-        if not isinstance(cells, list) or not cells:
-            source = text(row.get("text", row.get("rawText", "")))
-
-            cells = (
-                source.split("|")
-                if "|" in source
-                else re.split(r"\t+| {2,}", source)
-            )
-
-        values = [text(cell) for cell in cells]
-
-        if any(values):
-            result.append(values)
-
-    return result
-
-
-def find_document_context(source: str) -> dict[str, Any]:
-    title = compact("\n".join(source.splitlines()[:15]))
-
+def find_document_context(
+    source: str,
+) -> dict[str, Any]:
     years = {
         int(match[1])
         for match in YEAR_PATTERN.finditer(source)
     }
 
-    category = "UNCLASSIFIED"
-
-    # 문서 제목에 명시된 항목만 카테고리 근거로 사용한다.
-    for label, code in DOCUMENT_CATEGORIES.items():
-        if f"[{label}]" in title:
-            category = code
-            break
-
-    expense = "지출내역" in title or "지출별" in title
-    income = "수입내역" in title
-
-    typ = "UNKNOWN"
-
-    if expense and not income:
-        typ = "EXPENSE"
-    elif income and not expense:
-        typ = "INCOME"
-
     return {
-        "year": next(iter(years)) if len(years) == 1 else None,
-        "category": category,
-        "direction": typ,
+        "year": (
+            next(iter(years))
+            if len(years) == 1
+            else None
+        ),
+        # 제목에 특정 단어가 있다는 이유로
+        # 문서 전체의 카테고리를 확정하지 않는다.
+        "sourceText": source,
     }
+
+
+def configured_role(
+    value: object,
+    header_aliases: dict[str, list[str]],
+) -> str | None:
+    """외부에서 전달한 헤더 별칭만 명시적 매핑에 사용한다."""
+
+    source = normalize_header(value)
+    matches = []
+
+    for role, aliases in header_aliases.items():
+        if role not in SUPPORTED_ROLES:
+            continue
+
+        if any(
+            source == normalize_header(alias)
+            for alias in aliases
+        ):
+            matches.append(role)
+
+    if len(matches) != 1:
+        return None
+
+    return matches[0]
+
+
+def resolve_category(
+    *,
+    category_text: str,
+    description: str,
+    raw: str,
+    page: int,
+    context: dict[str, Any],
+    resolver: CategoryResolver | None,
+) -> tuple[str, str | None]:
+    """원문 카테고리와 외부 분류 결과를 분리한다."""
+
+    category_name = (
+        mask_text(category_text)
+        if category_text
+        else None
+    )
+
+    if resolver is None:
+        return "UNCLASSIFIED", category_name
+
+    resolved = resolver(
+        {
+            "categoryName": category_name,
+            "description": mask_text(description),
+            "rawText": mask_text(raw),
+            "pageNumber": page,
+            "documentYear": context.get("year"),
+            "documentText": mask_text(
+                context.get("sourceText", "")
+            ),
+        }
+    )
+
+    category_code = text(resolved)
+
+    return (
+        category_code or "UNCLASSIFIED",
+        category_name,
+    )
 
 
 def make_item(
@@ -251,7 +325,6 @@ def make_item(
     description: str,
     amount: int | None,
     typ: str,
-    category: str,
     year: int | None,
     when: str | None = None,
     month: str | None = None,
@@ -259,6 +332,9 @@ def make_item(
     amount_basis: str = "UNSPECIFIED",
     gross: int | None = None,
     tax: int | None = None,
+    tax_rate: Decimal | None = None,
+    category: str = "UNCLASSIFIED",
+    category_name: str | None = None,
     reasons: list[str] | None = None,
 ) -> dict[str, Any]:
     errors = list(reasons or [])
@@ -272,9 +348,16 @@ def make_item(
     if when is None and year is None:
         errors.append("귀속 연도 확인 필요")
 
-    extracted = amount is not None and bool(description)
+    if typ == "UNKNOWN":
+        errors.append("수입 및 지출 구분 확인 필요")
 
-    # 공제대상금액은 실제 입출금액으로 변환하지 않는다.
+    errors = list(dict.fromkeys(errors))
+
+    extracted = (
+        amount is not None
+        and bool(description)
+    )
+
     actual_amount = (
         None
         if amount_basis == "DEDUCTION_ELIGIBLE"
@@ -290,11 +373,28 @@ def make_item(
         "transactionType": typ,
         "description": mask_text(description),
         "category": category,
+        # 문서에 있는 임의의 카테고리 이름을 보존한다.
+        "categoryName": category_name,
         "amount": amount,
         "actualAmount": actual_amount,
-        "preTaxIncome": gross if typ == "INCOME" else None,
-        "taxDeducted": tax if typ == "INCOME" else None,
-        "deductedTaxRate": None,
+        "preTaxIncome": (
+            gross
+            if typ == "INCOME"
+            else None
+        ),
+        "taxDeducted": (
+            tax
+            if typ == "INCOME"
+            else None
+        ),
+        # 백분율 숫자 단위로 반환한다.
+        # 예: 4.1%는 4.1이다.
+        "deductedTaxRate": (
+            float(tax_rate)
+            if tax_rate is not None
+            and typ == "INCOME"
+            else None
+        ),
         "pageNumber": page,
         "rawText": mask_text(raw),
         "valueKind": value_kind,
@@ -306,44 +406,738 @@ def make_item(
             or amount_basis == "DEDUCTION_ELIGIBLE"
         ),
         "failureReason": (
-            " / ".join(dict.fromkeys(errors))
+            " / ".join(errors)
             if errors
             else None
         ),
     }
 
 
-def month_header(
+def group_word_lines(
+    words: list[dict[str, Any]],
+) -> list[list[dict[str, Any]]]:
+    """글자의 세로 위치와 높이를 기준으로 행을 구성한다."""
+
+    lines: list[list[dict[str, Any]]] = []
+
+    ordered = sorted(
+        words,
+        key=lambda word: (
+            float(word["top"]),
+            float(word["x0"]),
+        ),
+    )
+
+    for word in ordered:
+        top = float(word["top"])
+        height = (
+            float(word["bottom"])
+            - float(word["top"])
+        )
+
+        if not lines:
+            lines.append([word])
+            continue
+
+        previous = lines[-1]
+        previous_top = statistics.median(
+            float(item["top"])
+            for item in previous
+        )
+
+        tolerance = max(
+            2.0,
+            height * 0.3,
+        )
+
+        if abs(top - previous_top) <= tolerance:
+            previous.append(word)
+        else:
+            lines.append([word])
+
+    for line in lines:
+        line.sort(
+            key=lambda word: float(word["x0"])
+        )
+
+    return lines
+
+
+def geometry_rows(
+    page: Any,
+) -> list[list[str]]:
+    """고정된 컬럼 좌표 없이 단어 간 간격으로 셀을 구성한다."""
+
+    words = page.extract_words(
+        x_tolerance=1.5,
+        y_tolerance=3,
+        keep_blank_chars=False,
+    )
+
+    result = []
+
+    for line in group_word_lines(words):
+        if not line:
+            continue
+
+        heights = [
+            float(word["bottom"])
+            - float(word["top"])
+            for word in line
+        ]
+
+        # 일반적인 단어 간 공백보다 큰 간격에서 셀을 나눈다.
+        # 실제 추론 결과가 불확실하면 다른 후보와 비교한다.
+        gap_limit = max(
+            6.0,
+            statistics.median(heights) * 0.7,
+        )
+
+        cells = []
+        current = [text(line[0]["text"])]
+
+        for previous, word in zip(
+            line,
+            line[1:],
+        ):
+            gap = (
+                float(word["x0"])
+                - float(previous["x1"])
+            )
+
+            if gap > gap_limit:
+                cells.append(" ".join(current))
+                current = [text(word["text"])]
+            else:
+                current.append(text(word["text"]))
+
+        cells.append(" ".join(current))
+
+        if any(cells):
+            result.append(cells)
+
+    return result
+
+
+def split_transaction_line(
+    source: str,
+) -> list[str] | None:
+    """날짜와 행 끝의 숫자 묶음을 이용해 일반 텍스트를 분리한다."""
+
+    line = normalize_text(source)
+    match = DATE_PATTERN.match(line)
+
+    if not match:
+        return None
+
+    when_text = match.group(0).strip()
+    remainder = line[match.end():].strip()
+
+    if not remainder:
+        return [when_text]
+
+    tokens = remainder.split()
+
+    typ = None
+
+    if (
+        tokens
+        and direction(tokens[0]) != "UNKNOWN"
+    ):
+        typ = tokens.pop(0)
+
+    # 설명에 있는 숫자는 보존하고,
+    # 행 끝에서 연속된 숫자·백분율만 별도 셀로 분리한다.
+    trailing = []
+
+    while tokens:
+        token = tokens[-1]
+
+        if (
+            parse_amount(token) is not None
+            or parse_rate(token) is not None
+            or is_empty(token)
+        ):
+            trailing.append(tokens.pop())
+        else:
+            break
+
+    trailing.reverse()
+
+    cells = [when_text]
+
+    if typ is not None:
+        cells.append(typ)
+
+    cells.append(" ".join(tokens))
+    cells.extend(trailing)
+
+    return cells
+
+
+def text_rows(source: str) -> list[list[str]]:
+    result = []
+
+    for line in source.splitlines():
+        line = line.strip()
+
+        if not line:
+            continue
+
+        if "|" in line:
+            cells = [
+                text(cell)
+                for cell in line.split("|")
+            ]
+
+            if cells and not cells[0]:
+                cells = cells[1:]
+
+            if cells and not cells[-1]:
+                cells = cells[:-1]
+
+            result.append(cells)
+            continue
+
+        cells = re.split(
+            r"\t+| {2,}",
+            line,
+        )
+
+        if len(cells) > 1:
+            result.append(
+                [text(cell) for cell in cells]
+            )
+            continue
+
+        transaction = split_transaction_line(line)
+
+        if transaction is not None:
+            result.append(transaction)
+        else:
+            result.append([line])
+
+    return result
+
+
+def normalize_rows(
+    rows: list[dict],
+) -> list[list[str]]:
+    result = []
+
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+
+        cells = row.get("cells")
+
+        if isinstance(cells, list) and cells:
+            values = [
+                text(cell)
+                for cell in cells
+            ]
+
+            if any(values):
+                result.append(values)
+
+            continue
+
+        source = text(
+            row.get(
+                "text",
+                row.get("rawText", ""),
+            )
+        )
+
+        result.extend(text_rows(source))
+
+    return result
+
+
+def column_ratio(
     rows: list[list[str]],
-) -> list[tuple[int, dict[int, int]]]:
-    found = []
+    column: int,
+    parser: Callable[[object], Any],
+) -> float:
+    values = [
+        row[column]
+        for row in rows
+        if column < len(row)
+        and not is_empty(row[column])
+    ]
 
-    for row_index, cells in enumerate(rows):
-        mapping = {}
+    if not values:
+        return 0.0
 
-        for column_index, cell in enumerate(cells):
-            match = MONTH_PATTERN.fullmatch(compact(cell))
+    return sum(
+        parser(value) is not None
+        for value in values
+    ) / len(values)
 
-            if match:
-                mapping[column_index] = int(match[1])
 
-        if mapping:
-            found.append((row_index, mapping))
+def infer_schema(
+    rows: list[list[str]],
+    header_aliases: dict[str, list[str]],
+) -> tuple[
+    dict[str, int],
+    list[int],
+    int | None,
+]:
+    """ヘッダー名だけに依存せず、列の値から役割を推定する。"""
 
-    return found
+    dated_rows = [
+        row
+        for row in rows
+        if any(
+            parse_date(cell) is not None
+            for cell in row
+        )
+    ]
+
+    if not dated_rows:
+        return {}, [], None
+
+    width = Counter(
+        len(row)
+        for row in dated_rows
+    ).most_common(1)[0][0]
+
+    samples = [
+        row
+        for row in dated_rows
+        if len(row) == width
+    ]
+
+    first_data_index = next(
+        index
+        for index, row in enumerate(rows)
+        if row in samples
+    )
+
+    roles: dict[str, int] = {}
+    conflicts = set()
+
+    # 외부 설정이 있는 경우에만 헤더를 명시적으로 매핑한다.
+    for row in rows[:first_data_index]:
+        if len(row) != width:
+            continue
+
+        for column, cell in enumerate(row):
+            role = configured_role(
+                cell,
+                header_aliases,
+            )
+
+            if role is None:
+                continue
+
+            if (
+                role in roles
+                and roles[role] != column
+            ):
+                conflicts.add(role)
+            else:
+                roles[role] = column
+
+    for role in conflicts:
+        roles.pop(role, None)
+
+    if "date" not in roles:
+        candidates = [
+            column
+            for column in range(width)
+            if column_ratio(
+                samples,
+                column,
+                parse_date,
+            ) >= 0.9
+        ]
+
+        if len(candidates) == 1:
+            roles["date"] = candidates[0]
+
+    occupied = set(roles.values())
+
+    if "type" not in roles:
+        candidates = []
+
+        for column in range(width):
+            if column in occupied:
+                continue
+
+            values = [
+                row[column]
+                for row in samples
+                if not is_empty(row[column])
+            ]
+
+            if (
+                values
+                and sum(
+                    direction(value) != "UNKNOWN"
+                    for value in values
+                ) / len(values) >= 0.9
+            ):
+                candidates.append(column)
+
+        if len(candidates) == 1:
+            roles["type"] = candidates[0]
+
+    occupied = set(roles.values())
+
+    if "tax_rate" not in roles:
+        candidates = [
+            column
+            for column in range(width)
+            if column not in occupied
+            and column_ratio(
+                samples,
+                column,
+                parse_rate,
+            ) >= 0.9
+        ]
+
+        if len(candidates) == 1:
+            roles["tax_rate"] = candidates[0]
+
+    numeric_columns = []
+
+    for column in range(width):
+        if column in roles.values():
+            continue
+
+        # 날짜 앞의 숫자는 순번일 가능성이 있어
+        # 금액 추론에 자동 사용하지 않는다.
+        if (
+            "date" in roles
+            and column < roles["date"]
+        ):
+            continue
+
+        if column_ratio(
+            samples,
+            column,
+            parse_amount,
+        ) >= 0.9:
+            numeric_columns.append(column)
+
+    # 세율과 두 금액의 관계가 일관될 때만
+    # 세전 금액과 실제 금액을 추론한다.
+    if (
+        "tax_rate" in roles
+        and "gross" not in roles
+        and "net" not in roles
+        and len(numeric_columns) == 2
+    ):
+        valid_pairs = []
+
+        for gross_column, net_column in (
+            (
+                numeric_columns[0],
+                numeric_columns[1],
+            ),
+            (
+                numeric_columns[1],
+                numeric_columns[0],
+            ),
+        ):
+            matched = 0
+            contradicted = 0
+
+            for row in samples:
+                gross = parse_amount(
+                    row[gross_column]
+                )
+                net = parse_amount(
+                    row[net_column]
+                )
+                rate = parse_rate(
+                    row[roles["tax_rate"]]
+                )
+
+                if (
+                    gross is None
+                    or net is None
+                    or rate is None
+                    or rate == 0
+                ):
+                    continue
+
+                expected = (
+                    Decimal(gross)
+                    * (Decimal(100) - rate)
+                    / 100
+                )
+
+                if (
+                    gross >= net
+                    and abs(
+                        Decimal(net) - expected
+                    ) <= 1
+                ):
+                    matched += 1
+                else:
+                    contradicted += 1
+
+            if matched > 0 and contradicted == 0:
+                valid_pairs.append(
+                    (gross_column, net_column)
+                )
+
+        if len(valid_pairs) == 1:
+            roles["gross"], roles["net"] = (
+                valid_pairs[0]
+            )
+
+    # 숫자 컬럼이 하나일 때만 일반 금액으로 추론한다.
+    if (
+        "amount" not in roles
+        and "net" not in roles
+        and len(numeric_columns) == 1
+    ):
+        roles["amount"] = numeric_columns[0]
+
+    excluded_columns = (
+        set(roles.values())
+        | set(numeric_columns)
+    )
+
+    description_columns = []
+
+    if "description" not in roles:
+        for column in range(width):
+            if column in excluded_columns:
+                continue
+
+            if any(
+                not is_empty(row[column])
+                for row in samples
+            ):
+                description_columns.append(column)
+
+    return roles, description_columns, width
+
+
+def parse_daily_table(
+    rows: list[list[str]],
+    page: int,
+    context: dict[str, Any],
+    header_aliases: dict[str, list[str]],
+    category_resolver: CategoryResolver | None,
+) -> list[dict[str, Any]]:
+    roles, description_columns, width = infer_schema(
+        rows,
+        header_aliases,
+    )
+
+    if width is None:
+        return []
+
+    result = []
+
+    for cells in rows:
+        dates = {
+            parsed
+            for cell in cells
+            if (parsed := parse_date(cell)) is not None
+        }
+
+        if not dates:
+            continue
+
+        raw = " | ".join(cells)
+        reasons = []
+
+        if len(cells) != width:
+            result.append(
+                make_item(
+                    page=page,
+                    raw=raw,
+                    description=raw,
+                    amount=None,
+                    typ="UNKNOWN",
+                    year=context.get("year"),
+                    when=(
+                        next(iter(dates))
+                        if len(dates) == 1
+                        else None
+                    ),
+                    reasons=[
+                        "컬럼 수가 달라 행 구조 확인 필요"
+                    ],
+                )
+            )
+            continue
+
+        def get(role: str) -> str:
+            column = roles.get(role)
+
+            if column is None:
+                return ""
+
+            return cells[column]
+
+        when = (
+            parse_date(get("date"))
+            if "date" in roles
+            else next(iter(dates))
+            if len(dates) == 1
+            else None
+        )
+
+        if when is None:
+            reasons.append(
+                "거래 일자 확인 필요"
+            )
+
+        typ = direction(get("type"))
+
+        if typ == "UNKNOWN":
+            kinds = {
+                direction(cell)
+                for cell in cells
+                if direction(cell) != "UNKNOWN"
+            }
+
+            if len(kinds) == 1:
+                typ = next(iter(kinds))
+
+        description = get("description")
+
+        if not description:
+            description = " ".join(
+                cells[column]
+                for column in description_columns
+                if not is_empty(cells[column])
+                and not IDENTIFIER_PATTERN.search(
+                    cells[column]
+                )
+            )
+
+        gross = parse_amount(get("gross"))
+        tax = parse_amount(get("tax"))
+        rate = parse_rate(get("tax_rate"))
+
+        amount = None
+        amount_basis = "UNSPECIFIED"
+
+        if "net" in roles:
+            amount = parse_amount(get("net"))
+            amount_basis = "ACTUAL"
+        elif "amount" in roles:
+            amount = parse_amount(get("amount"))
+        elif (
+            gross is not None
+            and tax is not None
+            and gross >= tax
+        ):
+            amount = gross - tax
+            amount_basis = "ACTUAL"
+        else:
+            reasons.append(
+                "저장할 금액 컬럼을 확정하지 못했습니다."
+            )
+
+        if typ == "INCOME":
+            if (
+                gross is not None
+                and amount is not None
+            ):
+                if amount > gross:
+                    reasons.append(
+                        "실제 입금액이 세전 금액보다 큽니다."
+                    )
+                else:
+                    calculated_tax = gross - amount
+
+                    if (
+                        tax is not None
+                        and tax != calculated_tax
+                    ):
+                        reasons.append(
+                            "세액과 세전·실제 금액의 차이가 다릅니다."
+                        )
+
+                    if tax is None:
+                        tax = calculated_tax
+
+                    if rate is not None:
+                        expected_tax = (
+                            Decimal(gross)
+                            * rate
+                            / 100
+                        )
+
+                        if abs(
+                            Decimal(calculated_tax)
+                            - expected_tax
+                        ) > 1:
+                            reasons.append(
+                                "세율과 실제 금액이 일치하지 않습니다."
+                            )
+
+        category, category_name = resolve_category(
+            category_text=get("category"),
+            description=description,
+            raw=raw,
+            page=page,
+            context=context,
+            resolver=category_resolver,
+        )
+
+        result.append(
+            make_item(
+                page=page,
+                raw=raw,
+                description=description,
+                amount=amount,
+                typ=typ,
+                year=(
+                    int(when[:4])
+                    if when
+                    else context.get("year")
+                ),
+                when=when,
+                amount_basis=amount_basis,
+                gross=gross,
+                tax=tax,
+                tax_rate=rate,
+                category=category,
+                category_name=category_name,
+                reasons=reasons,
+            )
+        )
+
+    return result
 
 
 def parse_monthly_table(
     rows: list[list[str]],
     page: int,
     context: dict[str, Any],
+    category_resolver: CategoryResolver | None,
 ) -> list[dict[str, Any]] | None:
-    headers = month_header(rows)
+    headers = []
+
+    for row_index, row in enumerate(rows):
+        mapping = {}
+
+        for column, cell in enumerate(row):
+            match = MONTH_PATTERN.fullmatch(
+                compact(cell)
+            )
+
+            if match:
+                mapping[column] = int(match[1])
+
+        if mapping:
+            headers.append(
+                (row_index, mapping)
+            )
 
     if not headers:
         return None
 
-    # 월 이름의 위치를 기준으로 읽으며, 특정 카드사 이름에 의존하지 않는다.
     months = {
         month
         for _, mapping in headers
@@ -353,54 +1147,30 @@ def parse_monthly_table(
     if months != set(range(1, 13)):
         return None
 
-    row_indexes = [index for index, _ in headers]
+    indexes = [
+        index
+        for index, _ in headers
+    ]
 
-    if row_indexes != list(range(min(row_indexes), max(row_indexes) + 1)):
+    if indexes != list(
+        range(min(indexes), max(indexes) + 1)
+    ):
         return None
 
-    month_maps = [mapping for _, mapping in headers]
-    month_columns = {
+    mappings = [
+        mapping
+        for _, mapping in headers
+    ]
+
+    first_month_column = min(
         column
-        for mapping in month_maps
+        for mapping in mappings
         for column in mapping
-    }
-
-    first_month_column = min(month_columns)
-    last_month_column = max(month_columns)
-
-    header_text = compact(
-        " ".join(
-            cell
-            for row in rows[:max(row_indexes) + 1]
-            for cell in row
-        )
     )
 
-    eligible = "공제대상금액" in header_text
-    amount_basis = "DEDUCTION_ELIGIBLE" if eligible else "UNSPECIFIED"
-
-    # 항목 합계 열은 월별 열의 오른쪽에서 명시된 열만 사용한다.
-    total_columns = []
-
-    for row in rows[:min(row_indexes)]:
-        for index, cell in enumerate(row):
-            if index <= last_month_column:
-                continue
-
-            label = compact(cell)
-
-            if "금액" in label or SUMMARY_PATTERN.search(label):
-                total_columns.append(index)
-
-    total_column = (
-        total_columns[0]
-        if len(set(total_columns)) == 1
-        else None
-    )
-
+    block_height = len(mappings)
+    index = max(indexes) + 1
     result = []
-    block_height = len(month_maps)
-    index = max(row_indexes) + 1
 
     while index < len(rows):
         block = rows[index:index + block_height]
@@ -412,298 +1182,185 @@ def parse_monthly_table(
         prefix = [
             cell
             for cell in block[0][:first_month_column]
-            if cell
+            if not is_empty(cell)
         ]
 
         if not prefix:
             index += 1
             continue
 
-        description = " · ".join(
-            mask_text(cell.replace("\n", " "))
-            for cell in prefix
+        description = " · ".join(prefix)
+        raw = "\n".join(
+            " | ".join(row)
+            for row in block
         )
 
-        values: dict[int, int | None] = {}
-        errors = []
+        values = {}
+        reasons = []
 
         if len(block) != block_height:
-            errors.append("월별 자료의 행 수 확인 필요")
+            reasons.append(
+                "월별 자료의 행 수 확인 필요"
+            )
 
-        for offset, mapping in enumerate(month_maps):
-            current = block[offset] if offset < len(block) else []
+        for offset, mapping in enumerate(mappings):
+            current = (
+                block[offset]
+                if offset < len(block)
+                else []
+            )
 
             for column, month in mapping.items():
                 values[month] = parse_amount(
-                    current[column] if column < len(current) else None
+                    current[column]
+                    if column < len(current)
+                    else None
                 )
 
-        if any(values.get(month) is None for month in range(1, 13)):
-            errors.append("12개월 금액 중 읽지 못한 값이 있습니다.")
-
-        annual_total = None
-
-        if total_column is not None:
-            annual_total = parse_amount(
-                block[0][total_column]
-                if total_column < len(block[0])
-                else None
+        if any(
+            values.get(month) is None
+            for month in range(1, 13)
+        ):
+            reasons.append(
+                "12개월 금액 중 읽지 못한 값이 있습니다."
             )
 
-        if (
-            not errors
-            and annual_total is not None
-            and sum(values.values()) != annual_total
-        ):
-            errors.append("월별 금액 합계와 항목 합계가 다릅니다.")
+        year = context.get("year")
 
-        if context["year"] is None:
-            errors.append("귀속 연도를 확인하지 못했습니다.")
+        if year is None:
+            reasons.append(
+                "귀속 연도 확인 필요"
+            )
 
-        raw = "\n".join(" | ".join(row) for row in block)
+        category, category_name = resolve_category(
+            category_text="",
+            description=description,
+            raw=raw,
+            page=page,
+            context=context,
+            resolver=category_resolver,
+        )
+
+        # 월별 집계라는 이유만으로
+        # 지출이나 공제 대상 금액이라고 단정하지 않는다.
+        reasons.append(
+            "월별 금액의 거래 방향과 금액 성격 확인 필요"
+        )
 
         for month in range(1, 13):
-            period = (
-                f"{context['year']}-{month:02d}"
-                if context["year"] is not None
-                else None
+            result.append(
+                make_item(
+                    page=page,
+                    raw=raw,
+                    description=description,
+                    amount=values.get(month),
+                    typ="UNKNOWN",
+                    year=year,
+                    month=(
+                        f"{year}-{month:02d}"
+                        if year is not None
+                        else None
+                    ),
+                    value_kind="MONTHLY_AGGREGATE",
+                    category=category,
+                    category_name=category_name,
+                    reasons=reasons,
+                )
             )
-
-            result.append(make_item(
-                page=page,
-                raw=raw,
-                description=description,
-                amount=values.get(month),
-                typ="EXPENSE",
-                category="UNCLASSIFIED",
-                year=context["year"],
-                month=period,
-                value_kind="MONTHLY_AGGREGATE",
-                amount_basis=amount_basis,
-                reasons=errors,
-            ))
 
         index += block_height
 
     return result
 
 
-def parse_daily_table(
+def parse_rows(
     rows: list[list[str]],
     page: int,
     context: dict[str, Any],
+    header_aliases: dict[str, list[str]],
+    category_resolver: CategoryResolver | None,
 ) -> list[dict[str, Any]]:
-    result = []
-    header = {}
-    header_width = None
-    previous_description = ""
-
-    for cells in rows:
-        roles = {}
-        duplicates = set()
-
-        for index, cell in enumerate(cells):
-            name = header_role(cell)
-
-            if name:
-                if name in roles:
-                    duplicates.add(name)
-                roles[name] = index
-
-        for name in duplicates:
-            roles.pop(name, None)
-
-        if (
-            any(name in roles for name in ("amount", "net", "gross"))
-            and any(name in roles for name in ("date", "description", "type"))
-        ):
-            header = roles
-            header_width = len(cells)
-            previous_description = ""
-            continue
-
-        dates = [
-            (index, parse_date(cell))
-            for index, cell in enumerate(cells)
-            if parse_date(cell) is not None
-        ]
-
-        active = (
-            header
-            if header and len(cells) == header_width
-            else {}
-        )
-
-        if not active and not dates:
-            continue
-
-        if SUMMARY_PATTERN.search(compact(" ".join(cells))):
-            previous_description = ""
-            continue
-
-        def get(name: str) -> str:
-            column = active.get(name)
-
-            return (
-                cells[column]
-                if column is not None and column < len(cells)
-                else ""
-            )
-
-        when = (
-            parse_date(get("date"))
-            if "date" in active
-            else dates[0][1] if len(dates) == 1 else None
-        )
-
-        if "date" in active and when is None:
-            continue
-
-        ignored = {index for index, _ in dates}
-
-        if "sequence" in active:
-            ignored.add(active["sequence"])
-        elif (
-            len(dates) == 1
-            and dates[0][0] == 1
-            and re.fullmatch(r"\d+", cells[0])
-        ):
-            ignored.add(0)
-
-        kinds = [
-            (index, direction(cell))
-            for index, cell in enumerate(cells)
-            if direction(cell) != "UNKNOWN"
-        ]
-
-        ignored.update(index for index, _ in kinds)
-
-        typ = direction(get("type"))
-
-        if typ == "UNKNOWN":
-            typ = kinds[0][1] if len(kinds) == 1 else context["direction"]
-
-        amount = None
-        gross = parse_amount(get("gross"))
-        tax = parse_amount(get("tax"))
-
-        money_roles = [
-            name
-            for name in ("net", "amount", "gross")
-            if name in active
-        ]
-
-        if money_roles:
-            amount = parse_amount(get(money_roles[0]))
-
-            for name in ("net", "amount", "gross", "tax"):
-                if name in active:
-                    ignored.add(active[name])
-
-        else:
-            candidates = [
-                (index, parse_amount(cell))
-                for index, cell in enumerate(cells)
-                if index not in ignored
-                and parse_amount(cell) is not None
-            ]
-
-            ignored.update(index for index, _ in candidates)
-
-            if len(candidates) == 1:
-                amount = candidates[0][1]
-
-        description = get("description")
-
-        if "description" in active:
-            if description:
-                previous_description = description
-            else:
-                description = previous_description
-        else:
-            description = " ".join(
-                cell
-                for index, cell in enumerate(cells)
-                if index not in ignored
-                and cell
-                and not re.search(r"[*＊]", cell)
-                and not IDENTIFIER_PATTERN.search(cell)
-            )
-
-        if amount is None and when is None:
-            continue
-
-        result.append(make_item(
-            page=page,
-            raw=" | ".join(cells),
-            description=description,
-            amount=amount,
-            typ=typ,
-            category=context["category"],
-            year=context["year"],
-            when=when,
-            value_kind="DETAIL" if when else "ANNUAL_TOTAL",
-            gross=gross,
-            tax=tax,
-        ))
-
-    return result
-
-
-def parse_table(
-    rows: list[list[str]],
-    page: int,
-    context: dict[str, Any],
-) -> list[dict[str, Any]]:
-    monthly = parse_monthly_table(rows, page, context)
+    monthly = parse_monthly_table(
+        rows,
+        page,
+        context,
+        category_resolver,
+    )
 
     if monthly is not None:
         return monthly
 
-    return parse_daily_table(rows, page, context)
+    return parse_daily_table(
+        rows,
+        page,
+        context,
+        header_aliases,
+        category_resolver,
+    )
 
 
-def document_summary(
-    tables: list[list[list[str]]],
-) -> int | None:
-    """가로 집계표에서 세부 항목의 합과 일치하는 전체 합계만 읽는다."""
-
-    for rows in tables:
-        if len(rows) != 2:
-            continue
-
-        headers, values = rows
-
-        if not headers or not values:
-            continue
-
-        if "합계" in "".join(headers):
-            continue
-
-        if compact(headers[-1]) not in ("합계금액", "총합계금액"):
-            continue
-
-        amounts = [parse_amount(value) for value in values]
-
-        if (
-            len(amounts) >= 2
-            and all(value is not None for value in amounts)
-            and sum(amounts[:-1]) == amounts[-1]
-        ):
-            return amounts[-1]
-
-    return None
+def candidate_score(
+    items: list[dict[str, Any]],
+) -> tuple[int, int, int]:
+    return (
+        sum(
+            item["parseSuccess"]
+            and not item["excluded"]
+            for item in items
+        ),
+        sum(
+            item["parseSuccess"]
+            for item in items
+        ),
+        len(items),
+    )
 
 
 def extract_transactions(
     pdf_bytes: bytes,
     ocr_pages: list[dict] | None = None,
+    *,
+    header_aliases: dict[str, list[str]] | None = None,
+    category_resolver: CategoryResolver | None = None,
 ) -> dict[str, Any]:
+    """PDF와 외부 OCR 결과에서 거래 후보를 추출한다.
+
+    헤더 별칭:
+        필요할 때 DB나 설정에서 전달한다.
+        특정 문서의 헤더 목록을 이 모듈에 내장하지 않는다.
+
+    카테고리 분류기:
+        원문 카테고리와 거래 설명을 받아
+        서비스에서 사용하는 카테고리 코드를 반환한다.
+        분류기가 없거나 결과가 없으면 미분류로 남긴다.
+    """
+
     if (
         not isinstance(pdf_bytes, bytes)
         or not pdf_bytes.startswith(b"%PDF-")
     ):
-        raise ValueError("올바른 PDF 파일이 아닙니다.")
+        raise ValueError(
+            "올바른 PDF 파일이 아닙니다."
+        )
+
+    aliases = header_aliases or {}
+
+    for role, values in aliases.items():
+        if role not in SUPPORTED_ROLES:
+            raise ValueError(
+                f"지원하지 않는 컬럼 역할입니다: {role}"
+            )
+
+        if (
+            not isinstance(values, list)
+            or not all(
+                isinstance(value, str)
+                for value in values
+            )
+        ):
+            raise ValueError(
+                "헤더 별칭은 문자열 목록이어야 합니다."
+            )
 
     ocr_map = {
         item["pageNumber"]: item
@@ -714,134 +1371,212 @@ def extract_transactions(
 
     transactions = []
     page_results = []
-    summary_values = []
-
-    context = {
-        "year": None,
-        "category": "UNCLASSIFIED",
-        "direction": "UNKNOWN",
-    }
 
     with pdfplumber.open(BytesIO(pdf_bytes)) as pdf:
         if pdf.doc.encryption is not None:
-            raise ValueError("암호화된 PDF는 지원하지 않습니다.")
+            raise ValueError(
+                "암호화된 PDF는 지원하지 않습니다."
+            )
 
         if len(pdf.pages) > MAX_PAGES:
-            raise ValueError("PDF 페이지 수가 허용 범위를 초과했습니다.")
+            raise ValueError(
+                "PDF 페이지 수가 허용 범위를 초과했습니다."
+            )
 
-        for page_number, page in enumerate(pdf.pages, 1):
+        native_texts = [
+            page.extract_text() or ""
+            for page in pdf.pages
+        ]
+
+        ocr_texts = []
+
+        for page_number in range(
+            1,
+            len(pdf.pages) + 1,
+        ):
             ocr = ocr_map.get(page_number) or {}
-            ocr_rows = ocr.get("rows") or []
+            source = text(ocr.get("text"))
 
-            native_text = page.extract_text() or ""
-            ocr_text = text(ocr.get("text"))
-
-            if ocr_rows:
-                ocr_text = "\n".join(
-                    " | ".join(
-                        text(cell)
-                        for cell in row.get("cells", [])
-                    ) or text(row.get("text"))
-                    for row in ocr_rows
+            if not source:
+                source = "\n".join(
+                    " | ".join(row)
+                    for row in normalize_rows(
+                        ocr.get("rows") or []
+                    )
                 )
 
-            current = find_document_context(native_text or ocr_text)
+            ocr_texts.append(source)
 
-            for key, value in current.items():
-                if value is not None and value not in ("UNKNOWN", "UNCLASSIFIED"):
-                    context[key] = value
+        context = find_document_context(
+            "\n".join(
+                native or ocr
+                for native, ocr in zip(
+                    native_texts,
+                    ocr_texts,
+                )
+            )
+        )
 
-            native_tables = [
-                [
-                    [text(cell) for cell in row]
-                    for row in table
-                ]
-                for table in page.extract_tables()
+        for page_number, page in enumerate(
+            pdf.pages,
+            1,
+        ):
+            native_text = native_texts[
+                page_number - 1
             ]
 
-            total = document_summary(native_tables)
+            ocr = ocr_map.get(page_number) or {}
+            ocr_source = ocr_texts[
+                page_number - 1
+            ]
 
-            if total is not None:
-                summary_values.append(total)
+            candidates = []
 
-            native_items = []
+            # 각 추출 방식은 페이지 단위의 대안이다.
+            # 서로 합치지 않으므로 같은 거래의 중복을 줄인다.
+            native_table_items = []
 
-            for table in native_tables:
-                native_items.extend(parse_table(
-                    table,
-                    page_number,
-                    context,
-                ))
+            for table in page.extract_tables():
+                rows = [
+                    [
+                        text(cell)
+                        for cell in row
+                    ]
+                    for row in table
+                ]
 
-            ocr_items = parse_table(
-                normalize_rows(ocr_rows)
-                if ocr_rows
-                else normalize_rows([
-                    {"text": line}
-                    for line in ocr_text.splitlines()
-                ]),
+                native_table_items.extend(
+                    parse_rows(
+                        rows,
+                        page_number,
+                        context,
+                        aliases,
+                        category_resolver,
+                    )
+                )
+
+            candidates.append(
+                (
+                    "PDF_TABLE",
+                    native_table_items,
+                )
+            )
+
+            geometry_items = parse_rows(
+                geometry_rows(page),
                 page_number,
                 context,
+                aliases,
+                category_resolver,
             )
 
-            native_success = sum(
-                item["parseSuccess"] for item in native_items
-            )
-            ocr_success = sum(
-                item["parseSuccess"] for item in ocr_items
+            candidates.append(
+                (
+                    "PDF_POSITION",
+                    geometry_items,
+                )
             )
 
-            if ocr_success > native_success:
-                selected = ocr_items
-                method = "OCR"
-            else:
-                selected = native_items or ocr_items
-                method = "PDF_TABLE" if native_items else "OCR"
+            native_text_items = parse_rows(
+                text_rows(native_text),
+                page_number,
+                context,
+                aliases,
+                category_resolver,
+            )
+
+            candidates.append(
+                (
+                    "PDF_TEXT",
+                    native_text_items,
+                )
+            )
+
+            ocr_rows = normalize_rows(
+                ocr.get("rows") or []
+            )
+
+            if ocr_rows:
+                candidates.append(
+                    (
+                        "OCR",
+                        parse_rows(
+                            ocr_rows,
+                            page_number,
+                            context,
+                            aliases,
+                            category_resolver,
+                        ),
+                    )
+                )
+
+            if ocr_source:
+                candidates.append(
+                    (
+                        "OCR",
+                        parse_rows(
+                            text_rows(ocr_source),
+                            page_number,
+                            context,
+                            aliases,
+                            category_resolver,
+                        ),
+                    )
+                )
+
+            method, selected = max(
+                candidates,
+                key=lambda candidate: candidate_score(
+                    candidate[1]
+                ),
+            )
+
+            if not selected:
+                method = "NONE"
 
             transactions.extend(selected)
 
-            page_results.append({
-                "pageNumber": page_number,
-                "method": method,
-                "extractedCount": len(selected),
-                "parsedCount": sum(
-                    item["parseSuccess"] for item in selected
-                ),
-            })
-
-    monthly_items = [
-        item
-        for item in transactions
-        if item["valueKind"] == "MONTHLY_AGGREGATE"
-    ]
-
-    # 全体合計は取引として追加せず、月別明細の検算にだけ使用する。
-    if (
-        monthly_items
-        and len(set(summary_values)) == 1
-        and all(item["amount"] is not None for item in monthly_items)
-    ):
-        monthly_sum = sum(
-            item["amount"] for item in monthly_items
-        )
-
-        if monthly_sum != summary_values[0]:
-            for item in monthly_items:
-                item["needsReview"] = True
-                item["excluded"] = True
-                item["failureReason"] = (
-                    "월별 금액과 문서 전체 합계가 다릅니다."
-                )
+            page_results.append(
+                {
+                    "pageNumber": page_number,
+                    "method": method,
+                    "extractedCount": len(selected),
+                    "parsedCount": sum(
+                        item["parseSuccess"]
+                        for item in selected
+                    ),
+                    "needsReviewCount": sum(
+                        item["needsReview"]
+                        for item in selected
+                    ),
+                    "failureReason": (
+                        None
+                        if selected
+                        else (
+                            "거래 구조를 확인하지 못했습니다. "
+                            "이미지 문서는 OCR 결과가 필요하며, "
+                            "텍스트 문서는 컬럼 구조 확인이 필요합니다."
+                        )
+                    ),
+                }
+            )
 
     parsed_count = sum(
-        item["parseSuccess"] for item in transactions
+        item["parseSuccess"]
+        for item in transactions
     )
 
     return {
         "totalPages": len(page_results),
         "extractedCount": len(transactions),
         "parsedCount": parsed_count,
-        "failedCount": len(transactions) - parsed_count,
+        "failedCount": (
+            len(transactions) - parsed_count
+        ),
+        "needsReviewCount": sum(
+            item["needsReview"]
+            for item in transactions
+        ),
         "pageResults": page_results,
         "transactions": transactions,
         "tables": [],
