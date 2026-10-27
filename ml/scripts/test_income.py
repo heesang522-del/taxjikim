@@ -20,8 +20,8 @@ from app.income_classifier import CLASSIFICATION_LIMITS, classify_descriptions
 TEST_DATA_PATH = BASE_DIR / "data/income/testing/test_data.csv"
 
 
+# 직접 시험한 새 설명을 시험 CSV에 저장한다.
 def save_test_description(description: str, path: Path) -> None:
-    """직접 입력한 새 설명만 시험 CSV에 추가하고 정답은 비워둔다."""
     description = description.strip()
     if not description:
         return
@@ -46,8 +46,8 @@ def save_test_description(description: str, path: Path) -> None:
     print(f"  시험용 설명 저장: {path}")
 
 
+# 모델별 분류 결과와 점수, 미분류 사유를 출력한다.
 def show_predictions(description: str, models: dict, expected: str = "") -> None:
-    """같은 설명에 대한 두 모델의 카테고리와 서로 다른 점수 종류를 출력한다."""
     print(f"\n설명: {description or '(빈 설명)'}")
     if expected:
         print(f"직접 적은 정답: {expected}")
@@ -63,8 +63,9 @@ def show_predictions(description: str, models: dict, expected: str = "") -> None
 
 
 
+# 명령 옵션에 맞게 모델을 불러와 설명을 시험한다.
 def main() -> None:
-    """CSV 일괄 시험·한 문장 시험·반복 직접 입력 중 선택해 실행한다."""
+    # 터미널에서 실행할 때 사용할 옵션을 설정한다.
     parser = argparse.ArgumentParser(description=__doc__)
     inputs = parser.add_mutually_exclusive_group()
     inputs.add_argument("--description", help="바로 확인할 거래 설명")
