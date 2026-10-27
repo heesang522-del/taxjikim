@@ -18,10 +18,12 @@ async function requestComments(postId, config = {}) {
 export async function getComments(postId) {
   const comments = await requestComments(postId);
   // DB 응답을 기존 댓글 UI 필드에 맞추되 작성자 회원 번호를 함께 보관한다.
+  // parentCommentId가 있으면 대댓글이므로, 화면에서 부모 댓글 id와 비교할 수 있게 문자열로 맞춘다.
   return comments.map((comment) => ({
     id: String(comment.commentId),
     postId: String(comment.postId),
     userId: comment.userId,
+    parentCommentId: comment.parentCommentId != null ? String(comment.parentCommentId) : null,
     body: comment.content,
     author: comment.writer,
     createdAt: comment.createdAt,
@@ -29,8 +31,16 @@ export async function getComments(postId) {
   }));
 }
 
-export function createComment(postId, content) {
-  return requestComments(postId, { method: 'POST', data: { content } });
+export function createComment(postId, content, parentCommentId = null) {
+  return requestComments(postId, { method: 'POST', data: { content, parentCommentId } });
+}
+
+export function updateComment(postId, commentId, content) {
+  return requestComments(postId, {
+    url: `/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+    method: 'PATCH',
+    data: { content },
+  });
 }
 
 export function deleteComment(postId, commentId) {

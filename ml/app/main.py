@@ -12,6 +12,8 @@ from typing import Annotated, Any
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from .pdf_parser import extract_transactions
+from . import pdf_parser
+from .expense_classifier import classify_descriptions
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -21,6 +23,19 @@ MAX_PAGES = 50
 
 # Spring이 전달하는 PDF 포인트 좌표 기준의 행 묶음 허용 간격이다.
 ROW_TOP_TOLERANCE = 3.0
+def load_expense_model() -> dict:
+    """전체 데이터로 학습한 지출 모델과 전처리 파이프라인을 읽는다."""
+    try:
+        report = json.loads((MODEL_DIR / "model_report.json").read_text(encoding="utf-8"))
+        selected = report["selected_model"]
+        if selected not in ("logistic_regression", "linear_svc"):
+            raise ValueError("선택한 모델 이름이 올바르지 않습니다.")
+        # 학습 코드가 로컬에 생성한 파일만 읽는다. 서버에서 다시 학습하지 않는다.
+        return joblib.load(MODEL_DIR / f"{selected}_bundle.pkl")
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        raise RuntimeError(
+            "지출 모델을 먼저 준비해주세요: python scripts/train_expense.py"
+        ) from exc
 
 app = FastAPI(
     title="TaxJiKim ML API",
@@ -263,11 +278,14 @@ def analyze_pdf(
             "PDF 분석 실패: exceptionType=%s",
             type(exc).__name__,
         )
-
         raise HTTPException(
             status_code=500,
-            detail="PDF 분석 중 서버 오류가 발생했습니다.",
+            detail={
+                "code": "PDF_ANALYSIS_FAILED",
+                "message": "PDF 분석에 실패했습니다.",
+            },
         ) from exc
 
     finally:
         file.file.close()
+       
