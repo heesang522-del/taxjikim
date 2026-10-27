@@ -2,8 +2,6 @@
 'use no memo';
 
 import { create } from 'zustand';
-import { BOARD_SEED, COMMENT_SEED } from '../data/content';
-import { getCurrentUser } from './useAuthStore';
 import { getBoardPosts } from '../api/post.js';
 
 const KEY = 'taxlab.board.v2';
@@ -12,7 +10,6 @@ const COMMENT_KEY = 'taxlab.comments.v1';
 
 const isComment = (c) => c && [c.id, c.postId, c.author, c.body, c.createdAt].every((v) => typeof v === 'string');
 const isPost = (p) => p && [p.id, p.tab, p.title, p.body, p.author, p.createdAt].every((v) => typeof v === 'string') && Number.isFinite(p.views);
-const today = () => new Date().toLocaleDateString('sv-SE'); // YYYY-MM-DD
 
 const load = (key, valid) => {
   try {
@@ -25,10 +22,10 @@ const save = (key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* 저장 공간이 없거나 막힌 경우 무시 */ }
 };
 
-const readComments = () => load(COMMENT_KEY, isComment) ?? COMMENT_SEED;
+const readComments = () => load(COMMENT_KEY, isComment) ?? [];
 
-// 기존 브라우저 글을 복원하고, 저장 이력이 없을 때만 기본 예시 글로 시작한다.
-const readPosts = () => load(KEY, isPost) ?? load(OLD_KEY, isPost) ?? BOARD_SEED;
+// 기존 브라우저 글을 복원한다. 저장 이력이 없으면 빈 목록으로 시작하고 서버 글만 보여준다.
+const readPosts = () => load(KEY, isPost) ?? load(OLD_KEY, isPost) ?? [];
 const mergePosts = (serverPosts, browserPosts) => {
   const serverIds = new Set(serverPosts.map((post) => post.id));
   return [...serverPosts, ...browserPosts.filter((post) => post.source !== 'server' && !serverIds.has(post.id))];
@@ -45,8 +42,9 @@ export const syncBoardFromStorage = (key) => {
 };
 
 /**
- * 서버 게시글과 브라우저 예시 글을 함께 표시한다. 댓글은 기존 브라우저 저장 방식을 유지한다.
- * deletedByAdmin이 true인 글·댓글은 관리자 삭제로 내용을 가리고 "관리자에 의해 삭제됨" 흔적만 남긴다.
+ * 서버 게시글과 (남아있다면) 과거 브라우저 저장 글을 함께 표시한다.
+ * deletedByAdmin이 true인 글은 관리자 삭제로 내용을 가리고 "관리자에 의해 삭제됨" 흔적만 남긴다.
+ * comments/adminDeleteComment는 AdminReportsPage의 신고 댓글 처리용으로만 남겨 둔다.
  */
 export const useBoardStore = create((set, get) => {
   // 서버 글을 브라우저에 복제 저장하면 삭제 후 다시 나타날 수 있어 예시 글만 저장한다.
@@ -62,11 +60,6 @@ export const useBoardStore = create((set, get) => {
     },
     comments: readComments(),
 
-    addPost: ({ tab, title, body, files = [] }) => {
-      const post = { id: `p${Date.now()}`, tab, title: title.trim(), body: body.trim(), files, author: getCurrentUser()?.nickname ?? '', views: 0, createdAt: today() };
-      setPosts((list) => [post, ...list]);
-      return post.id;
-    },
     updatePost: (id, { tab, title, body, files }) => {
       setPosts((list) => list.map((p) => (p.id === id ? { ...p, tab, title: title.trim(), body: body.trim(), ...(files ? { files } : {}) } : p)));
     },
@@ -75,11 +68,8 @@ export const useBoardStore = create((set, get) => {
     /** 신고 처리: 글을 지우지 않고 관리자 삭제 표시만 남긴다 */
     adminDeletePost: (id) => setPosts((list) => list.map((p) => (p.id === id ? { ...p, deletedByAdmin: true } : p))),
 
-    addComment: (postId, body) => {
-      const comment = { id: `c${Date.now()}`, postId, author: getCurrentUser()?.nickname ?? '', body: body.trim(), createdAt: today(), deletedByAdmin: false };
-      setComments((list) => [...list, comment]);
-    },
-    removeComment: (id) => setComments((list) => list.filter((c) => c.id !== id)),
+    // comments: 신고 관리자 화면(AdminReportsPage)이 신고된 댓글을 찾아 "관리자 삭제" 표시를 남기는 데만 쓴다.
+    // 실제(서버) 댓글은 각 CommentSection이 API로 직접 불러와 이 배열에 올라오지 않는다.
     adminDeleteComment: (id) => setComments((list) => list.map((c) => (c.id === id ? { ...c, deletedByAdmin: true } : c))),
   };
 });

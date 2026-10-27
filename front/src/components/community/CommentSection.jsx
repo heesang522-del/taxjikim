@@ -5,25 +5,28 @@ import { useEffect, useState } from 'react';
 import { Button, Card } from '../common/index';
 import { ROUTES } from '../../utils/routes';
 import { useAuth } from '../../store/useAuthStore';
-import { useBoard } from '../../store/useBoardStore';
 import { useToast } from '../../store/useToastStore';
 import { useReports } from '../../utils/useReports';
 import ReportModal from './ReportModal';
 import { getComments, createComment, updateComment, deleteComment } from '../../api/comment';
 
-export const DELETED_COMMENT = '관리자에 의해 삭제된 댓글입니다.';
-
+// 댓글 시각은 분 단위까지만 "00:00" 형식으로 표시한다.
 const formatCommentTime = (value) => {
   if (!value) return '-';
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
 };
 
 /** 글 상세 하단의 댓글 목록과 작성 폼. 회원은 작성·본인 댓글 수정·삭제·타인 댓글 신고를 할 수 있다. */
-export default function CommentSection({ postId, serverPost = false }) {
+export default function CommentSection({ postId }) {
   const toast = useToast();
   const { loggedIn, user } = useAuth();
-  const { comments, addComment, removeComment } = useBoard();
   const { addReport, hasReported } = useReports();
   const [text, setText] = useState('');
   const [reporting, setReporting] = useState(null); // 신고하려는 댓글
@@ -31,44 +34,39 @@ export default function CommentSection({ postId, serverPost = false }) {
   const [replyText, setReplyText] = useState('');
   const [editingId, setEditingId] = useState(null); // 수정 입력창을 연 댓글 id
   const [editText, setEditText] = useState('');
-  const [serverComments, setServerComments] = useState([]);
-  const [loading, setLoading] = useState(serverPost);
+  const [list, setList] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  // 실제 게시글은 DB 댓글을 읽고, 기존 예시 게시글의 댓글은 브라우저에 유지한다.
   useEffect(() => {
     let active = true;
-    if (serverPost) {
-      getComments(postId)
-        .then((items) => {
-          if (active) setServerComments(items);
-        })
-        .catch((cause) => {
-          if (active) setError(cause.message);
-        })
-        .finally(() => {
-          if (active) setLoading(false);
-        });
-    }
+    getComments(postId)
+      .then((items) => {
+        if (active) setList(items);
+      })
+      .catch((cause) => {
+        if (active) setError(cause.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
     return () => {
       active = false;
     };
-  }, [postId, serverPost]);
-  const list = serverPost ? serverComments : comments.filter((c) => c.postId === postId);
+  }, [postId]);
+  // 삭제된 댓글(본인 삭제·관리자 삭제)은 답글 보존을 위해 자리만 남기므로 총 개수에서는 뺀다.
+  const visibleCommentCount = list.filter((c) => !c.deleted).length;
 
   // 대댓글(1단계)만 지원하므로 부모 없는 댓글과, 부모 id별 답글 목록으로 나눠서 묶어 보여준다.
-  // mock 댓글(serverPost=false)은 parentCommentId 개념이 없어 전부 최상위로 둔다.
-  const topLevelComments = serverPost ? list.filter((c) => !c.parentCommentId) : list;
-  const repliesByParent = serverPost
-    ? list.reduce((map, c) => {
-        if (c.parentCommentId) {
-          (map[c.parentCommentId] ??= []).push(c);
-        }
-        return map;
-      }, {})
-    : {};
+  const topLevelComments = list.filter((c) => !c.parentCommentId);
+  const repliesByParent = list.reduce((map, c) => {
+    if (c.parentCommentId) {
+      (map[c.parentCommentId] ??= []).push(c);
+    }
+    return map;
+  }, {});
 
-  const isOwner = (c) => (serverPost ? String(c.userId) === String(user.userId) : c.author === user.nickname);
+  const isOwner = (c) => String(c.userId) === String(user.userId);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -80,14 +78,9 @@ export default function CommentSection({ postId, serverPost = false }) {
     setSaving(true);
     try {
       // 서버가 인증 쿠키로 작성자 회원 번호를 확인하며, 클라이언트는 내용을 전송한다.
-      if (serverPost) {
-        await createComment(postId, text);
-        setText('');
-        setServerComments(await getComments(postId));
-      } else {
-        addComment(postId, text);
-        setText('');
-      }
+      await createComment(postId, text);
+      setText('');
+      setList(await getComments(postId));
       setError('');
       toast('댓글을 등록했습니다');
     } catch (cause) {
@@ -97,7 +90,6 @@ export default function CommentSection({ postId, serverPost = false }) {
     }
   };
 
-  // 답글은 서버 연동 댓글에서만 지원한다(백엔드가 parentCommentId를 받는 글만 가능).
   const submitReply = async (e, parentId) => {
     e.preventDefault();
     if (!replyText.trim()) {
@@ -110,7 +102,7 @@ export default function CommentSection({ postId, serverPost = false }) {
       await createComment(postId, replyText, parentId);
       setReplyText('');
       setReplyingTo(null);
-      setServerComments(await getComments(postId));
+      setList(await getComments(postId));
       setError('');
       toast('답글을 등록했습니다');
     } catch (cause) {
@@ -130,7 +122,6 @@ export default function CommentSection({ postId, serverPost = false }) {
     setEditText('');
   };
 
-  // 수정은 답글처럼 서버 연동 댓글에서만 지원한다(mock 예시 댓글은 localStorage만 쓰고 실제 DB가 없다).
   const submitEdit = async (e, c) => {
     e.preventDefault();
     if (!editText.trim()) {
@@ -141,7 +132,7 @@ export default function CommentSection({ postId, serverPost = false }) {
     setSaving(true);
     try {
       await updateComment(postId, c.id, editText);
-      setServerComments(await getComments(postId));
+      setList(await getComments(postId));
       cancelEdit();
       setError('');
       toast('댓글을 수정했습니다');
@@ -156,11 +147,9 @@ export default function CommentSection({ postId, serverPost = false }) {
     if (saving) return;
     setSaving(true);
     try {
-      if (serverPost) {
-        await deleteComment(postId, commentId);
-        // 삭제 성공 후 화면에서만 제거하며 DB에는 삭제 시각과 기록이 남는다.
-        setServerComments((items) => items.filter((comment) => comment.id !== commentId));
-      } else removeComment(commentId);
+      await deleteComment(postId, commentId);
+      // 삭제 성공 후 화면에서만 제거하며 DB에는 삭제 시각과 기록이 남는다.
+      setList((items) => items.filter((comment) => comment.id !== commentId));
       toast('댓글을 삭제했습니다');
     } catch (cause) {
       toast(cause.message);
@@ -179,11 +168,12 @@ export default function CommentSection({ postId, serverPost = false }) {
     setReporting(null);
   };
 
-  // 댓글 한 개(최상위 또는 답글)를 그린다. 수정 중이면 입력창을, 아니면 내용과 버튼을 보여준다.
+  // 댓글 한 개(최상위 또는 답글)를 그린다. 삭제된 댓글은 답글 보존을 위해 자리를 유지한 채 안내문만,
+  // 수정 중이면 입력창을, 아니면 내용과 버튼을 보여준다.
   const renderComment = (c, { isReply = false } = {}) => (
     <div key={c.id} style={{ paddingBlock: 10, marginLeft: isReply ? 24 : 0, borderTop: '1px solid var(--border)' }}>
-      {c.deletedByAdmin ? (
-        <p className="muted small">{DELETED_COMMENT}</p>
+      {c.deleted ? (
+        <p className="muted small">삭제된 댓글입니다.</p>
       ) : editingId === c.id ? (
         <form className="grid" style={{ gap: 8 }} onSubmit={(e) => submitEdit(e, c)}>
           <textarea
@@ -208,19 +198,19 @@ export default function CommentSection({ postId, serverPost = false }) {
         <>
           <p className="small muted">
             {isReply && '↳ '}
-            {c.author} · 생성: {formatCommentTime(c.createdAt)}
-            {c.updatedAt && ` · 수정: ${formatCommentTime(c.updatedAt)}`}
+            {c.author} ·{' '}
+            {c.updatedAt && c.updatedAt !== c.createdAt
+              ? `(수정됨) ${formatCommentTime(c.updatedAt)}`
+              : formatCommentTime(c.createdAt)}
           </p>
           <p style={{ whiteSpace: 'pre-wrap' }}>{c.body}</p>
           {loggedIn && (
             <div className="row" style={{ marginTop: 6, gap: 8 }}>
               {isOwner(c) ? (
                 <>
-                  {serverPost && (
-                    <Button size="sm" variant="ghost" disabled={saving} onClick={() => startEdit(c)}>
-                      수정
-                    </Button>
-                  )}
+                  <Button size="sm" variant="ghost" disabled={saving} onClick={() => startEdit(c)}>
+                    수정
+                  </Button>
                   <Button size="sm" variant="ghost" disabled={saving} onClick={() => remove(c.id)}>
                     삭제
                   </Button>
@@ -230,7 +220,7 @@ export default function CommentSection({ postId, serverPost = false }) {
                   신고
                 </Button>
               )}
-              {serverPost && !isReply && (
+              {!isReply && (
                 <Button
                   size="sm"
                   variant="ghost"
@@ -251,7 +241,7 @@ export default function CommentSection({ postId, serverPost = false }) {
   );
 
   return (
-    <Card title={`댓글 ${list.length}`} icon="messageSquare">
+    <Card title={`댓글 ${visibleCommentCount}`} icon="messageSquare">
       {loading && (
         <p className="state-msg" role="status">
           댓글을 불러오는 중입니다.
