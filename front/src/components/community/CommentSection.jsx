@@ -148,8 +148,9 @@ export default function CommentSection({ postId }) {
     setSaving(true);
     try {
       await deleteComment(postId, commentId);
-      // 삭제 성공 후 화면에서만 제거하며 DB에는 삭제 시각과 기록이 남는다.
-      setList((items) => items.filter((comment) => comment.id !== commentId));
+      // 로컬에서 바로 빼면 자식 답글이 있는지 모른 채 자리를 지워버린다.
+      // 서버에서 다시 받아와야 답글 보존 로직(삭제 표시 + 답글 유지)이 그대로 적용된다.
+      setList(await getComments(postId));
       toast('댓글을 삭제했습니다');
     } catch (cause) {
       toast(cause.message);
