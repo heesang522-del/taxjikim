@@ -1,8 +1,12 @@
 package com.kh.back.notification.service;
 
 import com.kh.back.notification.dto.NotificationPageDto;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 public interface NotificationService {
+
+    // 로그인한 회원의 알림 SSE 구독을 시작한다. 실제 연결 관리는 NotificationEmitterRegistry에 위임한다.
+    SseEmitter subscribe(Long userId);
 
     // 공지사항 게시글 업로드 시 전체 활성 회원에게 알림 발송
     void broadcastNoticePost(Long postId, String title);
