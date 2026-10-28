@@ -9,12 +9,14 @@ import com.kh.back.notification.dto.NotificationPageDto;
 import com.kh.back.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -25,6 +27,18 @@ public class NotificationApiController {
 
     private final NotificationService notificationService;
 
+
+    // 로그인한 회원의 알림 실시간 구독(SSE). 이벤트는 "알림이 바뀌었다"는 신호만 보내고,
+    // 실제 목록·안읽음 수는 클라이언트가 받은 뒤 기존 조회 API로 다시 가져온다.
+    // SSE 응답은 스트림이라 공통 ApiResponse 포맷을 쓰지 않는다.
+    @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter subscribe(@AuthenticationPrincipal CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+
+        return notificationService.subscribe(principal.getUserId());
+    }
 
     //로그인한 회원의 알림 목록 커서 페이징 조회 (공지사항 게시글 ID + title 포함)
     //cursorId: 이전 응답 meta.nextCursor 값. 없으면 최신 알림부터 조회한다.
