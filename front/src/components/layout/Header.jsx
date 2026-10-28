@@ -12,7 +12,7 @@ import { Button, Icon, Modal, Pill } from '../common/index';
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
-  const { items, unreadCount, markAllRead } = useNotifications();
+  const { items, unreadCount, hasMore, loadingMore, openList, loadMore, markAllRead } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -79,6 +79,7 @@ export function Header() {
               onClick={() => {
                 setNotifOpen(true);
                 markAllRead();
+                openList(); // 알림창을 열 때마다 최신 1페이지로 목록을 새로 불러온다.
               }}
             >
               <Icon name="bell" size={16} />
@@ -104,7 +105,15 @@ export function Header() {
       </div>
       {notifOpen && (
         <Modal title="알림" onClose={() => setNotifOpen(false)}>
-          <div className="grid" style={{ gap: 8, minWidth: 280, maxWidth: 360 }}>
+          <div
+            className="grid"
+            style={{ gap: 8, minWidth: 280, maxWidth: 360, maxHeight: 360, overflowY: 'auto' }}
+            onScroll={(e) => {
+              const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+              // 스크롤이 바닥에서 40px 이내로 가까워지면 다음 페이지를 미리 불러온다.
+              if (scrollHeight - scrollTop - clientHeight < 40) loadMore();
+            }}
+          >
             {items.length ? (
               items.map((n) => (
                 <Link key={n.id} to={n.to} className="notif-item" onClick={() => setNotifOpen(false)}>
@@ -116,6 +125,10 @@ export function Header() {
               ))
             ) : (
               <p className="state-msg">새 알림이 없습니다</p>
+            )}
+            {loadingMore && <p className="small muted" style={{ textAlign: 'center' }}>불러오는 중...</p>}
+            {!hasMore && items.length > 0 && (
+              <p className="small muted" style={{ textAlign: 'center' }}>마지막 알림입니다</p>
             )}
           </div>
         </Modal>

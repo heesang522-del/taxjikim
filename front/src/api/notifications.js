@@ -26,9 +26,11 @@ async function requestNotifications(config) {
   }
 }
 
-// 로그인한 회원의 알림 목록 조회 (최신순)
-export function getNotifications() {
-  return requestNotifications({ url: '/notifications' })
+// 로그인한 회원의 알림 목록 커서 페이징 조회 (최신순)
+// cursorId: 이전 조회 결과의 meta.nextCursor 값. 없으면 최신 알림부터 조회한다.
+// size: 한 번에 가져올 개수. 생략하면 서버 기본값(20)을 쓴다.
+export function getNotifications({ cursorId, size } = {}) {
+  return requestNotifications({ url: '/notifications', params: { cursorId, size } })
 }
 
 // 로그인한 회원의 미읽음 알림 수 조회 (뱃지용 폴링에 사용)
