@@ -17,36 +17,59 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 public class TaxValidator {
 
+    // DECIMAL(15, 2)의 저장 범위다.
     private static final BigDecimal MAX_AMOUNT =
             new BigDecimal("9999999999999.99");
 
+    // DB 조건에 따라 세율은 0 이상 100 이하를 허용한다.
     private static final BigDecimal MAX_RATE =
             new BigDecimal("100");
 
+    private static final int MAX_UNSIGNED_SMALL_INT = 65535;
+    private static final int MAX_DESCRIPTION_LENGTH = 255;
+
+    // 카테고리 목록은 제한하지 않고 코드 형식과 길이만 검사한다.
+    private static final Pattern CATEGORY_PATTERN =
+            Pattern.compile("[A-Z][A-Z0-9_]{0,49}");
+
+    // 현재 API에서 사용하는 사업장 지역 코드다.
     private static final Set<String> BUSINESS_REGIONS = Set.of(
             "CAPITAL_CONGESTION",
             "CAPITAL_OTHER",
             "NON_CAPITAL"
     );
 
+    // 현재 API에서 사용하는 거래 구분이다.
     private static final Set<String> TRANSACTION_TYPES = Set.of(
             "INCOME",
             "EXPENSE",
             "UNKNOWN"
     );
 
+    // 현재 API에서 사용하는 저장 상태다.
+    private static final Set<String> SAVE_STATUSES = Set.of(
+            "TEMP",
+            "SAVED"
+    );
+
     public void validateId(Long value, String field) {
         if (value == null || value <= 0) {
-            throw invalid(field, "유효한 번호가 필요합니다.");
+            throw invalid(
+                    field,
+                    "유효한 번호가 필요합니다."
+            );
         }
     }
 
     public void validateTaxYear(Integer taxYear) {
-        if (taxYear == null || taxYear < 1000 || taxYear > 9999) {
+        if (taxYear == null
+                || taxYear < 1000
+                || taxYear > 9999) {
             throw invalid(
                     "taxYear",
                     "귀속 연도를 네 자리 숫자로 입력해주세요."
@@ -88,6 +111,7 @@ public class TaxValidator {
             return;
         }
 
+        // 회원 분석은 분석 소유자에게만 허용한다.
         if (input.getUserId() != null
                 && Objects.equals(
                 input.getUserId(),
@@ -96,7 +120,7 @@ public class TaxValidator {
             return;
         }
 
-        // 비회원 분석은 해당 분석을 생성한 서버 세션에서만 접근한다.
+        // 비회원 분석은 해당 분석을 생성한 서버 세션에서만 허용한다.
         if (input.getUserId() == null
                 && access.getGuestInputIds() != null
                 && access.getGuestInputIds()
@@ -109,7 +133,10 @@ public class TaxValidator {
 
     public void validateInput(TaxInputRequest request) {
         if (request == null) {
-            throw invalid("input", "분석 기본정보가 필요합니다.");
+            throw invalid(
+                    "input",
+                    "분석 기본정보가 필요합니다."
+            );
         }
 
         validateTaxYear(request.getTaxYear());
@@ -142,7 +169,8 @@ public class TaxValidator {
 
         String region = request.getBusinessRegion();
 
-        if (region != null && !BUSINESS_REGIONS.contains(region)) {
+        if (region != null
+                && !BUSINESS_REGIONS.contains(region)) {
             throw invalid(
                     "businessRegion",
                     "지원하지 않는 사업장 지역 코드입니다."
@@ -151,20 +179,29 @@ public class TaxValidator {
 
         String saveStatus = request.getSaveStatus();
 
-        if (!"TEMP".equals(saveStatus)
-                && !"SAVED".equals(saveStatus)) {
+        if (saveStatus == null
+                || !SAVE_STATUSES.contains(saveStatus)) {
             throw invalid(
                     "saveStatus",
                     "저장 상태는 TEMP 또는 SAVED여야 합니다."
             );
         }
+
+        /*
+         * 기본정보의 기존 저장 검증만 수행한다.
+         * 사업자 여부에 따른 분석 필수 조건은
+         * 최종 분석을 수행하는 서버 경로에서 별도로 검사해야 한다.
+         */
     }
 
     public void validateTransactions(
             List<TaxTransactionDto> rows
     ) {
         if (rows == null || rows.isEmpty()) {
-            throw invalid("rows", "저장할 거래가 없습니다.");
+            throw invalid(
+                    "rows",
+                    "저장할 거래가 없습니다."
+            );
         }
 
         for (int index = 0; index < rows.size(); index++) {
@@ -180,12 +217,17 @@ public class TaxValidator {
             String field
     ) {
         if (row == null) {
-            throw invalid(field, "거래가 비어 있습니다.");
+            throw invalid(
+                    field,
+                    "거래가 비어 있습니다."
+            );
         }
 
         String type = row.getTransactionType();
 
-        if (type != null && !TRANSACTION_TYPES.contains(type)) {
+        // 거래 구분의 NULL 허용은 현재 DB 구조를 따른다.
+        if (type != null
+                && !TRANSACTION_TYPES.contains(type)) {
             throw invalid(
                     field + ".transactionType",
                     "INCOME, EXPENSE, UNKNOWN 중 하나여야 합니다."
@@ -204,26 +246,29 @@ public class TaxValidator {
         }
 
         /*
-         * 저장 단계에서는 거래 연도를 분석 연도와 강제로 맞추지 않는다.
-         * 실제 계산 대상 거래의 범위는 계산 엔진에서 검증한다.
+         * 거래 날짜 자체의 범위를 검사한다.
+         * 거래 연도와 분석 귀속 연도의 일치 여부는
+         * 서비스의 저장 경로에서 검사한다.
          */
 
-        if (row.getDescription() != null
-                && row.getDescription().codePointCount(
+        String description = row.getDescription();
+
+        if (description != null
+                && description.codePointCount(
                 0,
-                row.getDescription().length()
-        ) > 255) {
+                description.length()
+        ) > MAX_DESCRIPTION_LENGTH) {
             throw invalid(
                     field + ".description",
                     "거래 설명은 255자 이하여야 합니다."
             );
         }
 
-        if (row.getCategory() == null
-                || row.getCategory().isBlank()) {
-            row.setCategory("UNCLASSIFIED");
-        }
-
+        /*
+         * 검증 중에는 거래 값을 변경하지 않는다.
+         * 빈 카테고리의 기본값 설정은 서비스의
+         * copyStoredTransaction에서 수행한다.
+         */
         validateCategory(
                 row.getCategory(),
                 field + ".category"
@@ -260,34 +305,22 @@ public class TaxValidator {
     }
 
     public void validateCategory(String category) {
-        validateCategory(category, "category");
+        validateCategory(
+                category,
+                "category"
+        );
     }
 
     private void validateCategory(
             String category,
             String field
     ) {
-        // 실제 허용 카테고리 목록이 확정되면 목록 검증도 추가한다.
-        if (category == null
-                || !category.matches("[A-Z][A-Z0-9_]{0,49}")) {
+        // 실제 카테고리 목록과 관계없이 코드 형식만 검사한다.
+        if (category == null // 만약 카테고리가 없거나 , 정해진 코드 형식에 맞지 않으면 오류 발생
+                || !CATEGORY_PATTERN.matcher(category).matches()) {
             throw invalid(
                     field,
                     "카테고리는 영문 대문자로 시작하는 50자 이하 코드여야 합니다."
-            );
-        }
-    }
-
-    /*
-     * DB 저장 검증과 역산 검증은 구분한다.
-     * 실제로 세전 금액을 역산하는 계산 경로에서만 호출한다.
-     */
-    public void validateInverseRate(BigDecimal rate) {
-        if (rate == null
-                || rate.signum() < 0
-                || rate.compareTo(MAX_RATE) >= 0) {
-            throw invalid(
-                    "deductedTaxRate",
-                    "세전 금액 역산에는 0 이상 100 미만의 세율이 필요합니다."
             );
         }
     }
@@ -302,10 +335,14 @@ public class TaxValidator {
                 return;
             }
 
-            throw invalid(field, "필수 입력값입니다.");
+            throw invalid(
+                    field,
+                    "필수 입력값입니다."
+            );
         }
 
-        if (value < 0 || value > 65535) {
+        // 실제 나이 제한이 아니라 DB 타입의 저장 범위다.
+        if (value < 0 || value > MAX_UNSIGNED_SMALL_INT) {
             throw invalid(
                     field,
                     "0부터 65535 사이의 정수여야 합니다."
@@ -319,18 +356,25 @@ public class TaxValidator {
             int scale,
             String field
     ) {
-        // 거래의 금액·세율 누락은 DB 설계에 따라 허용한다.
+        // 거래의 금액·세율 NULL 허용은 현재 DB 구조를 따른다.
         if (value == null) {
             return;
         }
 
-        if (value.signum() < 0 || value.compareTo(max) > 0) {
-            throw invalid(field, "저장 가능한 숫자 범위를 벗어났습니다.");
+        if (value.signum() < 0
+                || value.compareTo(max) > 0) {
+            throw invalid(
+                    field,
+                    "저장 가능한 숫자 범위를 벗어났습니다."
+            );
         }
 
         try {
-            // 저장 과정에서 금액이나 세율을 임의로 반올림하지 않는다.
-            value.setScale(scale, RoundingMode.UNNECESSARY);
+            // 값을 반올림하지 않고 허용 자릿수인지 확인한다.
+            value.setScale(
+                    scale,
+                    RoundingMode.UNNECESSARY
+            );
         } catch (ArithmeticException exception) {
             throw invalid(
                     field,
@@ -343,7 +387,10 @@ public class TaxValidator {
             MultipartFile file
     ) throws IOException {
         if (file == null || file.isEmpty()) {
-            throw invalid("file", "PDF 파일이 비어 있습니다.");
+            throw invalid(
+                    "file",
+                    "PDF 파일이 비어 있습니다."
+            );
         }
 
         String filename = file.getOriginalFilename();
@@ -351,20 +398,32 @@ public class TaxValidator {
         if (filename == null
                 || !filename.toLowerCase(Locale.ROOT)
                 .endsWith(".pdf")) {
-            throw invalid("file", "PDF 파일만 업로드할 수 있습니다.");
+            throw invalid(
+                    "file",
+                    "PDF 파일만 업로드할 수 있습니다."
+            );
         }
 
         byte[] bytes = file.getBytes();
 
+        // 확장자뿐 아니라 PDF 파일의 시작 표식도 검사한다.
         if (bytes.length < 5
                 || bytes[0] != '%'
                 || bytes[1] != 'P'
                 || bytes[2] != 'D'
                 || bytes[3] != 'F'
                 || bytes[4] != '-') {
-            throw invalid("file", "올바른 PDF 파일이 아닙니다.");
+            throw invalid(
+                    "file",
+                    "올바른 PDF 파일이 아닙니다."
+            );
         }
 
+        /*
+         * 파일 크기는 서버의 multipart 설정에서 제한한다.
+         * PDF 전체 구조와 페이지 검사는 후속 처리에서 수행한다.
+         * 저장된 파일과의 중복 여부는 별도 DB 검사 대상이다.
+         */
         return bytes;
     }
 

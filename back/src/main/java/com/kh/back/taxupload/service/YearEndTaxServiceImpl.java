@@ -54,8 +54,11 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             AccessContext access,
             TaxInputRequest request
     ) {
-        TaxInputRequest input =
-                normalizeInput(request, null, userId(access));
+        TaxInputRequest input = normalizeInput(
+                request,
+                null,
+                userId(access)
+        );
 
         taxValidator.validateInput(input);
 
@@ -112,11 +115,12 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
         if (existing.getUserId() == null
                 && "SAVED".equals(updated.getSaveStatus())) {
-
-            Long loginUserId = taxValidator.requireLogin(access);
+            Long loginUserId =
+                    taxValidator.requireLogin(access);
 
             if (access.getGuestInputIds() == null
-                    || !access.getGuestInputIds().contains(taxInputId)) {
+                    || !access.getGuestInputIds()
+                    .contains(taxInputId)) {
                 throw new ApiException(
                         HttpStatus.FORBIDDEN,
                         "ACCESS_DENIED",
@@ -127,6 +131,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             updated.setUserId(loginUserId);
         }
 
+        // 기본정보 변경 후 기존 계산 결과를 무효화한다.
         taxMapper.updateInput(updated);
         taxMapper.deleteResult(taxInputId);
 
@@ -144,8 +149,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     }
 
     /**
-     * 미저장 거래의 최초 저장에만 사용한다.
-     * 기존 거래의 수정·삭제는 개별 API로 처리한다.
+     * 신규 거래 저장 전용이다.
+     * 기존 거래는 개별 수정·삭제 API로 변경한다.
      */
     @Override
     @Transactional
@@ -158,10 +163,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 requireInput(access, taxInputId, true);
 
         if (rows == null) {
-            throw invalid(
-                    "rows",
-                    "저장할 거래 목록이 필요합니다."
-            );
+            throw invalid("rows", "저장할 거래 목록이 필요합니다.");
         }
 
         List<TaxTransactionDto> requested = new ArrayList<>();
@@ -235,12 +237,12 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         List<TaxTransactionDto> existing =
                 taxMapper.findTransactions(taxInputId);
 
-        // 같은 내용의 재요청은 기존 거래번호를 유지한다.
+        // 동일한 저장 재요청은 기존 거래번호를 유지한다.
         if (sameTransactions(existing, requested)) {
             return existing;
         }
 
-        // 기존 전체 거래를 삭제하거나 다시 저장하지 않는다.
+        // 기존 전체 거래를 삭제하거나 새 목록으로 교체하지 않는다.
         if (!existing.isEmpty()) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
@@ -281,8 +283,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     }
 
     /**
-     * 프론트에서 전달한 카테고리만 해당 거래에 반영한다.
-     * 신규 분석 생성, 전체 거래 저장, 변경 이력 저장은 하지 않는다.
+     * 프론트에서 받은 카테고리만 해당 기존 거래에 반영한다.
+     * 전체 거래 재저장과 별도 변경 이력 저장은 수행하지 않는다.
      */
     @Override
     @Transactional
@@ -292,6 +294,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long transactionId,
             String category
     ) {
+        // 분석 접근 권한을 확인하고 부모 분석을 잠근다.
         requireInput(access, taxInputId, true);
 
         taxValidator.validateCategory(category);
@@ -299,7 +302,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         TaxTransactionDto existing =
                 requireTransaction(taxInputId, transactionId);
 
-        // 실제 변경이 없으면 UPDATE도 실행하지 않는다.
+        // 같은 값이면 불필요한 UPDATE를 실행하지 않는다.
         if (Objects.equals(existing.getCategory(), category)) {
             return;
         }
@@ -321,9 +324,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         invalidateAfterTransactionChange(taxInputId);
     }
 
-    /**
-     * 프론트에서 지정한 거래 한 건만 삭제한다.
-     */
     @Override
     @Transactional
     public void deleteTransaction(
@@ -421,7 +421,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
     /**
      * PDF 검증·OCR·파싱만 수행한다.
-     * DB 저장은 별도 최초 저장 요청에서 수행한다.
+     * 거래 저장은 별도 저장 요청에서 수행한다.
      */
     @Override
     public PdfParseResponseDto parsePdf(
@@ -439,11 +439,12 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             List<PageOcrResultDto> pages =
                     taxOcrService.extractPages(bytes);
 
-            PdfParseResponseDto response = pythonPdfClient.analyze(
-                    bytes,
-                    file.getOriginalFilename(),
-                    pages
-            );
+            PdfParseResponseDto response =
+                    pythonPdfClient.analyze(
+                            bytes,
+                            file.getOriginalFilename(),
+                            pages
+                    );
 
             if (response == null
                     || response.getTransactions() == null
@@ -509,7 +510,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             if (!Boolean.TRUE.equals(source.getParseSuccess())
                     || Boolean.TRUE.equals(source.getNeedsReview())
                     || Boolean.TRUE.equals(source.getExcluded())) {
-
                 String reason = source.getFailureReason();
 
                 markPdfReview(
@@ -569,7 +569,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             row.setAmountBasis(source.getAmountBasis());
             row.setTaxDeducted(source.getTaxDeducted());
             row.setDocumentYear(source.getDocumentYear());
-
             row.setParseSuccess(true);
             row.setNeedsReview(false);
             row.setExcluded(false);
@@ -756,9 +755,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return row;
     }
 
-    private void invalidateAfterTransactionChange(
-            Long taxInputId
-    ) {
+    // 거래 변경 후 이전 계산 결과와 분석 갱신 시각을 정리한다.
+    private void invalidateAfterTransactionChange(Long taxInputId) {
         taxMapper.deleteResult(taxInputId);
         taxMapper.touchInput(taxInputId);
     }
@@ -841,7 +839,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 : "PDF_PROCESSING_FAILED";
     }
 
-    // 기존 계산 처리 로그이며 거래 변경 이력과는 별개다.
+    // 계산 처리 로그는 거래 수정 이력과 별개인 기존 기능이다.
     private void writeProcessLog(
             Long taxInputId,
             Long userId,
@@ -857,16 +855,16 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         );
 
         try {
-            template.executeWithoutResult(transactionStatus ->
-                    taxMapper.insertProcessLog(
-                            taxInputId,
-                            userId,
-                            processType,
-                            status,
-                            failReason
-                    )
+            template.executeWithoutResult(
+                    transactionStatus ->
+                            taxMapper.insertProcessLog(
+                                    taxInputId,
+                                    userId,
+                                    processType,
+                                    status,
+                                    failReason
+                            )
             );
-
         } catch (RuntimeException exception) {
             log.error(
                     "처리 이력 저장 실패. 유형={}, 상태={}, 예외={}",

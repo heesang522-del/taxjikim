@@ -1,5 +1,7 @@
 import { client } from './client';
 
+// 서버의 공통 응답과 오류를 처리한다.
+// 본문이 없는 204 응답도 정상적으로 처리한다.
 async function request(config) {
   try {
     const response = await client.request(config);
@@ -83,6 +85,7 @@ function optionalInteger(value, label, fallback = null) {
   return number;
 }
 
+// 분석 기본정보를 서버 요청 형식으로 정리한다.
 function normalizeTaxInput(input) {
   if (!input || typeof input !== 'object') {
     throw new Error('분석 기본정보가 필요합니다.');
@@ -94,11 +97,8 @@ function normalizeTaxInput(input) {
     ...input,
     taxYear: validateYear(input.taxYear),
     businessRegion: region || null,
-
     age: optionalInteger(input.age, '만 나이'),
-
     dependentCount: optionalInteger(input.dependentCount, '부양가족 수', 0),
-
     donationAmount: optionalNumber(input.donationAmount, '기부금', 0),
   };
 }
@@ -141,6 +141,8 @@ function validateTransactionDate(value) {
   return date;
 }
 
+// 저장 응답의 거래를 원래 화면 거래와 연결한다.
+// 동일한 내용의 거래는 별도 배열에 담아 순서대로 연결한다.
 function transactionKey(row) {
   return JSON.stringify([
     row.transactionType,
@@ -148,14 +150,11 @@ function transactionKey(row) {
     row.description,
     row.category,
     Number(row.amount),
-
     row.preTaxIncome == null ? null : Number(row.preTaxIncome),
-
     row.deductedTaxRate == null ? null : Number(row.deductedTaxRate),
   ]);
 }
 
-// 신규 거래 최초 저장 시에만 사용한다.
 export async function createTaxInput(input) {
   return request({
     url: '/tax/inputs/create',
@@ -196,8 +195,8 @@ export async function deleteTaxInput(taxInputId) {
   });
 }
 
-// 기존 거래 편집에서는 호출하지 않는다.
-// 미저장 거래의 최초 저장에만 사용한다.
+// 신규 거래 저장 전용이다.
+// 기존 거래의 수정 반영에서는 호출하지 않는다.
 export async function saveTransactions(taxInputId, rows) {
   if (!Array.isArray(rows)) {
     throw new Error('저장할 거래 목록이 필요합니다.');
@@ -217,8 +216,7 @@ export async function getTransactions(taxInputId) {
   });
 }
 
-// 변경된 카테고리 한 건만 전송한다.
-// 분석번호와 거래번호는 URL로 전달한다.
+// 거래번호는 주소로 보내고 변경된 카테고리만 본문에 담는다.
 export async function updateTransaction(taxInputId, transactionId, category) {
   validateCategory(category);
 
@@ -229,7 +227,6 @@ export async function updateTransaction(taxInputId, transactionId, category) {
   });
 }
 
-// 삭제할 거래의 식별자만 전송한다.
 export async function deleteTransaction(taxInputId, transactionId) {
   return request({
     url: `${transactionPath(taxInputId, transactionId)}/delete`,
@@ -251,7 +248,8 @@ export async function calculateTaxInput(taxInputId) {
   });
 }
 
-// 파싱 요청만 수행하며 거래를 저장하지 않는다.
+// PDF 분석만 요청한다.
+// 분석한 거래의 최초 저장은 별도 저장 API에서 수행한다.
 export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   if (!file) {
     throw new Error('PDF 파일을 선택해주세요.');
@@ -262,6 +260,7 @@ export async function parsePdf(file, { signal, taxInputId = null } = {}) {
 
   if (taxInputId !== null) {
     validateId(taxInputId, '분석번호');
+
     formData.append('taxInputId', String(taxInputId));
   }
 
@@ -325,37 +324,29 @@ export async function uploadTaxPdfApi(file, options = {}) {
   };
 }
 
+// 저장 식별자를 제외한 입력 상태를 비교한다.
+// 식별자가 연결되었다는 이유만으로 입력 변경으로 판단하지 않는다.
 export function getTaxReviewSignature(state) {
   function inputOnly(row) {
-    const { transactionId, taxInputId, persisted, ...input } = row;
-
-    return input;
+    return Object.fromEntries(
+      Object.entries(row).filter(([key]) => key !== 'transactionId' && key !== 'taxInputId' && key !== 'persisted')
+    );
   }
 
   return JSON.stringify({
     manualRows: (state.manualRows ?? []).map(inputOnly),
     fileRows: (state.fileRows ?? []).map(inputOnly),
-
     evidenceDocuments: (state.evidenceDocuments ?? []).map((document) => ({
       key: document.key,
       name: document.name,
       rows: (document.rows ?? []).map(inputOnly),
     })),
-
     profile: state.profile,
   });
 }
 
-/**
- * 프론트에서 변경 전후를 비교한다.
- *
- * 서버에 보내는 내용:
- * - 카테고리 변경: 해당 거래의 변경된 카테고리
- * - 삭제: 해당 거래의 분석번호와 거래번호
- *
- * 전체 거래 목록, 수정 전 값, 변경 이력은 전송하지 않는다.
- * 변경 이력은 서버에서 DB 원본을 조회해 저장한다.
- */
+// 변경 전후 거래를 비교하여 수정 또는 삭제된 거래만 처리한다.
+// 수정 요청에는 카테고리만 담고, 전체 거래를 재저장하지 않는다.
 export async function saveTaxReview(proposed, { originalState, onOperationSuccess } = {}) {
   if (!originalState || !proposed) {
     throw new Error('변경 전후 거래 목록이 필요합니다.');
@@ -372,13 +363,14 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
           throw new Error('화면 거래 번호가 중복됩니다.');
         }
 
+        const category = evidence ? (row.category ?? 'UNCLASSIFIED') : (row.cat ?? 'UNCLASSIFIED');
+
         result.set(key, {
           key,
           source,
           rowId: row.id,
           row,
-
-          category: String(evidence ? (row.category ?? 'UNCLASSIFIED') : (row.cat ?? 'UNCLASSIFIED')).trim(),
+          category: String(category).trim(),
         });
       }
     }
@@ -399,7 +391,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
   const operations = [];
   const serverTargets = new Set();
 
-  // 현재 화면은 카테고리 수정과 거래 삭제만 지원한다.
+  // 현재 편집창은 카테고리 수정과 거래 삭제만 지원한다.
   const fixedFields = [
     'kind',
     'date',
@@ -425,7 +417,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
     }
   }
 
-  // 비교 작업은 프론트 안에서만 수행한다.
+  // 모든 변경 대상을 검사한 뒤 서버 요청을 시작한다.
   for (const [key, previous] of before) {
     const next = after.get(key);
     const removing = !next;
@@ -443,7 +435,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
         throw new Error('현재 편집창에서는 카테고리 수정과 거래 삭제만 지원합니다.');
       }
 
-      // 변경 없는 거래는 요청 목록에 넣지 않는다.
+      // 변경하지 않은 거래는 요청 대상에서 제외한다.
       if (next.category === previous.category) {
         continue;
       }
@@ -457,8 +449,14 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
 
     const persisted = transactionId !== null;
 
+    // 미저장 거래는 기존 DB 행을 수정할 수 없다.
+    if (!persisted && !removing) {
+      throw new Error('아직 DB에 저장되지 않은 거래입니다. ' + '거래 저장 후 다시 수정해주세요.');
+    }
+
     if (persisted) {
       validateId(transactionId, '기존 거래번호');
+
       validateId(taxInputId, '기존 분석번호');
 
       const target = `${taxInputId}:${transactionId}`;
@@ -485,7 +483,6 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
   const completedOperations = [];
 
   try {
-    // 서버에는 operations에 포함된 변경 거래만 보낸다.
     for (const operation of operations) {
       if (operation.persisted) {
         if (operation.type === 'delete') {
@@ -503,46 +500,45 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
         }
       }
 
-      // 미저장 거래의 편집은 서버 요청 없이 화면만 반영한다.
+      // 저장된 거래는 서버 성공 이후 화면에 반영한다.
+      // 미저장 거래 삭제는 화면에서만 처리한다.
       completedOperations.push(operation);
 
-      // 저장된 거래는 서버 성공 응답을 받은 뒤 화면을 갱신한다.
       await onOperationSuccess?.(operation);
     }
   } catch (error) {
+    // 일부 성공 후 실패한 경우 성공한 작업을 호출부에 전달한다.
     error.completedOperations = completedOperations;
+
     throw error;
   }
 
   return {
     operations: completedOperations,
-
     updatedCount: completedOperations.filter((item) => item.persisted && item.type === 'update').length,
-
     deletedCount: completedOperations.filter((item) => item.persisted && item.type === 'delete').length,
-
     localCount: completedOperations.filter((item) => !item.persisted).length,
   };
 }
 
-/**
- * 미저장 정상 거래의 최초 저장 전용이다.
- * 기존 거래의 수정·삭제 버튼에서는 호출하지 않는다.
- */
+// 신규 정상 거래를 저장하고 DB 거래번호를 화면에 연결한다.
+// 기존 거래의 수정 반영에서는 호출하지 않는다.
 export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved } = {}) {
   if (typeof onInputCreated !== 'function' || typeof onGroupSaved !== 'function') {
-    throw new Error('최초 저장 결과를 반영할 함수가 필요합니다.');
+    throw new Error('저장 결과를 반영할 함수가 필요합니다.');
   }
 
   const groups = new Map();
 
   function collect(rows, source) {
     for (const row of rows ?? []) {
+      // 이미 저장된 거래와 검토·제외 대상은 저장하지 않는다.
       if (row.transactionId != null || row.needsReview === true || row.excluded === true || row.selected === false) {
         continue;
       }
 
       const date = validateTransactionDate(row.date);
+
       const year = validateYear(date.slice(0, 4));
 
       const kind = String(row.kind ?? '')
@@ -571,20 +567,15 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
         throw new Error('거래 설명을 입력해주세요.');
       }
 
-      const category = validateCategory(String(row.cat || 'UNCLASSIFIED').trim());
-
       const payload = {
         transactionType,
         transactionDate: date,
         description,
-        category,
+        category: validateCategory(String(row.cat || 'UNCLASSIFIED').trim()),
         amount,
         actualAmount: amount,
-
         preTaxIncome: optionalNumber(row.preTaxIncome, '세전 금액'),
-
         deductedTaxRate: optionalNumber(row.deductedTaxRate, '차감 세율'),
-
         amountBasis: row.amountBasis ?? 'UNSPECIFIED',
         valueKind: row.valueKind ?? 'DETAIL',
         needsReview: false,
@@ -604,6 +595,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
   }
 
   collect(state.manualRows, 'manual');
+
   collect(state.fileRows, 'file');
 
   if (groups.size === 0) {
@@ -618,6 +610,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
   let savedCount = 0;
 
   for (const [year, entries] of groups) {
+    // 같은 화면에서 재시도할 때 기존에 생성한 분석번호를 사용한다.
     let taxInputId = state.taxPendingInputIdsByYear?.[year] ?? null;
 
     if (taxInputId == null) {
@@ -636,7 +629,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
         taxInputId,
       });
     } else {
-      validateId(taxInputId, '최초 저장 분석번호');
+      validateId(taxInputId, '저장 분석번호');
     }
 
     const response = await saveTransactions(
@@ -647,7 +640,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
     const savedRows = response?.data;
 
     if (!Array.isArray(savedRows) || savedRows.length !== entries.length) {
-      throw new Error('최초 저장 결과의 거래 건수가 다릅니다.');
+      throw new Error('저장 결과의 거래 건수가 다릅니다.');
     }
 
     const buckets = new Map();
@@ -671,6 +664,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
       buckets.get(key).push(row);
     }
 
+    // 저장 응답의 DB 거래번호를 원래 화면 행에 연결한다.
     const bindings = entries.map((entry) => {
       const saved = buckets.get(transactionKey(entry.payload))?.shift();
 

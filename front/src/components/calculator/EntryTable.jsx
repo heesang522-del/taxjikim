@@ -56,6 +56,7 @@ function kindLabel(kind) {
   return '미확인';
 }
 
+// 직접 입력과 파일 거래를 같은 화면 구조로 변환한다.
 function collectRows(state) {
   const result = [];
 
@@ -71,7 +72,6 @@ function collectRows(state) {
         category: row.cat || 'UNCLASSIFIED',
         amount: getTransactionCashAmount(row),
 
-        // 식별자는 화면에 표시하지 않는다.
         taxInputId: row.taxInputId ?? null,
         transactionId: row.transactionId ?? null,
 
@@ -94,7 +94,7 @@ function hasPendingRows(state) {
   return collectRows(state).some((row) => !row.persisted && !row.needsReview && row.selected);
 }
 
-// 서버에서 성공한 거래만 화면 상태에 반영한다.
+// 반영된 수정·삭제를 화면과 저장 스냅샷에 적용한다.
 function applyOperation(state, operation) {
   function change(items, source) {
     return (items ?? []).flatMap((row) => {
@@ -108,6 +108,7 @@ function applyOperation(state, operation) {
 
   const taxSavedSnapshots = (state.taxSavedSnapshots ?? []).map((snapshot) => ({
     ...snapshot,
+
     rows: (snapshot.rows ?? []).flatMap((row) => {
       const matching =
         operation.persisted && row.taxInputId === operation.taxInputId && row.transactionId === operation.transactionId;
@@ -175,24 +176,26 @@ export function EntryTable() {
 
   const rowKeys = JSON.stringify(rows.map((row) => row.key).sort());
 
-  // 새로운 거래가 추가됐을 때만 팝업을 자동으로 연다.
-  // 최초 저장 후 거래번호만 갱신되면 다시 열리지 않는다.
+  // 새 거래가 추가되면 팝업을 자동으로 연다.
+  // 거래번호나 카테고리만 바뀌면 다시 열지 않는다.
   useEffect(() => {
     if (busy) return;
 
-    const keys = new Set(JSON.parse(rowKeys));
+    const currentKeys = new Set(JSON.parse(rowKeys));
 
-    const added = [...keys].some((key) => !previousKeysRef.current.has(key));
+    const hasNewRows = [...currentKeys].some((key) => !previousKeysRef.current.has(key));
 
-    previousKeysRef.current = keys;
+    previousKeysRef.current = currentKeys;
 
-    if (added) {
+    if (hasNewRows) {
       setOpen(true);
     }
   }, [rowKeys, busy]);
 
+  // React 상태와 실제 팝업의 열림 상태를 맞춘다.
   useEffect(() => {
     const dialog = dialogRef.current;
+
     if (!dialog) return;
 
     if (open && !dialog.open) {
@@ -206,6 +209,7 @@ export function EntryTable() {
     if (!open) return;
 
     const previousOverflow = document.body.style.overflow;
+
     document.body.style.overflow = 'hidden';
 
     return () => {
@@ -247,13 +251,16 @@ export function EntryTable() {
 
     resetDrafts();
     setError('');
+
     setMessage('아직 반영하지 않은 변경을 되돌렸습니다.');
   }
 
   function resetCategory(key) {
     setDrafts((previous) => {
       const next = { ...previous };
+
       delete next[key];
+
       return next;
     });
   }
@@ -288,22 +295,24 @@ export function EntryTable() {
   }
 
   function applyBulkCategory() {
-    if (!selectedBulk) return;
+    if (!selectedBulk || busy) return;
 
     clearStatus();
 
     setDrafts((previous) => ({
       ...previous,
+
       ...Object.fromEntries(selectedRows.map((row) => [row.key, selectedBulk])),
     }));
 
     setBulkCategory('');
   }
 
+  // 서버에 저장된 거래는 성공 응답 후에만 반영한다.
+  // 미저장 거래의 편집은 저장 전 화면 데이터에만 반영한다.
   function commitOperation(operation) {
     useTaxStore.setState((current) => applyOperation(current, operation));
 
-    // 성공한 항목의 초안만 제거한다.
     resetCategory(operation.key);
 
     if (operation.type === 'delete') {
@@ -313,36 +322,32 @@ export function EntryTable() {
     setCheckedKeys((previous) => previous.filter((key) => key !== operation.key));
   }
 
-  function updateSavedSignature(initial, completedKeys) {
-    useTaxStore.setState((current) => {
-      const remainingChanges = collectRows(current).some((row) => {
-        if (completedKeys.has(row.key)) return false;
+  function hasRemainingChanges(current, completedKeys) {
+    return collectRows(current).some((row) => {
+      if (completedKeys.has(row.key)) {
+        return false;
+      }
 
-        return deletedKeys.includes(row.key) || (drafts[row.key] !== undefined && drafts[row.key] !== row.category);
-      });
-
-      return {
-        taxLastSavedSignature:
-          !remainingChanges &&
-          !hasPendingRows(current) &&
-          JSON.stringify(current.profile) === JSON.stringify(initial.profile)
-            ? getTaxReviewSignature(current)
-            : null,
-      };
+      return deletedKeys.includes(row.key) || (drafts[row.key] !== undefined && drafts[row.key] !== row.category);
     });
   }
 
-  // 수정과 삭제는 선택한 작업만 각각 전송한다.
   async function submitChanges(action) {
-    if (workingRef.current || useTaxStore.getState().taxSaveBusy) {
+    const initial = useTaxStore.getState();
+
+    if (workingRef.current || initial.taxSaveBusy) {
       return;
     }
 
     clearStatus();
 
-    const initial = useTaxStore.getState();
     const removing = new Set(deletedKeys);
-    const changes = new Map();
+
+    // 저장된 거래의 변경값만 서버 비교 결과에 반영한다.
+    const serverChanges = new Map();
+
+    // 미저장 거래의 변경값은 서버 요청과 분리한다.
+    const localOperations = [];
 
     if (action === 'update') {
       for (const row of collectRows(initial)) {
@@ -352,15 +357,30 @@ export function EntryTable() {
           continue;
         }
 
-        if (!categoriesFor(row.kind).some((item) => item.value === category)) {
+        const allowed = categoriesFor(row.kind).some((item) => item.value === category);
+
+        if (!allowed) {
           setError(`${row.description}: 카테고리를 확인해주세요.`);
           return;
         }
 
-        changes.set(row.key, category);
+        if (row.persisted) {
+          serverChanges.set(row.key, category);
+        } else {
+          localOperations.push({
+            key: row.key,
+            source: row.source,
+            rowId: row.rowId,
+            type: 'update',
+            category,
+            taxInputId: null,
+            transactionId: null,
+            persisted: false,
+          });
+        }
       }
 
-      if (changes.size === 0) {
+      if (serverChanges.size === 0 && localOperations.length === 0) {
         setMessage('반영할 카테고리 변경이 없습니다.');
         return;
       }
@@ -371,6 +391,8 @@ export function EntryTable() {
       return;
     }
 
+    // 미저장 거래의 카테고리는 서버 요청용 상태에서 변경하지 않는다.
+    // 따라서 미저장 거래를 서버 수정 대상으로 보내지 않는다.
     function proposedRows(items, source) {
       return (items ?? []).flatMap((row) => {
         const key = `${source}:${row.id}`;
@@ -379,37 +401,91 @@ export function EntryTable() {
           return removing.has(key) ? [] : [row];
         }
 
-        const category = changes.get(key);
+        const category = serverChanges.get(key);
 
-        return [category === undefined ? row : { ...row, cat: category }];
+        return [
+          category === undefined
+            ? row
+            : {
+                ...row,
+                cat: category,
+              },
+        ];
       });
     }
 
     const proposed = {
       ...initial,
+
       manualRows: proposedRows(initial.manualRows, 'manual'),
+
       fileRows: proposedRows(initial.fileRows, 'file'),
     };
 
     workingRef.current = true;
-    useTaxStore.setState({ taxSaveBusy: true });
+
+    useTaxStore.setState({
+      taxSaveBusy: true,
+    });
 
     try {
-      // 신규 분석 생성·전체 거래 저장은 호출하지 않는다.
       const result = await saveTaxReview(proposed, {
         originalState: initial,
         onOperationSuccess: commitOperation,
       });
 
-      const completedKeys = new Set(result.operations.map((operation) => operation.key));
+      // 서버 요청이 성공한 뒤 저장 전 편집값도 화면에 반영한다.
+      for (const operation of localOperations) {
+        commitOperation(operation);
+      }
 
-      updateSavedSignature(initial, completedKeys);
+      const completedKeys = new Set([
+        ...result.operations.map((operation) => operation.key),
 
-      setMessage(
-        action === 'update'
-          ? `DB 거래 수정 ${result.updatedCount}건` + ` · 미저장 목록 수정 ${result.localCount}건을 반영했습니다.`
-          : `DB 거래 삭제 ${result.deletedCount}건` + ` · 미저장 목록 제거 ${result.localCount}건을 반영했습니다.`
-      );
+        ...localOperations.map((operation) => operation.key),
+      ]);
+
+      const current = useTaxStore.getState();
+
+      const remainingChanges = hasRemainingChanges(current, completedKeys);
+
+      useTaxStore.setState({
+        taxLastSavedSignature:
+          !remainingChanges &&
+          !hasPendingRows(current) &&
+          JSON.stringify(current.profile) === JSON.stringify(initial.profile)
+            ? getTaxReviewSignature(current)
+            : null,
+      });
+
+      if (action === 'update') {
+        const parts = [];
+
+        if (result.updatedCount > 0) {
+          parts.push(`DB 거래 ${result.updatedCount}건을 수정했습니다.`);
+        }
+
+        if (localOperations.length > 0) {
+          parts.push(
+            `미저장 거래 ${localOperations.length}건의 카테고리를 화면에 반영했습니다. ` +
+              'DB에 반영하려면 본문의 저장을 눌러주세요.'
+          );
+        }
+
+        setMessage(parts.join(' '));
+      } else {
+        setMessage(
+          `DB 거래 ${result.deletedCount}건을 삭제하고 ` + `미저장 거래 ${result.localCount}건을 화면에서 제거했습니다.`
+        );
+      }
+
+      // 다른 미반영 작업이 없으면 수정·삭제 성공 후 닫는다.
+      if (!remainingChanges) {
+        previousKeysRef.current = new Set(collectRows(useTaxStore.getState()).map((row) => row.key));
+
+        resetDrafts();
+        setOpen(false);
+      }
     } catch (cause) {
       const completed = cause.completedOperations?.length ?? 0;
 
@@ -417,9 +493,14 @@ export function EntryTable() {
         (cause.message ?? '변경 반영에 실패했습니다.') +
           (completed > 0 ? ` 성공한 변경 ${completed}건은 유지됩니다. 남은 항목을 확인해주세요.` : '')
       );
+
+      // 실패한 항목의 편집값과 팝업은 유지한다.
     } finally {
       workingRef.current = false;
-      useTaxStore.setState({ taxSaveBusy: false });
+
+      useTaxStore.setState({
+        taxSaveBusy: false,
+      });
     }
   }
 
@@ -432,7 +513,8 @@ export function EntryTable() {
     }));
   }
 
-  function commitInitialGroup({ taxYear, taxInputId, rows: savedRows, bindings }) {
+  // 저장 응답의 거래번호를 기존 화면 거래에 연결한다.
+  function commitSavedGroup({ taxYear, taxInputId, rows: storedRows, bindings }) {
     const savedByKey = new Map(bindings.map((binding) => [`${binding.source}:${binding.rowId}`, binding.saved]));
 
     function applySaved(items, source) {
@@ -441,11 +523,11 @@ export function EntryTable() {
 
         if (!saved) return row;
 
-        // 화면 행의 id는 유지해 팝업이 다시 열리지 않도록 한다.
         return {
           ...row,
           taxInputId: saved.taxInputId,
           transactionId: saved.transactionId,
+          cat: saved.category,
           persisted: true,
           needsReview: false,
           excluded: false,
@@ -460,10 +542,13 @@ export function EntryTable() {
         ...(current.taxPendingInputIdsByYear ?? {}),
       };
 
-      delete pending[taxYear];
+      if (pending[taxYear] === taxInputId) {
+        delete pending[taxYear];
+      }
 
       return {
         manualRows: applySaved(current.manualRows, 'manual'),
+
         fileRows: applySaved(current.fileRows, 'file'),
 
         taxInputIdsByYear: {
@@ -475,10 +560,11 @@ export function EntryTable() {
 
         taxSavedSnapshots: [
           ...(current.taxSavedSnapshots ?? []).filter((snapshot) => snapshot.taxInputId !== taxInputId),
+
           {
             taxYear,
             taxInputId,
-            rows: savedRows,
+            rows: storedRows,
           },
         ],
 
@@ -488,27 +574,31 @@ export function EntryTable() {
     });
   }
 
+  // 본문의 저장 버튼에서 미저장 정상 거래를 DB에 저장한다.
   async function savePendingRows() {
-    if (workingRef.current || useTaxStore.getState().taxSaveBusy) {
+    const initial = useTaxStore.getState();
+
+    if (workingRef.current || initial.taxSaveBusy) {
       return;
     }
 
     clearStatus();
 
     if (hasChanges) {
-      setError('수정·삭제 예정 내용을 먼저 반영하거나 되돌린 뒤 최초 저장해주세요.');
+      setError('편집 중인 변경을 먼저 반영하거나 되돌려주세요.');
       return;
     }
 
-    const initial = useTaxStore.getState();
-
     if (!hasPendingRows(initial)) {
-      setMessage('최초 저장할 거래가 없습니다.');
+      setMessage('저장할 거래가 없습니다.');
       return;
     }
 
     workingRef.current = true;
-    useTaxStore.setState({ taxSaveBusy: true });
+
+    useTaxStore.setState({
+      taxSaveBusy: true,
+    });
 
     let completedCount = 0;
 
@@ -517,7 +607,7 @@ export function EntryTable() {
         onInputCreated: rememberCreatedInput,
 
         onGroupSaved: (group) => {
-          commitInitialGroup(group);
+          commitSavedGroup(group);
           completedCount += group.rows.length;
         },
       });
@@ -529,21 +619,20 @@ export function EntryTable() {
             : null,
       }));
 
-      setMessage(`미저장 거래 ${result.savedCount}건을 최초 저장했습니다.`);
-
-      // 최초 저장 요청이 모두 성공했을 때만 팝업을 닫는다.
       resetDrafts();
-      setOpen(false);
+
+      setMessage(`거래 ${result.savedCount}건을 DB에 저장했습니다.`);
     } catch (cause) {
       setError(
-        (cause.message ?? '최초 저장에 실패했습니다.') +
-          (completedCount > 0 ? ` 앞서 저장한 ${completedCount}건은 유지됩니다. 남은 거래를 확인해주세요.` : '')
+        (cause.message ?? '거래 저장에 실패했습니다.') +
+          (completedCount > 0 ? ` 앞서 저장한 ${completedCount}건은 유지됩니다.` : '')
       );
-
-      // 실패하면 팝업을 유지해 오류 확인과 재시도를 허용한다.
     } finally {
       workingRef.current = false;
-      useTaxStore.setState({ taxSaveBusy: false });
+
+      useTaxStore.setState({
+        taxSaveBusy: false,
+      });
     }
   }
 
@@ -551,19 +640,28 @@ export function EntryTable() {
     <Card title="수입·지출 내역" className="tax-entry-card">
       <div className="tax-toolbar">
         <span>
-          전체 {rows.length}건{' · '}수입 {rows.filter((row) => row.kind === 'in').length}건{' · '}지출{' '}
-          {rows.filter((row) => row.kind === 'out').length}건
+          전체 {rows.length}건{' · '}
+          DB 저장 {rows.filter((row) => row.persisted).length}건{' · '}
+          저장 대기 {pendingRows.length}건
         </span>
 
-        <Button disabled={busy} onClick={openEditor}>
-          내역 확인·수정
-        </Button>
+        <div className="tax-separated-actions">
+          <Button disabled={busy || hasChanges || pendingRows.length === 0} onClick={() => void savePendingRows()}>
+            저장
+          </Button>
+
+          <Button disabled={busy || rows.length === 0} onClick={openEditor}>
+            내역 확인·수정
+          </Button>
+        </div>
       </div>
 
-      <p className="tax-notice">수정·삭제는 팝업에서 각각 반영합니다. 기존 분석번호와 거래번호는 유지됩니다.</p>
+      <p className="tax-notice">
+        미저장 거래는 카테고리를 편집한 뒤 저장 버튼으로 DB에 저장합니다. 저장된 거래는 수정 반영 시 DB를 갱신합니다.
+      </p>
 
       <div className="tax-status" aria-live="polite">
-        {message}
+        {error ? <span role="alert">{error}</span> : <span>{message}</span>}
       </div>
 
       <div className="tax-table-area tax-read-area">
@@ -590,10 +688,12 @@ export function EntryTable() {
             {rows.map((row) => (
               <tr key={row.key}>
                 <td>{kindLabel(row.kind)}</td>
+
                 <td>{row.date}</td>
 
                 <td title={row.description}>
                   {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
+
                   {row.description}
                 </td>
 
@@ -634,9 +734,15 @@ export function EntryTable() {
             {error ? (
               <span role="alert">{error}</span>
             ) : (
-              <span>{message || '수정·삭제는 각각 반영합니다. 검토 거래는 최초 저장에서 제외됩니다.'}</span>
+              <span>{message || '카테고리를 선택한 뒤 수정 반영을 눌러주세요.'}</span>
             )}
           </div>
+
+          {pendingRows.length > 0 && (
+            <p className="tax-notice">
+              미저장 거래의 카테고리도 편집할 수 있습니다. 수정 반영 후 본문의 저장을 눌러야 DB에 저장됩니다.
+            </p>
+          )}
 
           <div className="tax-toolbar tax-editor-tools">
             <label>
@@ -646,6 +752,7 @@ export function EntryTable() {
                 disabled={busy}
                 onChange={(event) => {
                   setOnlyUnclassified(event.target.checked);
+
                   setCheckedKeys([]);
                   setBulkCategory('');
                 }}
@@ -711,10 +818,13 @@ export function EntryTable() {
                       }}
                     />
                   </th>
+
                   <th>구분</th>
                   <th>날짜</th>
                   <th>설명</th>
+
                   <th className="tax-amount">금액</th>
+
                   <th>카테고리</th>
                   <th>삭제</th>
                 </tr>
@@ -723,7 +833,9 @@ export function EntryTable() {
               <tbody>
                 {visibleRows.map((row) => {
                   const removing = deleted.has(row.key);
+
                   const options = categoriesFor(row.kind);
+
                   const value = drafts[row.key] ?? row.category;
 
                   return (
@@ -739,10 +851,12 @@ export function EntryTable() {
                       </td>
 
                       <td>{kindLabel(row.kind)}</td>
+
                       <td>{row.date}</td>
 
                       <td className="tax-description" title={row.description}>
                         {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
+
                         {row.description}
                       </td>
 
@@ -759,6 +873,7 @@ export function EntryTable() {
 
                               setDrafts((previous) => ({
                                 ...previous,
+
                                 [row.key]: event.target.value,
                               }));
                             }}
@@ -804,8 +919,8 @@ export function EntryTable() {
 
           <footer className="tax-editor-footer">
             <p className="tax-change-count">
-              수정 {changedRows.length}건{' · '}삭제 예정 {removingRows.length}건{' · '}최초 저장 대기{' '}
-              {pendingRows.length}건
+              수정 {changedRows.length}건{' · '}
+              삭제 예정 {removingRows.length}건
             </p>
 
             <div className="tax-separated-actions">
@@ -827,10 +942,6 @@ export function EntryTable() {
 
               <Button disabled={busy || !hasChanges} onClick={undoChanges}>
                 변경 되돌리기
-              </Button>
-
-              <Button disabled={busy || hasChanges || pendingRows.length === 0} onClick={() => void savePendingRows()}>
-                최초 저장
               </Button>
             </div>
           </footer>

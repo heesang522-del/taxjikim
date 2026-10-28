@@ -74,27 +74,6 @@
     </insert>
 
 
-    <insert id="insertTransactionHistory">
-        INSERT INTO tax_transaction_history (
-        TAX_INPUT_ID,
-        TRANSACTION_ID,
-        CHANGE_TYPE,
-        BEFORE_DATA,
-        AFTER_DATA,
-        CHANGED_BY,
-        CHANGED_AT
-        )
-        VALUES (
-        #{taxInputId},
-        #{transactionId},
-        #{changeType},
-        #{beforeData, jdbcType=LONGVARCHAR},
-        #{afterData, jdbcType=LONGVARCHAR},
-        #{changedBy, jdbcType=BIGINT},
-        CURRENT_TIMESTAMP(6)
-        )
-    </insert>
-
 
     <select id="findInput" resultMap="inputMap">
         SELECT

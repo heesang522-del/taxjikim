@@ -6,7 +6,7 @@ import { Button, Card, KeyValue } from '../common/index';
 
 import { getTaxInput, getTransactions, getTaxReviewSignature, updateTaxInput } from '../../api/taxApi';
 
-import { normalizeTaxKind, parseTaxAmount, useTax, useTaxStore } from '../../store/useTaxStore';
+import { normalizeTaxKind, useTax, useTaxStore } from '../../store/useTaxStore';
 
 import { getTaxInputSummary, getTransactionCashAmount } from '../../utils/taxInputSummary';
 
@@ -64,15 +64,10 @@ function validId(value) {
 function profileValues(profile) {
   return {
     businessRegistered: profile.businessRegistered ?? null,
-
     age: optionalInteger(profile.age, '만 나이'),
-
     startupReliefApplied: profile.startupReliefApplied ?? null,
-
     businessRegion: String(profile.businessRegion ?? '').trim() || null,
-
     dependentCount: optionalInteger(profile.dependentCount, '부양가족 수', 0),
-
     donationAmount: optionalNumber(profile.donationAmount, '기부금', 0),
   };
 }
@@ -105,8 +100,7 @@ function validateProfile(profile) {
 
 // 화면 거래와 DB 거래를 같은 형식으로 변환해 비교한다.
 function transactionValue(row, fromDatabase) {
-  const taxInputId = row.taxInputId;
-  const transactionId = row.transactionId;
+  const { taxInputId, transactionId } = row;
 
   if (!validId(taxInputId) || !validId(transactionId)) {
     throw new Error('저장된 거래 식별자를 확인하지 못했습니다. 거래 목록을 다시 확인해주세요.');
@@ -121,19 +115,12 @@ function transactionValue(row, fromDatabase) {
   return JSON.stringify([
     taxInputId,
     transactionId,
-
     normalizeTaxKind(fromDatabase ? row.transactionType : row.kind),
-
     dateText(fromDatabase ? row.transactionDate : row.date),
-
     String(fromDatabase ? (row.description ?? '') : (row.memo ?? '')).trim(),
-
     String(fromDatabase ? row.category || 'UNCLASSIFIED' : row.cat || 'UNCLASSIFIED').trim(),
-
     amount,
-
     optionalNumber(row.preTaxIncome, '세전 금액'),
-
     optionalNumber(row.deductedTaxRate, '차감 세율'),
   ]);
 }
@@ -187,7 +174,7 @@ export function SummaryRail({ onCalculate }) {
 
     try {
       if (hasPendingTransactions(initial)) {
-        throw new Error('내역 확인·수정에서 미저장 거래의 최초 저장 버튼을 눌러주세요.');
+        throw new Error('내역 확인·수정에서 미저장 거래의 저장 버튼을 눌러주세요.');
       }
 
       desiredProfile = validateProfile(initial.profile ?? {});
@@ -207,7 +194,7 @@ export function SummaryRail({ onCalculate }) {
       return;
     }
 
-    // 여러 분석의 거래가 화면에 함께 있다면 모두 확인한다.
+    // 여러 분석의 거래가 함께 있으면 모든 분석을 확인한다.
     const inputIds = new Set(savedScreenRows.map((row) => row.taxInputId));
 
     for (const snapshot of initial.taxSavedSnapshots ?? []) {
@@ -219,7 +206,7 @@ export function SummaryRail({ onCalculate }) {
       return;
     }
 
-    // 비동기 처리 중 입력이 바뀌었는지 확인하기 위한 값이다.
+    // 요청 도중 화면 입력이 변경되는지 확인한다.
     const initialSignature = getTaxReviewSignature(initial);
 
     movingRef.current = true;
@@ -230,7 +217,7 @@ export function SummaryRail({ onCalculate }) {
       const savedInputs = [];
       const databaseRows = [];
 
-      // 원본 거래를 재저장하지 않고 현재 DB 상태만 읽는다.
+      // 기존 거래를 다시 저장하지 않고 DB 상태를 조회한다.
       for (const taxInputId of inputIds) {
         const [inputResponse, rowsResponse] = await Promise.all([getTaxInput(taxInputId), getTransactions(taxInputId)]);
 
@@ -262,7 +249,6 @@ export function SummaryRail({ onCalculate }) {
       }
 
       // 기본정보가 달라진 분석만 갱신한다.
-      // 기존 분석번호와 거래 목록은 그대로 유지한다.
       for (const savedInput of savedInputs) {
         const storedProfile = profileValues(savedInput);
 
@@ -281,12 +267,12 @@ export function SummaryRail({ onCalculate }) {
         throw new Error('저장 중 입력 내용이 변경됐습니다. 다시 분석 결과 보기를 눌러주세요.');
       }
 
-      // DB 거래 확인과 기본정보 저장이 성공한 뒤에만 갱신한다.
+      // DB 확인과 기본정보 저장이 성공한 상태를 기록한다.
       useTaxStore.setState((current) => ({
         taxLastSavedSignature: getTaxReviewSignature(current),
       }));
 
-      // 후속 화면이 저장 중 상태로 막히지 않도록 해제한다.
+      // 후속 화면에서 거래 처리 중으로 판단하지 않도록 해제한다.
       useTaxStore.setState({ taxSaveBusy: false });
 
       await onCalculate();
