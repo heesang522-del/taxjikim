@@ -1,6 +1,7 @@
 package com.kh.back.notification.service;
 
 import com.kh.back.notification.dto.NotificationDto;
+import com.kh.back.notification.dto.NotificationPageDto;
 import com.kh.back.notification.mapper.NotificationMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,8 @@ public class NotificationServiceImpl implements NotificationService {
 
     private static final int TITLE_MAX_LENGTH = 100; // NOTIFICATIONS.TITLE 컬럼 길이
     private static final int COMMENT_PREVIEW_LENGTH = 15; // 알림에 노출할 댓글 내용 미리보기 길이
+    private static final int DEFAULT_PAGE_SIZE = 20; // size 파라미터가 없을 때 기본 페이지 크기
+    private static final int MAX_PAGE_SIZE = 50; // 클라이언트가 요청할 수 있는 최대 페이지 크기
 
     @Override
     @Transactional
@@ -24,8 +27,22 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
-    public List<NotificationDto> getNotifications(Long userId) {
-        return notificationMapper.findByUserId(userId);
+    public NotificationPageDto getNotifications(Long userId, Long cursorId, Integer size) {
+        int pageSize = resolvePageSize(size);
+        // 다음 페이지가 있는지 알아보려고 한 건 더 가져온 뒤, 넘치면 마지막 한 건을 떼어내고 hasMore로 알린다.
+        List<NotificationDto> fetched = notificationMapper.findByUserId(userId, cursorId, pageSize + 1);
+        boolean hasMore = fetched.size() > pageSize;
+        List<NotificationDto> items = hasMore ? fetched.subList(0, pageSize) : fetched;
+        Long nextCursor = hasMore ? items.get(items.size() - 1).getNotificationId() : null;
+        return new NotificationPageDto(items, hasMore, nextCursor);
+    }
+
+    // size가 비어있으면 기본값을, 범위를 벗어나면 1~MAX_PAGE_SIZE로 잘라낸다.
+    private int resolvePageSize(Integer size) {
+        if (size == null) {
+            return DEFAULT_PAGE_SIZE;
+        }
+        return Math.min(Math.max(size, 1), MAX_PAGE_SIZE);
     }
 
     @Override

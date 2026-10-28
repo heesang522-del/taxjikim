@@ -1,16 +1,14 @@
 package com.kh.back.notification.service;
 
-import com.kh.back.notification.dto.NotificationDto;
-
-import java.util.List;
+import com.kh.back.notification.dto.NotificationPageDto;
 
 public interface NotificationService {
 
     // 공지사항 게시글 업로드 시 전체 활성 회원에게 알림 발송
     void broadcastNoticePost(Long postId, String title);
 
-    // 로그인한 회원의 알림 목록 조회
-    List<NotificationDto> getNotifications(Long userId);
+    // 로그인한 회원의 알림 목록 커서 페이징 조회. cursorId·size가 없으면 기본값으로 처음부터 조회한다.
+    NotificationPageDto getNotifications(Long userId, Long cursorId, Integer size);
 
     // 로그인한 회원의 미읽음 알림 수 조회
     long getUnreadCount(Long userId);
