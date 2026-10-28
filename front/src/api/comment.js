@@ -29,8 +29,10 @@ export async function getComments(postId) {
     createdAt: comment.createdAt,
     updatedAt: comment.updatedAt,
     // 부모가 삭제됐어도 살아있는 답글이 있으면 자리는 유지된 채로 내려온다.
-    // deletedByType('SELF'|'ADMIN')이 있으면 삭제된 댓글이고 body/author가 없다.
-    deleted: comment.deletedByType != null,
+    // 삭제 여부는 deletedAt(실제 DB DELETED_AT 값) 유무로 판단한다. deletedByType은 지금 화면에서 안 쓰지만
+    // 누가 지웠는지 구분용으로 그대로 들고 있는다(DELETED_BY_TYPE을 기록하기 전 삭제 건은 비어 있을 수 있음).
+    deleted: comment.deletedAt != null,
+    deletedByType: comment.deletedByType ?? null,
   }));
 }
 
