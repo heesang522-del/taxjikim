@@ -1,9 +1,9 @@
 package com.kh.back.notification.service;
 
+import com.kh.back.common.sse.SseEmitterRegistry;
 import com.kh.back.notification.dto.NotificationDto;
 import com.kh.back.notification.dto.NotificationPageDto;
 import com.kh.back.notification.mapper.NotificationMapper;
-import com.kh.back.notification.sse.NotificationEmitterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +19,7 @@ import java.util.Map;
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationMapper notificationMapper;
-    private final NotificationEmitterRegistry notificationEmitterRegistry;
+    private final SseEmitterRegistry sseEmitterRegistry;
 
     private static final int TITLE_MAX_LENGTH = 100; // NOTIFICATIONS.TITLE 컬럼 길이
     private static final int COMMENT_PREVIEW_LENGTH = 15; // 알림에 노출할 댓글 내용 미리보기 길이
@@ -29,7 +29,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public SseEmitter subscribe(Long userId) {
-        return notificationEmitterRegistry.subscribe(userId);
+        return sseEmitterRegistry.subscribe(userId);
     }
 
     @Override
@@ -39,7 +39,7 @@ public class NotificationServiceImpl implements NotificationService {
         // insert가 아직 커밋되기 전에 push하면, push를 받은 클라이언트가 바로 목록을 다시 조회해도
         // 아직 안 보이는 경우가 생긴다. 그래서 커밋이 끝난 뒤에만 push 하도록 미룬다.
         // 대상 유저 목록을 따로 조회하지 않고, 지금 연결돼 있는(=로그인 중인) 모든 회원에게 보낸다.
-        pushAfterCommit(() -> notificationEmitterRegistry.sendToAll(NOTIFICATION_EVENT, Map.of("type", "NOTICE")));
+        pushAfterCommit(() -> sseEmitterRegistry.sendToAll(NOTIFICATION_EVENT, Map.of("type", "NOTICE")));
     }
 
     @Override
@@ -87,7 +87,7 @@ public class NotificationServiceImpl implements NotificationService {
         String message = commenterNickname + ": " + buildPreview(commentContent);
         notificationMapper.insertCommentNotification(postAuthorId, postId, safeTitle, message);
         // 글 작성자 한 명에게만 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
-        pushAfterCommit(() -> notificationEmitterRegistry.send(postAuthorId, NOTIFICATION_EVENT, Map.of("type", "COMMENT")));
+        pushAfterCommit(() -> sseEmitterRegistry.send(postAuthorId, NOTIFICATION_EVENT, Map.of("type", "COMMENT")));
     }
 
     // 댓글 내용 미리보기: 15자를 넘으면 자르고 말줄임표(...)를 붙인다.
