@@ -155,3 +155,4 @@ workers
 !/uploads/profile/
 /uploads/profile/*
 !/uploads/profile/default-profile.svg
+/docs/mypage-consultation-history-design.md

@@ -39,38 +39,7 @@
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
 - 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
 
-아래는 초기 mock 함수 목록이다. 인증·회원·PDF·채팅 등 실제 연결도 있으므로 전체를 mock으로 간주하지 않는다. 현재 호출은 기능 코드로 확인한다.
-
-| 함수 | 파일 | 사용 화면 | 응답 mock |
-| --- | --- | --- | --- |
-| `getHomeData()` | `api/home.js` | 홈 | `mocks/home.json` |
-| `getProfile()` | `api/profile.js` | 마이페이지 | `mocks/profile.json` |
-| `getCalcOptions()` | `api/calculator.js` | 세금 계산 | `mocks/calculator.json` |
-| `getCommunity()` | `api/community.js` | 커뮤니티 | `mocks/community.json` |
-| `getFaqs()` | `api/support.js` | 고객센터 | `mocks/support.json` |
-| `getAdminStats()` | `api/admin.js` | 관리자 | `mocks/admin.json` |
-
-## getAdminStats() 응답 예시 (예시값)
-~~~json
-{
-  "model": { "accuracy": 0.912, "recall": 0.874 },
-  "data": { "transactionCount": 1284 },
-  "ops": [{ "id": "members", "label": "총 회원수", "value": "34,250명", "tone": "default" }],
-  "users": [{ "id": 1, "name": "baduser99 (홍*동)", "desc": "크리에이터 | 경고 3회 누적" }],
-  "inquiry": { "id": 1042, "title": "[문의 #1042] ...", "status": "답변 대기", "meta": "작성자: freelancer01 | ..." }
-}
-~~~
-
-## getCalcOptions() 응답
-~~~json
-{
-  "regions": ["서울특별시"],
-  "jobs": ["개발자 (소프트웨어)"],
-  "categories": ["소프트웨어 개발비", "장비구입비"],
-  "comparisonRows": [["부가가치세 신고", "해당 없음", "필요 (간이·일반과세자)"]],
-  "guideLinks": [{ "id": 1, "label": "...", "message": "..." }]
-}
-~~~
+홈 화면(`getHomeData()`, `api/home.js`)은 아직 `mocks/home.json`을 쓰는 mock이다. 초기에 같이 쓰던 프로필·세금계산·커뮤니티·고객센터·관리자 mock 함수는 실제 API로 교체되며 해당 파일을 삭제했다. 현재 호출은 기능 코드로 확인한다.
 
 ## 로컬 상태 (API 아님)
 - 거래 내역: `store/useTransactionStore.js` (zustand). 세액은 이 내역과 `utils/tax.js`로 화면에서 계산한다.
