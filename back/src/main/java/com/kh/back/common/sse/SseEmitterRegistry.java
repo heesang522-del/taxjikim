@@ -1,4 +1,4 @@
-package com.kh.back.notification.sse;
+package com.kh.back.common.sse;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -16,12 +16,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-// 로그인한 회원의 알림 SSE 연결(emitter)을 유저ID 기준으로 들고 있다가, 이벤트가 생기면 그 유저에게 push 하는 역할만 담당한다.
-// 알림이 "무엇을" 의미하는지는 모르고 NotificationService가 결정해서 이 레지스트리에 위임한다.
-// 나중에 알림 외 다른 기능이 실시간 push가 필요해지면 이 클래스를 그대로 재사용할 수 있도록 알림 도메인 지식은 담지 않는다.
+// 로그인한 회원의 SSE 연결(emitter)을 유저ID 기준으로 들고 있다가, 이벤트가 생기면 그 유저에게 push 하는 역할만 담당한다.
+// 이벤트가 "무엇을" 의미하는지는 모르고, 호출하는 기능(NotificationService 등)이 결정해서 이 레지스트리에 위임한다.
+// 어떤 기능이든 실시간 push가 필요하면 그대로 재사용할 수 있도록 특정 도메인 지식은 담지 않는다.
 @Slf4j
 @Component
-public class NotificationEmitterRegistry {
+public class SseEmitterRegistry {
 
     // SseEmitter 자체 타임아웃(ms). 지정하지 않으면 서블릿 컨테이너 기본 비동기 타임아웃(Tomcat 기준 30초)이 적용돼 너무 빨리 끊긴다.
     private static final long EMITTER_TIMEOUT_MS = 30 * 60 * 1000L; // 30분
@@ -47,7 +47,7 @@ public class NotificationEmitterRegistry {
         }
     }
 
-    // 로그인한 회원의 알림 구독 연결을 새로 만들어 등록한다. 연결이 끊기는 모든 경로(정상 종료·타임아웃·오류)에서 맵 정리를 보장한다.
+    // 로그인한 회원의 구독 연결을 새로 만들어 등록한다. 연결이 끊기는 모든 경로(정상 종료·타임아웃·오류)에서 맵 정리를 보장한다.
     public SseEmitter subscribe(Long userId) {
         SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MS);
         List<SseEmitter> emitters = emittersByUserId.computeIfAbsent(userId, key -> new CopyOnWriteArrayList<>());
@@ -61,7 +61,7 @@ public class NotificationEmitterRegistry {
         });
         emitter.onError(ex -> removeEmitter(userId, emitter));
 
-        log.debug("알림 SSE 구독 등록: userId={}", userId);
+        log.debug("SSE 구독 등록: userId={}", userId);
         return emitter;
     }
 
