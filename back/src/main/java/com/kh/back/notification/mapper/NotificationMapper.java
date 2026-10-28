@@ -12,8 +12,9 @@ public interface NotificationMapper {
     // 공지사항 게시글 알림을 활성 회원 전체에게 생성
     int insertNoticeBroadcast(@Param("targetId") Long targetId, @Param("title") String title);
 
-    // 로그인한 회원의 알림 목록 조회 (최신순)
-    List<NotificationDto> findByUserId(@Param("userId") Long userId);
+    // 로그인한 회원의 알림 목록 커서 페이징 조회 (최신순). cursorId가 없으면 처음부터 조회한다.
+    List<NotificationDto> findByUserId(@Param("userId") Long userId, @Param("cursorId") Long cursorId,
+                                        @Param("limit") int limit);
 
     // 로그인한 회원의 미읽음 알림 수 조회
     long countUnreadByUserId(@Param("userId") Long userId);
