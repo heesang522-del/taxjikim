@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ROUTES } from './routes';
 import { useAuth } from '../store/useAuthStore';
-import { getNotifications, getUnreadNotificationCount, markAllNotificationsRead } from '../api/notifications';
+import { getNotifications, getUnreadNotificationCount, markNotificationRead } from '../api/notifications';
 
 const PAGE_SIZE = 10; // 한 번에 불러오는 알림 개수. 서버 기본값(20)과 맞춘다
 const SUBSCRIBE_URL = '/api/v1/notifications/subscribe'; // EventSource는 axios client를 거치지 않아 경로를 직접 적는다
@@ -13,6 +13,7 @@ const MAX_RECONNECT_ATTEMPTS = 5; // 계속 실패하면 재시도를 멈춘다.
 
 // 서버 알림을 화면이 쓰는 모양으로 바꾼다.
 // type(NOTICE/COMMENT)과 무관하게 targetType은 항상 POST·targetId는 게시글 ID라서 상세 경로를 하나로 통일한다.
+// 목록에는 항상 미읽음 알림만 내려오므로 읽음 여부는 따로 담지 않는다.
 function toNotificationItem(n) {
   return {
     id: n.notificationId,
@@ -20,15 +21,15 @@ function toNotificationItem(n) {
     desc: n.type === 'NOTICE' ? '새 공지가 올라왔습니다' : n.message,
     createdAt: n.createdAt,
     to: ROUTES.postDetail(n.targetId),
-    read: n.read,
   };
 }
 
 /** 헤더 알림 벨이 쓰는 훅.
  *  안읽음 수(unreadCount)는 로그인 중 서버 SSE 구독(/notifications/subscribe)으로 받는다.
  *  서버가 보내는 이벤트는 "알림이 바뀌었다"는 신호만 담고 있어서, 받으면 안읽음 수를 다시 조회한다.
- *  알림 목록(items)은 이 구독과 무관하게, 알림창을 열 때(openList) 최신 1페이지를 불러온 뒤
- *  스크롤로 더 볼 때만 loadMore로 이어붙인다. */
+ *  알림 목록(items)은 항상 미읽음 알림만 담는다. 알림창을 열 때(openList) 최신 1페이지를 불러온 뒤
+ *  스크롤로 더 볼 때만 loadMore로 이어붙이고, 알림을 읽으면(markRead) 서버에서 바로 삭제되므로
+ *  화면 목록에서도 같이 제거한다. */
 export function useNotifications() {
   const { loggedIn } = useAuth();
   const [items, setItems] = useState([]);
@@ -121,16 +122,15 @@ export function useNotifications() {
       .finally(() => setLoadingMore(false));
   }, [hasMore, loadingMore, nextCursor]);
 
-  // 벨을 열 때마다 호출되므로, 이미 다 읽은 상태면 불필요한 요청을 보내지 않는다.
-  const markAllRead = useCallback(() => {
-    if (unreadCount === 0) return Promise.resolve();
-    return markAllNotificationsRead()
+  // 알림 1건을 읽음 처리한다. 서버에서 바로 삭제되므로 화면 목록에서도 같이 지운다.
+  const markRead = useCallback((notificationId) => {
+    return markNotificationRead(notificationId)
       .then(() => {
-        setUnreadCount(0);
-        setItems((prev) => prev.map((n) => ({ ...n, read: true })));
+        setItems((prev) => prev.filter((n) => n.id !== notificationId));
+        setUnreadCount((prev) => Math.max(0, prev - 1));
       })
-      .catch(() => {}); // 실패해도 다음 알림 이벤트·재연결 시 실제 서버 상태로 맞춰진다
-  }, [unreadCount]);
+      .catch(() => {}); // 실패하면 목록에 남겨두고, 다음 알림 이벤트·재연결 시 실제 서버 상태로 맞춰진다
+  }, []);
 
-  return { items, unreadCount, hasMore, loadingMore, openList, loadMore, markAllRead };
+  return { items, unreadCount, hasMore, loadingMore, openList, loadMore, markRead };
 }
