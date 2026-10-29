@@ -56,6 +56,7 @@ public class SecurityConfig {
                         // 새 관리자 API를 추가할 때 권한 규칙을 깜빡 빠뜨리는 실수를 막기 위한 것이다.
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
+                        .requestMatchers("/ws/chat/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> apiResponseWriter.write(response, 401,
