@@ -73,8 +73,6 @@
         )
     </insert>
 
-
-
     <select id="findInput" resultMap="inputMap">
         SELECT
         TAX_INPUT_ID,
@@ -91,7 +89,7 @@
         WHERE TAX_INPUT_ID = #{taxInputId}
     </select>
 
-    <!-- 거래 변경과 계산은 같은 부모 분석을 먼저 잠근다. -->
+    <!-- 같은 분석에 대한 변경 작업을 조율하도록 부모 분석을 잠근다. -->
     <select id="lockInput" resultMap="inputMap">
         SELECT
         TAX_INPUT_ID,
@@ -185,6 +183,7 @@
         )
     </insert>
 
+    <!-- 거래번호가 있으면 특정 거래, 없으면 분석의 전체 거래를 조회한다. -->
     <select id="findTransactions" resultMap="transactionMap">
         SELECT
         TRANSACTION_ID,
@@ -198,26 +197,15 @@
         AMOUNT
         FROM tax_transactions
         WHERE TAX_INPUT_ID = #{taxInputId}
+
+        <if test="transactionId != null">
+            AND TRANSACTION_ID = #{transactionId}
+        </if>
+
         ORDER BY TRANSACTION_ID
     </select>
 
-    <select id="findTransaction" resultMap="transactionMap">
-        SELECT
-        TRANSACTION_ID,
-        TAX_INPUT_ID,
-        TRANSACTION_TYPE,
-        TRANSACTION_DATE,
-        DESCRIPTION,
-        CATEGORY,
-        PRE_TAX_INCOME,
-        DEDUCTED_TAX_RATE,
-        AMOUNT
-        FROM tax_transactions
-        WHERE TAX_INPUT_ID = #{taxInputId}
-        AND TRANSACTION_ID = #{transactionId}
-    </select>
-
-    <!-- 전체 목록 교체 저장에 사용한다. -->
+    <!-- 기존 XML의 전체 거래 삭제 구문은 유지한다. -->
     <delete id="deleteTransactions">
         DELETE FROM tax_transactions
         WHERE TAX_INPUT_ID = #{taxInputId}

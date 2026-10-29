@@ -9,6 +9,7 @@ import lombok.Setter;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -31,10 +32,7 @@ public class TaxTransactionDto {
     private BigDecimal deductedTaxRate;
     private BigDecimal amount;
 
-    /*
-     * PDF 분석 결과 전달용 필드다.
-     * 아래 필드는 현재 tax_transactions에 저장하지 않는다.
-     */
+    // PDF 분석 결과 전달용이며 거래 테이블에는 저장하지 않는다.
     private BigDecimal taxDeducted;
     private BigDecimal actualAmount;
 
@@ -45,17 +43,11 @@ public class TaxTransactionDto {
     private Boolean excluded;
     private String failureReason;
 
-    // 월별 자료는 실제 거래일을 생성하지 않고 월과 연도를 전달한다.
     private String transactionMonth;
     private Integer documentYear;
 
-    // 상세·월별 집계 등 자료의 집계 단위를 전달한다.
     private String valueKind;
-
-    // 실제 입출금액과 공제대상금액을 구분한다.
     private String amountBasis;
-
-    // 사용자 확인이 필요한 분석 결과인지 전달한다.
     private Boolean needsReview;
 
     @Getter
@@ -65,7 +57,7 @@ public class TaxTransactionDto {
     @AllArgsConstructor
     public static class TaxInputRequest {
 
-        // 요청으로 전달돼도 식별자와 소유자는 서버에서 결정한다.
+        // 식별자와 소유자는 서비스에서 결정한다.
         private Long taxInputId;
         private Long userId;
 
@@ -93,7 +85,7 @@ public class TaxTransactionDto {
 
     /*
      * HTTP 요청 본문으로 받지 않는다.
-     * Controller가 인증 정보와 서버 세션으로 생성한다.
+     * 서비스가 인증 정보와 서버 세션 정보로 생성한다.
      */
     @Getter
     @Builder
@@ -128,5 +120,42 @@ public class TaxTransactionDto {
         private Long taxInputId;
         private Map<String, Object> resultDetail;
         private String calculatedAt;
+    }
+
+    /*
+     * 통합 서비스 호출용 요청이다.
+     * Controller가 작업 대상과 필요한 값을 builder로 구성한다.
+     */
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TaxServiceRequest {
+
+        // INPUT / SAVED_INPUTS / TRANSACTIONS / RESULT / CATEGORY / TRANSACTION
+        private String target;
+
+        private Long taxInputId;
+        private Long transactionId;
+        private Integer taxYear;
+
+        private TaxInputRequest input;
+        private String category;
+    }
+
+    /*
+     * 통합 조회 메서드의 내부 반환 객체다.
+     * Controller는 필요한 필드만 꺼내 기존 API 응답으로 반환한다.
+     */
+    @Getter
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class TaxServiceResponse {
+
+        private TaxInputRequest input;
+        private List<TaxInputRequest> inputs;
+        private List<TaxTransactionDto> transactions;
+        private TaxResultResponse result;
     }
 }

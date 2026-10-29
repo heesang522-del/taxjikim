@@ -1,80 +1,60 @@
 package com.kh.back.taxupload.service;
 
+import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
-import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxResultResponse;
-
+import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
+import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceResponse;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Set;
 
 public interface YearEndTaxService {
 
-    TaxInputRequest createInput(
-            AccessContext access,
+    TaxInputRequest save(
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
             TaxInputRequest request
     );
 
-    TaxInputRequest getInput(
-            AccessContext access,
-            Long taxInputId
+    TaxServiceResponse get(
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
+            TaxServiceRequest request
     );
 
-    List<TaxInputRequest> getSavedInputs(
-            AccessContext access,
-            Integer taxYear
-    );
-
-    TaxInputRequest updateInput(
-            AccessContext access,
-            Long taxInputId,
-            TaxInputRequest request
-    );
-
-    void deleteInput(
-            AccessContext access,
-            Long taxInputId
-    );
-
-    List<TaxTransactionDto> saveTransactions(
-            AccessContext access,
+    List<TaxTransactionDto> transaction(
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
             Long taxInputId,
             List<TaxTransactionDto> rows
     );
 
-    List<TaxTransactionDto> getTransactions(
-            AccessContext access,
-            Long taxInputId
+    TaxInputRequest update(
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
+            TaxServiceRequest request
     );
 
-    void updateCategory(
-            AccessContext access,
-            Long taxInputId,
-            Long transactionId,
-            String category
-    );
-
-    void deleteTransaction(
-            AccessContext access,
-            Long taxInputId,
-            Long transactionId
-    );
-
-    TaxResultResponse getResult(
-            AccessContext access,
-            Long taxInputId
+    void delete(
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
+            TaxServiceRequest request
     );
 
     TaxResultResponse calculateInput(
-            AccessContext access,
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
             Long taxInputId
     );
 
     PdfParseResponseDto parsePdf(
-            AccessContext access,
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
             Long taxInputId,
             MultipartFile file
     ) throws IOException;
