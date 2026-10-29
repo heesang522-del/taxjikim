@@ -17,6 +17,6 @@ public interface TaxService {
     // 실제·예상 금액을 포함한 세전 총수입을 반환한다.
     TaxDto getTotalIncome(Long taxInputId);
 
-    // 분석번호에 해당하는 실제 총지출을 반환한다.
+    // 실제·예상 금액을 포함한 총지출을 반환한다.
     TaxDto getTotalExpense(Long taxInputId);
 }

@@ -38,7 +38,7 @@ public class TaxApiController {
         return ApiResponse.ok(taxService.getTotalIncome(taxInputId));
     }
 
-    // 분석번호에 해당하는 실제 총지출을 조회한다.
+    // 실제·예상 금액을 포함한 총지출을 조회한다.
     @GetMapping("/{taxInputId}/total-expense")
     public ApiResponse<TaxDto> getTotalExpense(@PathVariable("taxInputId") Long taxInputId) {
         return ApiResponse.ok(taxService.getTotalExpense(taxInputId));

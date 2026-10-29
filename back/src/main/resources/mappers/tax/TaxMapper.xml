@@ -33,11 +33,4 @@
         ORDER BY MONTH(TRANSACTION_DATE)
     </select>
 
-    <!-- 같은 분석의 지출만 합산하며, NULL 금액은 제외하고 합계가 없으면 0원을 반환한다. -->
-    <select id="findTotalExpense" resultType="java.math.BigDecimal">
-        SELECT COALESCE(SUM(AMOUNT), 0)
-        FROM tax_transactions
-        WHERE TAX_INPUT_ID = #{taxInputId}
-          AND TRANSACTION_TYPE = 'EXPENSE'
-    </select>
 </mapper>

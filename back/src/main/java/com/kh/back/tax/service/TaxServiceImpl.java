@@ -92,11 +92,12 @@ public class TaxServiceImpl implements TaxService {
         return new TaxDto(taxInputId, totalIncome);
     }
 
-    // 분석번호로 실제 총지출을 조회한다.
+    // 월별 실제·예상 지출 금액을 합산한다.
     @Override
     @Transactional(readOnly = true)
     public TaxDto getTotalExpense(Long taxInputId) {
-        BigDecimal totalExpense = taxMapper.findTotalExpense(taxInputId);
+        List<MonthlyAmountDto> expenses = getMonthlyExpenses(taxInputId);
+        BigDecimal totalExpense = sumMonthlyAmounts(expenses);
 
         return new TaxDto(taxInputId, totalExpense);
     }
