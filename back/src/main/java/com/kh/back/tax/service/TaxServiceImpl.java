@@ -22,84 +22,64 @@ public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
 
-    // 월별 세전 수입을 조회하고 올해 자료이면 남은 달에 평균 수입을 채운다.
+    // 월별 세전 수입을 조회한 뒤 공통 예상 계산을 적용한다.
     @Override
     @Transactional(readOnly = true)
     public List<MonthlyAmountDto> getMonthlyIncomes(Long taxInputId) {
-        List<MonthlyAmountDto> incomes = new ArrayList<>(taxMapper.findMonthlyIncomes(taxInputId));
+        List<MonthlyAmountDto> incomes = taxMapper.findMonthlyIncomes(taxInputId);
         TransactionPeriodDto period = taxMapper.findTransactionPeriod(taxInputId);
-        LocalDate lastDate = period.getLastDate();
-        int currentYear = LocalDate.now(ZoneId.of("Asia/Seoul")).getYear();
-
-        // 날짜 자료가 없거나 다른 연도·12월 자료이면 실제 집계만 반환한다.
-        if (lastDate == null || lastDate.getYear() != currentYear || lastDate.getMonthValue() == 12) {
-            return incomes;
-        }
-
-        LocalDate firstDate = period.getFirstDate();
-        int startMonth = firstDate.getMonthValue();
-        int lastMonth = lastDate.getMonthValue();
-        int monthCount = lastMonth - startMonth + 1;
-
-        BigDecimal totalIncome = BigDecimal.ZERO;
-        for (MonthlyAmountDto income : incomes) {
-            totalIncome = totalIncome.add(BigDecimal.valueOf(income.getAmount()));
-        }
-
-        // 수입이 없는 중간 달도 기간에 포함하며, 평균은 정수 금액으로 반올림한다.
-        long averageIncome = totalIncome.divide(
-                BigDecimal.valueOf(monthCount), 0, RoundingMode.HALF_UP).longValueExact();
-
-        // 예상 금액도 amount에 담아 응답하며, DB에는 저장하지 않는다.
-        for (int month = lastMonth + 1; month <= 12; month++) {
-            MonthlyAmountDto income = new MonthlyAmountDto();
-            income.setMonth(month);
-            income.setAmount(averageIncome);
-            income.setPredicted(true);
-            incomes.add(income);
-        }
-
-        return incomes;
+        return addPredictedMonths(incomes, period);
     }
 
-    // 월별 지출을 조회하고 올해 자료이면 남은 달에 평균 지출을 채운다.
+    // 월별 지출을 조회한 뒤 공통 예상 계산을 적용한다.
     @Override
     @Transactional(readOnly = true)
     public List<MonthlyAmountDto> getMonthlyExpenses(Long taxInputId) {
-        List<MonthlyAmountDto> expenses = new ArrayList<>(taxMapper.findMonthlyExpenses(taxInputId));
+        List<MonthlyAmountDto> expenses = taxMapper.findMonthlyExpenses(taxInputId);
         TransactionPeriodDto period = taxMapper.findTransactionPeriod(taxInputId);
+        return addPredictedMonths(expenses, period);
+    }
+
+    // 올해 자료의 남은 달에 월평균 예상 금액을 추가한다.
+    private List<MonthlyAmountDto> addPredictedMonths(
+            List<MonthlyAmountDto> monthlyAmounts, TransactionPeriodDto period) {
+        // 조회한 원래 목록은 유지하고, 응답할 목록에만 예상 월을 추가한다.
+        List<MonthlyAmountDto> amounts = new ArrayList<>(monthlyAmounts);
         LocalDate lastDate = period.getLastDate();
         int currentYear = LocalDate.now(ZoneId.of("Asia/Seoul")).getYear();
 
         // 다른 연도 자료이거나 12월까지 자료가 있으면 실제 집계만 반환한다.
         if (lastDate.getYear() != currentYear || lastDate.getMonthValue() == 12) {
-            return expenses;
+            return amounts;
         }
 
-        LocalDate firstDate = period.getFirstDate();
-        int startMonth = firstDate.getMonthValue();
+        int startMonth = period.getFirstDate().getMonthValue();
         int lastMonth = lastDate.getMonthValue();
         int monthCount = lastMonth - startMonth + 1;
-
-        BigDecimal totalExpense = BigDecimal.ZERO;
-        for (MonthlyAmountDto expense : expenses) {
-            totalExpense = totalExpense.add(BigDecimal.valueOf(expense.getAmount()));
-        }
+        BigDecimal totalAmount = sumMonthlyAmounts(amounts);
 
         // 거래가 없는 중간 달도 기간에 포함하며, 평균은 정수 금액으로 반올림한다.
-        long averageExpense = totalExpense.divide(
+        long averageAmount = totalAmount.divide(
                 BigDecimal.valueOf(monthCount), 0, RoundingMode.HALF_UP).longValueExact();
 
-        // 요청한 응답 형식을 유지하기 위해 예상 금액도 amount에 담는다. DB에는 저장하지 않는다.
+        // 예상 금액은 표시용 목록에만 추가하고, DB에는 저장하지 않는다.
         for (int month = lastMonth + 1; month <= 12; month++) {
-            MonthlyAmountDto expense = new MonthlyAmountDto();
-            expense.setMonth(month);
-            expense.setAmount(averageExpense);
-            expense.setPredicted(true);
-            expenses.add(expense);
+            MonthlyAmountDto amount = new MonthlyAmountDto();
+            amount.setMonth(month);
+            amount.setAmount(averageAmount);
+            amount.setPredicted(true);
+            amounts.add(amount);
         }
+        return amounts;
+    }
 
-        return expenses;
+    // 월별 목록의 금액을 모두 합산한다.
+    private BigDecimal sumMonthlyAmounts(List<MonthlyAmountDto> monthlyAmounts) {
+        BigDecimal totalAmount = BigDecimal.ZERO;
+        for (MonthlyAmountDto amount : monthlyAmounts) {
+            totalAmount = totalAmount.add(BigDecimal.valueOf(amount.getAmount()));
+        }
+        return totalAmount;
     }
 
     // 월별 실제·예상 세전 수입 금액을 합산한다.
@@ -107,12 +87,7 @@ public class TaxServiceImpl implements TaxService {
     @Transactional(readOnly = true)
     public TaxDto getTotalIncome(Long taxInputId) {
         List<MonthlyAmountDto> incomes = getMonthlyIncomes(taxInputId);
-        BigDecimal totalIncome = BigDecimal.ZERO;
-
-        // 월별 계산 결과를 재사용해 실제 금액과 예상 금액을 함께 더한다.
-        for (MonthlyAmountDto income : incomes) {
-            totalIncome = totalIncome.add(BigDecimal.valueOf(income.getAmount()));
-        }
+        BigDecimal totalIncome = sumMonthlyAmounts(incomes);
 
         return new TaxDto(taxInputId, totalIncome);
     }
