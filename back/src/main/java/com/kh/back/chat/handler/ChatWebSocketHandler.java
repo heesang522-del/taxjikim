@@ -25,10 +25,13 @@ import java.util.concurrent.ConcurrentHashMap;
  *   1. {@link #handleTextMessage}: 클라이언트가 보낸 JSON({"content":"..."})을 받는다.
  *      발신자(senderId)는 클라이언트가 알려주는 게 아니라, 연결 시 {@link ChatHandshakeInterceptor}가
  *      확인해서 세션에 넣어둔 인증된 userId를 그대로 쓴다. (클라이언트가 다른 사람인 척 보낼 수 없게)
+ *      다만 연결은 핸드셰이크 때 한 번만 인증하므로, 그 이후 로그아웃하거나 다른 기기에서 재로그인해도
+ *      이미 연결된 소켓은 재검증 없이 계속 송수신된다 — 당장은 의도적으로 남겨둔 제약이다.
  *   2. 기존 REST API와 똑같은 {@link ChatService#sendMessage}를 호출해 DB에 저장한다.
  *      (종료된 방에 보내면 여기서 예외가 나고, 발신자에게만 에러로 알려준다.)
  *   3. {@link #deliverToCounterpart}: 저장에 성공하면, 같은 방에 연결된 "상대방"에게만 그 메시지를 쏴준다.
- *   4. 상대방이 지금 이 순간 연결돼 있다는 건 상대가 채팅창을 보고 있다는 뜻이므로, 전달과 동시에 읽음 처리까지 해버린다.
+ *   4. 상대방이 지금 이 순간 연결돼 있다는 건 상대가 채팅창을 보고 있다는 뜻이므로, **실제로 전달에 성공했을 때만**
+ *      읽음 처리까지 함께 한다. 전송이 실패하면 상대가 받지 못한 것이므로 읽음 처리하지 않는다.
  *
  * 연결이 끊긴 동안 쌓인 메시지는 이 핸들러가 다시 보내주지 않는다 — 재연결 후 REST 목록 API를 다시 불러서 채우는 건 클라이언트 책임이다.
  */
@@ -100,7 +103,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         deliverToCounterpart(roomId, senderId, saved);
     }
 
-    // 저장된 메시지를 같은 방의 "상대방"(발신자 본인이 아닌 세션)에게 전달하고, 상대가 접속 중이면 바로 읽음 처리한다.
+    // 저장된 메시지를 같은 방의 "상대방"(발신자 본인이 아닌 세션)에게 전달하고, 실제로 전달됐을 때만 읽음 처리한다.
     private void deliverToCounterpart(String roomId, Long senderId, ChatMessageDto saved) {
         Set<WebSocketSession> roomSessions = rooms.get(roomId);
         if (roomSessions == null) {
@@ -111,8 +114,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             if (recipientId == null || recipientId.equals(senderId)) {
                 continue; // 발신자 본인 세션(다른 탭 등)에는 다시 보내지 않는다.
             }
-            sendMessage(recipient, saved);
-            markAsReadQuietly(Long.valueOf(roomId), recipientId, (String) recipient.getAttributes().get("role"));
+            // 전송에 실패하면(끊기는 중인 연결 등) 그 메시지는 읽음 처리하지 않는다 — 상대가 실제로 받지 못했으므로.
+            if (sendMessage(recipient, saved)) {
+                markAsReadQuietly(Long.valueOf(roomId), recipientId, (String) recipient.getAttributes().get("role"));
+            }
         }
     }
 
@@ -130,8 +135,9 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     // 정상적으로 전달된 메시지. 클라이언트는 {"type":"MESSAGE","message":{...ChatMessageDto...}} 형태로 받는다.
-    private void sendMessage(WebSocketSession session, ChatMessageDto message) {
-        send(session, Map.of("type", "MESSAGE", "message", message));
+    // 실제로 전송됐는지 호출한 쪽(deliverToCounterpart)이 알 수 있도록 성공 여부를 돌려준다.
+    private boolean sendMessage(WebSocketSession session, ChatMessageDto message) {
+        return send(session, Map.of("type", "MESSAGE", "message", message));
     }
 
     // 저장이 실패했을 때(종료된 방 등). 상대방에게는 보내지 않고, 보낸 사람 본인에게만 알려준다.
@@ -139,13 +145,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         send(session, Map.of("type", "ERROR", "code", code, "message", errorMessage));
     }
 
-    // 상대가 연결을 끊었거나 네트워크가 잠깐 끊긴 경우 전송이 실패할 수 있는데, 여기서는 로그만 남기고 넘어간다
-    // (그 세션은 곧 afterConnectionClosed로 정리된다).
-    private void send(WebSocketSession session, Object payload) {
+    // 상대가 연결을 끊었거나 네트워크가 잠깐 끊긴 경우 전송이 실패할 수 있다. 실패하면 로그만 남기고
+    // false를 돌려준다(그 세션은 곧 afterConnectionClosed로 정리된다) — 호출한 쪽이 성공 여부로 후속 처리를 판단한다.
+    private boolean send(WebSocketSession session, Object payload) {
         try {
             session.sendMessage(new TextMessage(objectMapper.writeValueAsString(payload)));
+            return true;
         } catch (IOException e) {
             log.warn("채팅 이벤트 전송 실패: sessionId={}", session.getId(), e);
+            return false;
         }
     }
 
