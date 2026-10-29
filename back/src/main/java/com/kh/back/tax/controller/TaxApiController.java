@@ -32,7 +32,7 @@ public class TaxApiController {
         return ApiResponse.ok(taxService.getMonthlyExpenses(taxInputId));
     }
 
-    // 분석번호에 해당하는 세전 총수입을 조회한다.
+    // 실제·예상 금액을 포함한 세전 총수입을 조회한다.
     @GetMapping("/{taxInputId}/total-income")
     public ApiResponse<TaxDto> getTotalIncome(@PathVariable("taxInputId") Long taxInputId) {
         return ApiResponse.ok(taxService.getTotalIncome(taxInputId));

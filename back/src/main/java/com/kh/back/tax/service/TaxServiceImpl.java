@@ -102,11 +102,17 @@ public class TaxServiceImpl implements TaxService {
         return expenses;
     }
 
-    // 분석번호로 세전 총수입을 조회한다.
+    // 월별 실제·예상 세전 수입 금액을 합산한다.
     @Override
     @Transactional(readOnly = true)
     public TaxDto getTotalIncome(Long taxInputId) {
-        BigDecimal totalIncome = taxMapper.findTotalIncome(taxInputId);
+        List<MonthlyAmountDto> incomes = getMonthlyIncomes(taxInputId);
+        BigDecimal totalIncome = BigDecimal.ZERO;
+
+        // 월별 계산 결과를 재사용해 실제 금액과 예상 금액을 함께 더한다.
+        for (MonthlyAmountDto income : incomes) {
+            totalIncome = totalIncome.add(BigDecimal.valueOf(income.getAmount()));
+        }
 
         return new TaxDto(taxInputId, totalIncome);
     }
