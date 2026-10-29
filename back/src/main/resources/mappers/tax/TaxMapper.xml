@@ -15,17 +15,17 @@
         WHERE TAX_INPUT_ID = #{taxInputId}
     </select>
 
-    <!-- 날짜가 있는 지출을 월별로 묶고, NULL 금액은 합산에서 제외한다. -->
+    <!-- 날짜가 있는 지출을 월별로 묶고, 합계를 정수 금액으로 반올림한다. NULL 금액은 합산에서 제외한다. -->
     <select id="findMonthlyExpenses" resultType="com.kh.back.tax.dto.MonthlyExpenseDto">
-        SELECT YEAR(TRANSACTION_DATE) AS year,
-               MONTH(TRANSACTION_DATE) AS month,
-               COALESCE(SUM(AMOUNT), 0) AS actualExpense
+        SELECT MONTH(TRANSACTION_DATE) AS month,
+               ROUND(COALESCE(SUM(AMOUNT), 0), 0) AS actualExpense
         FROM tax_transactions
         WHERE TAX_INPUT_ID = #{taxInputId}
           AND TRANSACTION_TYPE = 'EXPENSE'
+        <!-- 혹시 몰라 집어넣은 구문 TRANSACTION_DATE IS NOT NULL -->
           AND TRANSACTION_DATE IS NOT NULL
-        GROUP BY YEAR(TRANSACTION_DATE), MONTH(TRANSACTION_DATE)
-        ORDER BY YEAR(TRANSACTION_DATE), MONTH(TRANSACTION_DATE)
+        GROUP BY MONTH(TRANSACTION_DATE)
+        ORDER BY MONTH(TRANSACTION_DATE)
     </select>
 
     <!-- 같은 분석의 지출만 합산하며, NULL 금액은 제외하고 합계가 없으면 0원을 반환한다. -->

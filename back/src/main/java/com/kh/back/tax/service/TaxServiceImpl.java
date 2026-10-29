@@ -30,7 +30,7 @@ public class TaxServiceImpl implements TaxService {
         int currentYear = LocalDate.now(ZoneId.of("Asia/Seoul")).getYear();
 
         // 다른 연도 자료이거나 12월까지 자료가 있으면 실제 집계만 반환한다.
-        if (lastDate == null || lastDate.getYear() != currentYear || lastDate.getMonthValue() == 12) {
+        if (lastDate.getYear() != currentYear || lastDate.getMonthValue() == 12) {
             return expenses;
         }
 
@@ -41,17 +41,16 @@ public class TaxServiceImpl implements TaxService {
 
         BigDecimal totalExpense = BigDecimal.ZERO;
         for (MonthlyExpenseDto expense : expenses) {
-            totalExpense = totalExpense.add(expense.getActualExpense());
+            totalExpense = totalExpense.add(BigDecimal.valueOf(expense.getActualExpense()));
         }
 
-        // 거래가 없는 중간 달도 기간에 포함하며, 평균은 소수점 둘째 자리까지 반올림한다.
-        BigDecimal averageExpense = totalExpense.divide(
-                BigDecimal.valueOf(monthCount), 2, RoundingMode.HALF_UP);
+        // 거래가 없는 중간 달도 기간에 포함하며, 평균은 정수 금액으로 반올림한다.
+        long averageExpense = totalExpense.divide(
+                BigDecimal.valueOf(monthCount), 0, RoundingMode.HALF_UP).longValueExact();
 
         // 요청한 응답 형식을 유지하기 위해 예상 금액도 actualExpense에 담는다. DB에는 저장하지 않는다.
         for (int month = lastMonth + 1; month <= 12; month++) {
             MonthlyExpenseDto expense = new MonthlyExpenseDto();
-            expense.setYear(currentYear);
             expense.setMonth(month);
             expense.setActualExpense(averageExpense);
             expenses.add(expense);
