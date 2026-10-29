@@ -450,34 +450,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     }
 
     @Override
-    public TaxResultResponse calculateInput(
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
-            Long taxInputId
-    ) {
-        AccessContext access = createAccess(principal, guestInputIds);
-
-        requireInput(access, taxInputId, false);
-
-        // 현재 구현은 계산 엔진 미연결 상태를 반환한다.
-        ApiException exception = new ApiException(
-                HttpStatus.SERVICE_UNAVAILABLE,
-                "CALCULATOR_NOT_CONFIGURED",
-                "세금 계산 엔진이 아직 연결되지 않았습니다."
-        );
-
-        writeProcessLog(
-                taxInputId,
-                access.getUserId(),
-                "CALC",
-                "FAIL",
-                exception.getCode()
-        );
-
-        throw exception;
-    }
-
-    @Override
     public PdfParseResponseDto parsePdf(
             CustomUserDetails principal,
             Set<Long> guestInputIds,
@@ -848,31 +820,31 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return true;
     }
 
-    private boolean sameDecimal(
+    private boolean sameDecimal( // 두 숫자가 같은지 비교
             BigDecimal left,
             BigDecimal right
     ) {
-        if (left == null || right == null) {
+        if (left == null || right == null) { // left 와 right 를 비교해 같으면 true, 다르면 false 반환
             return left == right;
         }
 
-        return left.compareTo(right) == 0;
+        return left.compareTo(right) == 0; // 왼쪽이 작으면 음수, 같으면 0, 왼쪽이 크면 양수
     }
 
-    private AccessContext createAccess(
-            CustomUserDetails principal,
+    private AccessContext createAccess( // 회원 번호를 가져오고 관리자 권한이 있는지 확인하는 부분
+            CustomUserDetails principal, // 회원 인증 정보와 비회원 분석번호 목록을 받아 접근 정보 객체를 만드는 메서드
             Set<Long> guestInputIds
     ) {
-        Long userId = principal == null
+        Long userId = principal == null // 조건 , 참일떄 값 : 거짓일때 값 형태의 삼항 연산자
                 ? null
-                : principal.getUserId();
-
-        boolean admin = principal != null
-                && principal.getAuthorities()
-                .stream()
-                .anyMatch(authority ->
+                : principal.getUserId();  // principal 이 null 이면 - > 비회원이므로 userid =null
+                                          // principal 이 있으면 인증 정보에서 회원번호를 가져옴
+        boolean admin = principal != null // 관리자 여부 검사하는 부분 , 인증정보가 있는지 확인, 없으면 뒤쪽은 실해아지 않고 admin 은 false
+                && principal.getAuthorities() // 사용자가 가진 권한 목록을 가져옴
+                .stream() // 권한 목록을 하나씩 검사할 수 있도록 처리
+                .anyMatch(authority -> // 각 권한중 조건에 맞는 것이 하나라도 있는지 확인
                         "ROLE_ADMIN".equals(
-                                authority.getAuthority()
+                                authority.getAuthority() // 
                         )
                 );
 

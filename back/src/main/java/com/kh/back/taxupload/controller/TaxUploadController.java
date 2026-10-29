@@ -278,20 +278,6 @@ public class TaxUploadController {
         return ApiResponse.ok(response.getResult());
     }
 
-    @PostMapping("/inputs/{taxInputId}/calculate")
-    public ApiResponse<TaxResultResponse> calculateInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
-    ) {
-        return ApiResponse.ok(
-                service.calculateInput(
-                        principal,
-                        readGuestInputs(servletRequest.getSession(false)),
-                        taxInputId
-                )
-        );
-    }
 
     @PostMapping(
             value = "/parse",

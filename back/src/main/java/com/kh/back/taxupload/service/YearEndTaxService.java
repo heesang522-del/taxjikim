@@ -46,11 +46,7 @@ public interface YearEndTaxService {
             TaxServiceRequest request
     );
 
-    TaxResultResponse calculateInput(
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
-            Long taxInputId
-    );
+
 
     PdfParseResponseDto parsePdf(
             CustomUserDetails principal,
