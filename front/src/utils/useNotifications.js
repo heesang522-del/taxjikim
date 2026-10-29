@@ -16,7 +16,7 @@ function toNotificationItem(n) {
     title: n.title,
     desc: n.type === 'NOTICE' ? '새 공지가 올라왔습니다' : n.message,
     createdAt: n.createdAt,
-    to: ROUTES.boardPost(n.targetId),
+    to: ROUTES.postDetail(n.targetId),
     read: n.read,
   };
 }

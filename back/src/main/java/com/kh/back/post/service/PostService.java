@@ -16,7 +16,7 @@ public interface PostService {
 
     // 목록 조회. 페이지 크기·offset 변환·전체 건수 조회·PageMeta 조립까지 전부 여기서 끝내고
     // 컨트롤러가 그대로 반환할 수 있는 ApiResponse를 돌려준다. page는 1부터 시작한다.
-    ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String boardType);
+    ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String postType);
 
     // 게시글을 저장하고, 업로드된 첨부파일을 함께 연결한다.
     void saveWithFiles(PostDto post, List<String> savedFileNames);

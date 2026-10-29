@@ -22,7 +22,7 @@ const read = () => {
   return INQUIRY_SEED;
 };
 
-// 서버 문의와 브라우저 예시 문의를 합친다. 같은 id는 서버 데이터를 우선한다 (useBoardStore와 같은 방식).
+// 서버 문의와 브라우저 예시 문의를 합친다. 같은 id는 서버 데이터를 우선한다 (usePostStore와 같은 방식).
 const mergeInquiries = (serverInquiries, localInquiries) => {
   const serverIds = new Set(serverInquiries.map((q) => q.id));
   return [...serverInquiries, ...localInquiries.filter((q) => q.source !== 'server' && !serverIds.has(q.id))];

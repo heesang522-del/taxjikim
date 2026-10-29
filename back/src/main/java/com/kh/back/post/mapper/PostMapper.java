@@ -16,14 +16,14 @@ public interface PostMapper {
             @Param("keyword") String keyword,
             @Param("offset") int offset,
             @Param("size") int size,
-            @Param("boardType") String boardType,
+            @Param("postType") String postType,
             @Param("currentUserId") Long currentUserId,
             @Param("isAdmin") boolean isAdmin
     );
 
     int countAll(
             @Param("keyword") String keyword,
-            @Param("boardType") String boardType,
+            @Param("postType") String postType,
             @Param("currentUserId") Long currentUserId,
             @Param("isAdmin") boolean isAdmin
     );
