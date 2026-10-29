@@ -5,12 +5,11 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 
-// 세금 분석 결과 데이터를 전달한다.
+// 분석번호와 조회한 총수입 또는 총지출 금액을 전달한다.
 @Getter
 @AllArgsConstructor
 public class TaxDto {
 
     private final Long taxInputId;
-    private final BigDecimal totalExpense;
-    private final BigDecimal totalIncome;
+    private final BigDecimal totalAmount;
 }

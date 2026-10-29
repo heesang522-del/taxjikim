@@ -65,8 +65,7 @@ public class TaxServiceImpl implements TaxService {
     public TaxDto getTotalExpense(Long taxInputId) {
         BigDecimal totalExpense = taxMapper.findTotalExpense(taxInputId);
 
-        // 이번에 조회하지 않은 총수입은 null로 둔다.
-        return new TaxDto(taxInputId, totalExpense, null);
+        return new TaxDto(taxInputId, totalExpense);
     }
 
     // 분석번호로 세전 총수입을 조회한다.
@@ -75,7 +74,6 @@ public class TaxServiceImpl implements TaxService {
     public TaxDto getTotalIncome(Long taxInputId) {
         BigDecimal totalIncome = taxMapper.findTotalIncome(taxInputId);
 
-        // 이번에 조회하지 않은 총지출은 null로 둔다.
-        return new TaxDto(taxInputId, null, totalIncome);
+        return new TaxDto(taxInputId, totalIncome);
     }
 }
