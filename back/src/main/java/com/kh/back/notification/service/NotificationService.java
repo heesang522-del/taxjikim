@@ -23,4 +23,8 @@ public interface NotificationService {
     // 정보공유·팁·QnA 게시글에 댓글이 달렸을 때 게시글 작성자에게 알림 발송 (본인 댓글 제외)
     void notifyPostComment(Long postId, Long postAuthorId, Long commenterId, String commenterNickname,
                             String postTitle, String commentContent);
+
+    // 내 댓글에 답글이 달렸을 때 부모 댓글 작성자에게 알림 발송 (본인 답글 제외)
+    void notifyCommentReply(Long postId, Long parentCommentAuthorId, Long replierId, String replierNickname,
+                             String postTitle, String replyContent);
 }

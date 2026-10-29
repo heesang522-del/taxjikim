@@ -5,6 +5,7 @@ import com.kh.back.notification.dto.NotificationDto;
 import com.kh.back.notification.dto.NotificationPageDto;
 import com.kh.back.notification.mapper.NotificationMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -13,6 +14,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 import java.util.Map;
+
 
 @Service
 @RequiredArgsConstructor
@@ -88,6 +90,23 @@ public class NotificationServiceImpl implements NotificationService {
         notificationMapper.insertCommentNotification(postAuthorId, postId, safeTitle, message);
         // 글 작성자 한 명에게만 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
         pushAfterCommit(() -> sseEmitterRegistry.send(postAuthorId, NOTIFICATION_EVENT, Map.of("type", "COMMENT")));
+    }
+
+    @Override
+    @Transactional
+    public void notifyCommentReply(Long postId, Long parentCommentAuthorId, Long replierId, String replierNickname,
+                                    String postTitle, String replyContent) {
+        // 본인 댓글에 본인이 답글을 달면 알림을 보내지 않는다. 탈퇴 여부는 체크하지 않는다.
+        if (parentCommentAuthorId.equals(replierId)) {
+            return;
+        }
+        String safeTitle = (postTitle != null && postTitle.length() > TITLE_MAX_LENGTH)
+                ? postTitle.substring(0, TITLE_MAX_LENGTH)
+                : postTitle;
+        String message = replierNickname + ": " + buildPreview(replyContent);
+        notificationMapper.insertReplyNotification(parentCommentAuthorId, postId, safeTitle, message);
+        // 부모 댓글 작성자 한 명에게만 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
+        pushAfterCommit(() -> sseEmitterRegistry.send(parentCommentAuthorId, NOTIFICATION_EVENT, Map.of("type", "REPLY")));
     }
 
     // 댓글 내용 미리보기: 15자를 넘으면 자르고 말줄임표(...)를 붙인다.

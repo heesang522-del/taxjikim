@@ -66,4 +66,10 @@
         VALUES (#{userId}, 'COMMENT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
     </insert>
 
+    <!-- 내 댓글에 답글이 달렸을 때 부모 댓글 작성자에게 알림 1건 생성 -->
+    <insert id="insertReplyNotification">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES (#{userId}, 'REPLY', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+    </insert>
+
 </mapper>
