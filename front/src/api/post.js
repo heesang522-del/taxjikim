@@ -65,6 +65,23 @@ export async function getBoardPosts() {
   return posts;
 }
 
+// 게시판 목록을 한 페이지만 받아온다. 탭(boardType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,
+// 페이지 번호 UI에 쓸 meta(page/size/total/totalPages)도 함께 돌려준다.
+export async function getBoardPostsPage({ page = 1, boardType, keyword, sort = 'latest' } = {}) {
+  const response = await client.get('', {
+    baseURL: POST_API_BASE,
+    params: { page, sort, boardType: boardType || undefined, keyword: keyword || undefined },
+  });
+
+  const result = response.data;
+
+  if (!result?.success || !Array.isArray(result.data)) {
+    throw new Error(result?.error?.message || result?.message || '게시글 목록을 불러오지 못했습니다.');
+  }
+
+  return { posts: result.data.map(toBoardPost), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
+}
+
 // 서버의 QNA 게시글을 Q&A 화면에서 쓰는 필드로 변환한다.
 export function toInquiry(post) {
   return {
