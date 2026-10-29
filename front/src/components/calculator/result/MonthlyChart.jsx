@@ -1,12 +1,54 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { Card } from '../common/index';
+import { useEffect, useState } from 'react';
+import { getMonthlyIncomes, getMonthlyExpenses } from '../../../api/taxApi';
+import { Card } from '../../common/index';
 
-const W = 640, H = 220, PAD = { l: 44, r: 8, t: 10, b: 26 };
+const W = 640,
+  H = 220,
+  PAD = { l: 44, r: 8, t: 10, b: 26 };
 
-// 이전 SVG 좌표와 막대 배치를 유지하고, 전달받은 월별 데이터만 연결한다.
-export function MonthlyChart({ incomes = [], expenses = [], isLoading = false, errorMessage = '' }) {
+// 분석번호로 월별 금액을 조회하고 기존 SVG 막대그래프로 표시한다.
+export function MonthlyChart({ taxInputId }) {
+  const [monthlyData, setMonthlyData] = useState({ incomes: [], expenses: [] });
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
+
+  // 분석번호가 바뀌면 이전 결과를 비우고 해당 분석의 수입·지출을 다시 조회한다.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+
+    async function loadMonthlyData() {
+      setIsLoading(true);
+      setErrorMessage('');
+      setMonthlyData({ incomes: [], expenses: [] });
+
+      try {
+        const [incomeResult, expenseResult] = await Promise.all([
+          getMonthlyIncomes(taxInputId, { signal: controller.signal }),
+          getMonthlyExpenses(taxInputId, { signal: controller.signal }),
+        ]);
+        if (!cancelled) {
+          setMonthlyData({ incomes: incomeResult.data, expenses: expenseResult.data });
+        }
+      } catch (error) {
+        if (!cancelled) setErrorMessage(error.message || '월별 데이터를 불러오지 못했습니다.');
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadMonthlyData();
+    // 화면을 떠나거나 분석번호가 바뀐 뒤 이전 응답이 화면을 덮어쓰지 않게 한다.
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [taxInputId]);
+
+  const { incomes, expenses } = monthlyData;
   const monthly = { inc: Array(12).fill(0), exp: Array(12).fill(0) };
   const incomePredicted = Array(12).fill(false);
   const expensePredicted = Array(12).fill(false);
