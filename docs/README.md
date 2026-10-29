@@ -19,9 +19,8 @@
 ## 연결·인증·협업 자료
 
 - [백엔드 API](api-draft.md), [프론트 API 기록](../front/docs/api-draft.md), [화면 기록](../front/docs/model-card.md): 작성 시점의 구현 설명. 세금 목표 설계는 위 담당 문서를 따른다.
-- [인증·인가 역할](authentication-authorization-study.md): 사용자 정보·소유권 검사.
-- [백엔드 안내](backend-manual.md), [학습 노트](backend-review-guide.md): 인증·회원 코드 설명. 학습 노트의 과거 실패 정책은 현재 안내와 구분한다.
-- 관리자·로그인 실패 문서와 [PR 25 초안](pr-25-review-draft.md): 해당 기능·PR의 검토 기록. 세금 계산 명세가 아니다.
+- [인증·인가 역할](<인증·인가 역할 분담과 사용자 정보 사용 정리.md>): 사용자 정보·소유권 검사.
+- [React 코드 구조 개선 및 정리 사항](<React 코드 구조 개선 및 정리 사항.md>): 화면 구성 요소의 역할 분리와 미사용 코드 정리 방향.
 - [코드 규칙](code-convention.md), [Git 규칙](git-rule.md), [PR 가이드](pr-guide.md): 공통 작업 규칙.
 
 중복 대화 인계서는 삭제하고 필요한 합의·예시·출처를 담당 문서에 통합했다.
