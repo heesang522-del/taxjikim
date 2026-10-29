@@ -46,7 +46,9 @@ public class CommentServiceImpl implements CommentService {
 
         // parentCommentId는 userId와 달리 신원 정보가 아니라 "어느 댓글에 다는지"를 가리키는
         // 참조값이라 요청값을 그대로 받되, 존재 여부·소속 글만 서버에서 검증한다.
-        Long resolvedParentCommentId = resolveParentCommentId(postId, parentCommentId);
+        // parentComment는 평탄화 전 원본 부모 댓글이다(작성자 id는 답글 알림 발송에 사용).
+        CommentDto parentComment = resolveParentComment(postId, parentCommentId);
+        Long resolvedParentCommentId = resolveStorageParentCommentId(parentComment);
 
         // 작성자 번호는 요청 본문을 신뢰하지 않고 인증된 회원 정보에서 받는다.
         CommentDto comment = new CommentDto();
@@ -61,9 +63,22 @@ public class CommentServiceImpl implements CommentService {
             postMapper.updateAnswerStatus(postId, "DONE");
         }
 
+        // 답글이면서 그 부모 댓글의 작성자가 글 작성자 본인인 경우, 아래 답글 알림이 같은 사람에게
+        // 더 구체적으로 가므로 "글에 댓글 달림" 알림은 중복으로 보지 않고 생략한다.
+        boolean isReplyToPostAuthorsOwnComment = parentComment != null
+                && parentComment.getUserId().equals(post.getUserId());
+
         // 알림 대상 게시판이고 본인 글에 본인이 댓글을 단 게 아닐 때만 알림을 보낸다.
-        if (COMMENT_NOTIFY_POST_TYPES.contains(post.getPostType()) && !post.getUserId().equals(userId)) {
+        if (COMMENT_NOTIFY_POST_TYPES.contains(post.getPostType()) && !post.getUserId().equals(userId)
+                && !isReplyToPostAuthorsOwnComment) {
             notificationService.notifyPostComment(postId, post.getUserId(), userId, writerNickname,
+                    post.getTitle(), trimmedContent);
+        }
+
+        // 답글이면(parentComment가 있으면) 게시판 종류와 무관하게 부모 댓글 작성자에게 알림을 보낸다.
+        // 본인 댓글에 본인이 답글을 단 경우는 NotificationServiceImpl 내부에서 걸러진다.
+        if (parentComment != null) {
+            notificationService.notifyCommentReply(postId, parentComment.getUserId(), userId, writerNickname,
                     post.getTitle(), trimmedContent);
         }
     }
@@ -95,9 +110,9 @@ public class CommentServiceImpl implements CommentService {
         return content.trim();
     }
 
-    // 대댓글은 1단계까지만 허용한다(스키마 제약). 답글에 또 답글을 달면
-    // 원래 댓글(조부모)로 평탄화해서 저장한다.
-    private Long resolveParentCommentId(Long postId, Long parentCommentId) {
+    // 요청으로 들어온 parentCommentId가 가리키는 원본 부모 댓글을 조회·검증한다.
+    // (평탄화는 저장 시에만 적용하고, 작성자 id 등 원본 정보는 그대로 보존해 알림 대상 판단에 쓴다.)
+    private CommentDto resolveParentComment(Long postId, Long parentCommentId) {
         if (parentCommentId == null) {
             return null;
         }
@@ -105,7 +120,16 @@ public class CommentServiceImpl implements CommentService {
         if (parent == null || !parent.getPostId().equals(postId)) {
             throw new ApiException(HttpStatus.NOT_FOUND, "COMMENT_NOT_FOUND", "답글을 작성할 댓글을 찾을 수 없습니다.");
         }
-        return parent.getParentCommentId() != null ? parent.getParentCommentId() : parent.getCommentId();
+        return parent;
+    }
+
+    // 대댓글은 1단계까지만 허용한다(스키마 제약). 답글에 또 답글을 달면
+    // 원래 댓글(조부모)로 평탄화해서 저장한다.
+    private Long resolveStorageParentCommentId(CommentDto parentComment) {
+        if (parentComment == null) {
+            return null;
+        }
+        return parentComment.getParentCommentId() != null ? parentComment.getParentCommentId() : parentComment.getCommentId();
     }
 
     private PostDto requirePost(Long postId) {

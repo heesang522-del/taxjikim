@@ -25,4 +25,8 @@ public interface NotificationMapper {
     // 댓글 알림 1건 생성 (수신자: 게시글 작성자)
     int insertCommentNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
                                    @Param("title") String title, @Param("message") String message);
+
+    // 답글 알림 1건 생성 (수신자: 답글이 달린 부모 댓글의 작성자)
+    int insertReplyNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
+                                 @Param("title") String title, @Param("message") String message);
 }
