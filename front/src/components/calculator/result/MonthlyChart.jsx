@@ -9,6 +9,42 @@ const W = 640,
   H = 220,
   PAD = { l: 44, r: 8, t: 10, b: 26 };
 
+// 최고 금액에 맞춰 4칸짜리 Y축의 눈금 간격과 표시 단위를 정한다.
+function getYAxisScale(highestAmount) {
+  const targetStep = highestAmount / 4;
+  let magnitude = 1;
+  // 예: 간격 후보가 30만 원이면 자릿값은 10만 원이다.
+  while (targetStep >= magnitude * 10) {
+    magnitude *= 10;
+  }
+
+  // 자릿값의 1·2·5·10배 중 금액을 담을 수 있는 간격으로 올림한다.
+  const ratio = targetStep / magnitude;
+  let step;
+  if (ratio <= 1) {
+    step = magnitude;
+  } else if (ratio <= 2) {
+    step = magnitude * 2;
+  } else if (ratio <= 5) {
+    step = magnitude * 5;
+  } else {
+    step = magnitude * 10;
+  }
+
+  const max = step * 4;
+  // 막대 높이는 원 단위로 계산하고 눈금 글자만 원·만원·억원으로 바꾼다.
+  let unit = '원';
+  let divisor = 1;
+  if (max >= 100000000) {
+    unit = '억원';
+    divisor = 100000000;
+  } else if (max >= 10000) {
+    unit = '만원';
+    divisor = 10000;
+  }
+  return { max, step, unit, divisor };
+}
+
 // 분석번호로 월별 금액을 조회하고 기존 SVG 막대그래프로 표시한다.
 export function MonthlyChart({ taxInputId }) {
   const [monthlyData, setMonthlyData] = useState({ incomes: [], expenses: [] });
@@ -78,7 +114,8 @@ export function MonthlyChart({ taxInputId }) {
 
   const iw = W - PAD.l - PAD.r,
     ih = H - PAD.t - PAD.b;
-  const max = Math.ceil(Math.max(...monthly.inc, ...monthly.exp) / 1e6) * 1e6 || 1e6;
+  const highestAmount = Math.max(...monthly.inc, ...monthly.exp);
+  const { max, step, unit, divisor } = getYAxisScale(highestAmount);
   const bw = iw / 12;
   const fx = PAD.l + (forecastIndex === -1 ? 12 : forecastIndex) * bw;
   const barStyle = (forecast, color) =>
@@ -109,7 +146,7 @@ export function MonthlyChart({ taxInputId }) {
             <g key={i}>
               <line x1={PAD.l} x2={W - PAD.r} y1={y} y2={y} stroke="var(--border)" />
               <text x={PAD.l - 6} y={y + 4} textAnchor="end">
-                {Math.round(((max / 4) * i) / 1e4)}
+                {((step * i) / divisor).toLocaleString('ko-KR', { maximumFractionDigits: 4 })}
               </text>
             </g>
           );
@@ -150,7 +187,7 @@ export function MonthlyChart({ taxInputId }) {
           </text>
         )}
         <text x={PAD.l} y={PAD.t - 1} style={{ fontSize: 10 }}>
-          (만원)
+          ({unit})
         </text>
       </svg>
       <p className="small muted" style={{ marginTop: 8 }}>
