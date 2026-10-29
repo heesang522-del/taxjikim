@@ -12,7 +12,7 @@ import { Button, Icon, Modal, Pill } from '../common/index';
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
-  const { items, unreadCount, hasMore, loadingMore, openList, loadMore, markAllRead } = useNotifications();
+  const { items, unreadCount, hasMore, loadingMore, openList, loadMore, markRead } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -78,8 +78,7 @@ export function Header() {
               style={{ position: 'relative' }}
               onClick={() => {
                 setNotifOpen(true);
-                markAllRead();
-                openList(); // 알림창을 열 때마다 최신 1페이지로 목록을 새로 불러온다.
+                openList(); // 알림창을 열 때마다 최신 미읽음 1페이지로 목록을 새로 불러온다.
               }}
             >
               <Icon name="bell" size={16} />
@@ -116,7 +115,15 @@ export function Header() {
           >
             {items.length ? (
               items.map((n) => (
-                <Link key={n.id} to={n.to} className="notif-item" onClick={() => setNotifOpen(false)}>
+                <Link
+                  key={n.id}
+                  to={n.to}
+                  className="notif-item"
+                  onClick={() => {
+                    setNotifOpen(false);
+                    markRead(n.id); // 알림을 열어본 시점에 읽음 처리(서버에서 바로 삭제됨)
+                  }}
+                >
                   <p style={{ fontWeight: 600 }}>{n.title}</p>
                   <p className="small muted">
                     {n.desc} · {n.createdAt}

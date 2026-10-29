@@ -13,7 +13,8 @@
     </insert>
 
     <!--
-        로그인한 회원의 알림 목록 커서 페이징 조회 (삭제되지 않은 알림만).
+        로그인한 회원의 미읽음 알림 목록 커서 페이징 조회 (읽었거나 삭제된 알림은 제외).
+        읽음 처리는 곧바로 소프트 삭제(DELETED_AT)로 이어지므로, 여기 보이는 알림은 항상 미읽음 상태다.
         NOTIFICATION_ID는 자동 증가 PK이고 CREATED_AT은 삽입 시 DB가 채우는 값이라,
         생성 순서와 항상 같이 움직여서 정렬·커서 기준으로 그대로 쓸 수 있다.
         cursorId가 있으면 그보다 작은(더 오래된) 알림부터 내려준다.
@@ -31,6 +32,7 @@
             CREATED_AT      AS createdAt
         FROM NOTIFICATIONS
         WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
           AND DELETED_AT IS NULL
         <if test="cursorId != null">
           AND NOTIFICATION_ID &lt; #{cursorId}
@@ -49,14 +51,15 @@
     </select>
 
     <!--
-    로그인한 회원의 미읽음 알림을 전체 읽음 처리
-    알림이 열릴 때 동작
-         -->
-    <update id="markAllAsReadByUserId">
+        알림 1건 읽음 처리: 읽음 플래그를 켜는 동시에 소프트 삭제(DELETED_AT)해서
+        목록·미읽음 수 조회에서 바로 빠지게 한다. userId까지 조건에 넣어 본인 알림만 처리한다.
+    -->
+    <update id="markAsReadById">
         UPDATE NOTIFICATIONS
-        SET IS_READ = TRUE
-        WHERE USER_ID = #{userId}
-          AND IS_READ = FALSE
+        SET IS_READ = TRUE,
+            DELETED_AT = NOW()
+        WHERE NOTIFICATION_ID = #{notificationId}
+          AND USER_ID = #{userId}
           AND DELETED_AT IS NULL
     </update>
 

@@ -26,7 +26,7 @@ async function requestNotifications(config) {
   }
 }
 
-// 로그인한 회원의 알림 목록 커서 페이징 조회 (최신순)
+// 로그인한 회원의 미읽음 알림 목록 커서 페이징 조회 (최신순)
 // cursorId: 이전 조회 결과의 meta.nextCursor 값. 없으면 최신 알림부터 조회한다.
 // size: 한 번에 가져올 개수. 생략하면 서버 기본값(20)을 쓴다.
 export function getNotifications({ cursorId, size } = {}) {
@@ -38,7 +38,7 @@ export function getUnreadNotificationCount() {
   return requestNotifications({ url: '/notifications/unread-count' })
 }
 
-// 로그인한 회원의 미읽음 알림을 전체 읽음 처리
-export function markAllNotificationsRead() {
-  return requestNotifications({ url: '/notifications/read-all', method: 'PATCH' })
+// 알림 1건 읽음 처리. 서버에서 곧바로 소프트 삭제되어 목록에서 사라진다.
+export function markNotificationRead(notificationId) {
+  return requestNotifications({ url: `/notifications/${notificationId}/read`, method: 'PATCH' })
 }

@@ -1,11 +1,13 @@
 package com.kh.back.notification.service;
 
+import com.kh.back.common.exception.ApiException;
 import com.kh.back.common.sse.SseEmitterRegistry;
 import com.kh.back.notification.dto.NotificationDto;
 import com.kh.back.notification.dto.NotificationPageDto;
 import com.kh.back.notification.mapper.NotificationMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -70,8 +72,11 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
-    public void markAllAsRead(Long userId) {
-        notificationMapper.markAllAsReadByUserId(userId);
+    public void markAsRead(Long userId, Long notificationId) {
+        int updated = notificationMapper.markAsReadById(userId, notificationId);
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "NOTIFICATION_NOT_FOUND", "알림을 찾을 수 없습니다.");
+        }
     }
 
     @Override

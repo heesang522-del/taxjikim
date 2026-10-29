@@ -63,8 +63,7 @@ public class CommentServiceImpl implements CommentService {
             postMapper.updateAnswerStatus(postId, "DONE");
         }
 
-        // 답글이면서 그 부모 댓글의 작성자가 글 작성자 본인인 경우, 아래 답글 알림이 같은 사람에게
-        // 더 구체적으로 가므로 "글에 댓글 달림" 알림은 중복으로 보지 않고 생략한다.
+        // 게시판 작성자 == 댓글 작성자 일 때, 중복된 알림을 보내지 않기 위해 답글에 대한 알림만 발송한다.
         boolean isReplyToPostAuthorsOwnComment = parentComment != null
                 && parentComment.getUserId().equals(post.getUserId());
 
