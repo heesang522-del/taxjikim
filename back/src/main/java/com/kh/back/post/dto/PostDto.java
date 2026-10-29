@@ -13,7 +13,7 @@ public class PostDto {
     private String writer; // 작성자 닉네임 또는 이름
 
     // 🌟 DB 스키마(POSTS)에 맞춘 필수 필드 추가
-    private String boardType;    // INFO / TIP / NOTICE / FAQ / QNA
+    private String postType;    // INFO / TIP / NOTICE / FAQ / QNA
     private boolean isPublic = true; // QNA 전용 공개 여부 (기본값 true)
 
     private String title;

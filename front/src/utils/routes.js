@@ -8,10 +8,10 @@ export const ROUTES = {
   signup: '/signup',
   findAccount: '/find-account',
   mypage: '/mypage',
-  board: '/community',
-  boardWrite: '/community/new',
-  boardPost: (id) => `/community/${id}`,
-  boardEdit: (id) => `/community/${id}/edit`,
+  postList: '/community',
+  postWrite: '/community/new',
+  postDetail: (id) => `/community/${id}`,
+  postEdit: (id) => `/community/${id}/edit`,
   help: '/support',
   helpQna: '/support?tab=qna',
   qnaPost: (id) => `/support/qna/${id}`,
@@ -25,6 +25,6 @@ export const ROUTES = {
 export const NAV_ITEMS = [
   { to: ROUTES.home, label: '홈', end: true },
   { to: '/calculator', label: '세금 계산·시뮬레이션' },
-  { to: ROUTES.board, label: '게시판' },
+  { to: ROUTES.postList, label: '게시판' },
   { to: ROUTES.help, label: '고객센터' },
 ];

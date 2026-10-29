@@ -4,14 +4,14 @@
 import { Button, Card, DataTable, Pill } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
 import { useReports } from '../utils/useReports';
-import { useBoard } from '../store/useBoardStore';
+import { usePost } from '../store/usePostStore';
 import { useToast } from '../store/useToastStore';
 
 const snippet = (text, n = 50) => (text.length > n ? `${text.slice(0, n)}…` : text);
 
 export default function AdminReportsPage() {
   const { reports, resolveReport } = useReports();
-  const { posts, comments, adminDeletePost, adminDeleteComment } = useBoard();
+  const { posts, comments, adminDeletePost, adminDeleteComment } = usePost();
   const toast = useToast();
   const pending = reports.filter((r) => r.status === '대기');
   const done = reports.filter((r) => r.status !== '대기');
@@ -43,7 +43,7 @@ export default function AdminReportsPage() {
     { key: 'o', header: '신고 대상', render: (r) => {
       const t = targetOf(r);
       return r.targetType === 'post' && !t.gone
-        ? <Button variant="link" size="sm" to={ROUTES.boardPost(r.postId)}>{t.label}</Button>
+        ? <Button variant="link" size="sm" to={ROUTES.postDetail(r.postId)}>{t.label}</Button>
         : <span className={t.gone ? 'muted' : ''}>{t.label}</span>;
     } },
     { key: 'r', header: '사유', render: (r) => r.reason },

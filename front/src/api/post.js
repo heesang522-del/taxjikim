@@ -4,7 +4,7 @@ import { client } from './client.js';
 const POST_API_BASE = '/api/v1/posts/community';
 
 // 서버의 게시글을 기존 게시판 화면에서 사용하는 필드로 변환한다.
-export function toBoardPost(post) {
+export function toPost(post) {
   const tabs = {
     INFO: '정보 공유',
     TIP: '팁',
@@ -14,7 +14,7 @@ export function toBoardPost(post) {
   return {
     id: String(post.postId),
     userId: post.userId,
-    tab: tabs[post.boardType] || post.boardType,
+    tab: tabs[post.postType] || post.postType,
     title: post.title || '',
     body: post.content || '',
     author: post.writer || '알 수 없는 사용자',
@@ -39,7 +39,7 @@ export function toBoardPost(post) {
   };
 }
 
-export async function getBoardPosts() {
+export async function getPosts() {
   const posts = [];
   let page = 1;
   let totalPages = 1;
@@ -57,7 +57,7 @@ export async function getBoardPosts() {
       throw new Error(result?.error?.message || result?.message || '게시글 목록을 불러오지 못했습니다.');
     }
 
-    posts.push(...result.data.map(toBoardPost));
+    posts.push(...result.data.map(toPost));
     totalPages = result.meta?.totalPages || 1;
     page += 1;
   } while (page <= totalPages);
@@ -65,12 +65,12 @@ export async function getBoardPosts() {
   return posts;
 }
 
-// 게시판 목록을 한 페이지만 받아온다. 탭(boardType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,
+// 게시판 목록을 한 페이지만 받아온다. 탭(postType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,
 // 페이지 번호 UI에 쓸 meta(page/size/total/totalPages)도 함께 돌려준다.
-export async function getBoardPostsPage({ page = 1, boardType, keyword, sort = 'latest' } = {}) {
+export async function getPostsPage({ page = 1, postType, keyword, sort = 'latest' } = {}) {
   const response = await client.get('', {
     baseURL: POST_API_BASE,
-    params: { page, sort, boardType: boardType || undefined, keyword: keyword || undefined },
+    params: { page, sort, postType: postType || undefined, keyword: keyword || undefined },
   });
 
   const result = response.data;
@@ -79,7 +79,7 @@ export async function getBoardPostsPage({ page = 1, boardType, keyword, sort = '
     throw new Error(result?.error?.message || result?.message || '게시글 목록을 불러오지 못했습니다.');
   }
 
-  return { posts: result.data.map(toBoardPost), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
+  return { posts: result.data.map(toPost), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
 }
 
 // 서버의 QNA 게시글을 Q&A 화면에서 쓰는 필드로 변환한다.
@@ -106,7 +106,7 @@ export async function getInquiries() {
   do {
     const response = await client.get('', {
       baseURL: POST_API_BASE,
-      params: { page, boardType: 'QNA' },
+      params: { page, postType: 'QNA' },
     });
 
     const result = response.data;

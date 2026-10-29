@@ -40,9 +40,9 @@ public class PostApiController {
 
                                                   @RequestParam(defaultValue = "1") int page,
 
-                                                  @RequestParam(required = false) String boardType) {
+                                                  @RequestParam(required = false) String postType) {
 
-        return postService.getPostPage(sort, keyword, page, boardType);
+        return postService.getPostPage(sort, keyword, page, postType);
     }
 
     @GetMapping("/{postId}")
@@ -67,13 +67,13 @@ public class PostApiController {
     }
 
     @PostMapping(consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
-    public ApiResponse<Void> createPost(@RequestParam("title") String title, @RequestParam("content") String content, @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
+    public ApiResponse<Void> createPost(@RequestParam("title") String title, @RequestParam("content") String content, @RequestParam(value = "postType", defaultValue = "INFO") String postType,
 
                                         @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
 
                                         @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson) {
 
-        PostDto post = makePost(title, content, boardType, isPublic);
+        PostDto post = makePost(title, content, postType, isPublic);
 
         postService.saveWithFiles(post, parseFileNames(savedFileNamesJson));
 
@@ -87,7 +87,7 @@ public class PostApiController {
 
                                         @RequestParam("content") String content,
 
-                                        @RequestParam(value = "boardType", defaultValue = "INFO") String boardType,
+                                        @RequestParam(value = "postType", defaultValue = "INFO") String postType,
 
                                         @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
 
@@ -95,7 +95,7 @@ public class PostApiController {
 
                                         @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson) {
 
-        PostDto post = makePost(title, content, boardType, isPublic);
+        PostDto post = makePost(title, content, postType, isPublic);
 
         post.setPostId(postId);
 
@@ -112,13 +112,13 @@ public class PostApiController {
         return ApiResponse.ok(null);
     }
 
-    private PostDto makePost(String title, String content, String boardType, boolean isPublic) {
+    private PostDto makePost(String title, String content, String postType, boolean isPublic) {
 
         PostDto post = new PostDto();
 
         post.setTitle(title);
         post.setContent(content);
-        post.setBoardType(boardType);
+        post.setPostType(postType);
         post.setPublic(isPublic);
 
         // 사용자 ID는 서비스에서 인증 정보로 지정한다.

@@ -4,14 +4,14 @@
 
 <mapper namespace="com.kh.back.post.mapper.PostMapper">
 
-    <resultMap id="게시글매핑"
+    <resultMap id="postMapping"
                type="com.kh.back.post.dto.PostDto">
 
         <id property="postId" column="POST_ID"/>
 
         <result property="userId" column="USER_ID"/>
         <result property="writer" column="WRITER"/>
-        <result property="boardType" column="BOARD_TYPE"/>
+        <result property="postType" column="BOARD_TYPE"/>
 
         <result property="title" column="TITLE"/>
         <result property="content" column="CONTENT"/>
@@ -26,7 +26,7 @@
 
     </resultMap>
 
-    <resultMap id="파일매핑"
+    <resultMap id="fileMapping"
                type="com.kh.back.post.dto.FileMetadataDto">
 
         <id property="fileId" column="FILE_ID"/>
@@ -51,7 +51,7 @@
 
     </resultMap>
 
-    <sql id="게시글조회컬럼">
+    <sql id="postColumns">
 
         p.POST_ID,
         p.USER_ID,
@@ -72,7 +72,7 @@
 
     </sql>
 
-    <sql id="검색조건">
+    <sql id="keyword">
 
         <if test="keyword != null and keyword != ''">
 
@@ -83,14 +83,14 @@
 
         </if>
 
-        <!-- boardType이 없으면 모든 게시판을 섞어서 보여준다(기존 동작과 동일). -->
-        <if test="boardType != null and boardType != ''">
+        <!-- postType이 없으면 모든 게시판을 섞어서 보여준다(기존 동작과 동일). -->
+        <if test="postType != null and postType != ''">
 
-            AND p.BOARD_TYPE = #{boardType}
+            AND p.BOARD_TYPE = #{postType}
 
         </if>
 
-        <!-- QNA 비공개 글은 boardType 필터 여부와 상관없이 작성자 본인·관리자만 조회된다. -->
+        <!-- QNA 비공개 글은 postType 필터 여부와 상관없이 작성자 본인·관리자만 조회된다. -->
         <if test="!isAdmin">
 
             AND (
@@ -105,7 +105,7 @@
 
     </sql>
 
-    <sql id="정렬조건">
+    <sql id="sort">
 
         <choose>
 
@@ -121,10 +121,10 @@
 
     </sql>
 
-    <select id="findById" resultMap="게시글매핑">
+    <select id="findById" resultMap="postMapping">
 
         SELECT
-        <include refid="게시글조회컬럼"/>
+        <include refid="postColumns"/>
 
         FROM POSTS p
 
@@ -137,7 +137,7 @@
     </select>
 
     <!-- 변경 중 작성자 확인과 실제 변경을 같은 트랜잭션으로 처리한다. -->
-    <select id="lockById" resultMap="게시글매핑">
+    <select id="lockById" resultMap="postMapping">
 
         SELECT
         POST_ID,
@@ -150,10 +150,10 @@
 
     </select>
 
-    <select id="findPage" resultMap="게시글매핑">
+    <select id="findPage" resultMap="postMapping">
 
         SELECT
-        <include refid="게시글조회컬럼"/>
+        <include refid="postColumns"/>
 
         FROM POSTS p
 
@@ -162,10 +162,10 @@
 
         WHERE p.DELETED_AT IS NULL
 
-        <include refid="검색조건"/>
+        <include refid="keyword"/>
 
         ORDER BY
-        <include refid="정렬조건"/>
+        <include refid="sort"/>
 
         LIMIT #{size}
         OFFSET #{offset}
@@ -178,7 +178,7 @@
         FROM POSTS p
         WHERE p.DELETED_AT IS NULL
 
-        <include refid="검색조건"/>
+        <include refid="keyword"/>
 
     </select>
 
@@ -197,13 +197,13 @@
         )
         VALUES (
         #{userId},
-        #{boardType},
+        #{postType},
         #{title},
         #{content},
         #{public},
         <!-- QNA 글만 답변 대기 상태로 시작한다. 다른 게시판은 답변 상태를 쓰지 않는다. -->
         <choose>
-            <when test="boardType == 'QNA'">'WAITING'</when>
+            <when test="postType == 'QNA'">'WAITING'</when>
             <otherwise>NULL</otherwise>
         </choose>
         )
@@ -245,7 +245,7 @@
 
     </update>
 
-    <select id="findFilesByPostId" resultMap="파일매핑">
+    <select id="findFilesByPostId" resultMap="fileMapping">
 
         SELECT f.*
         FROM FILE_META f
@@ -291,7 +291,7 @@
 
     </insert>
 
-    <select id="lockPendingFile" resultMap="파일매핑">
+    <select id="lockPendingFile" resultMap="fileMapping">
 
         SELECT *
         FROM FILE_META

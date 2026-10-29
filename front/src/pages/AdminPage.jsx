@@ -7,7 +7,7 @@ import { Button, Card, DataTable, HBar, Pill, Tabs } from '../components/common/
 import { ADMIN_STATS, USAGE_METRICS, FAILURE_LOG_SEED } from '../data/content';
 import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
-import { useBoard } from '../store/useBoardStore';
+import { usePost } from '../store/usePostStore';
 import { useInquiry } from '../store/useInquiryStore';
 import { useReports } from '../utils/useReports';
 import { useFaq } from '../utils/useFaq';
@@ -114,7 +114,7 @@ export default function AdminPage() {
   const [tab, setTab] = useState(ADMIN_TABS.some(([id]) => id === params.get('tab')) ? params.get('tab') : ADMIN_TABS[0][0]);
   const toast = useToast();
 
-  const { posts, updatePost } = useBoard();
+  const { posts, updatePost } = usePost();
   const { inquiries } = useInquiry();
   const { reports } = useReports();
   const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
@@ -226,7 +226,7 @@ export default function AdminPage() {
             <p className="small muted" style={{ marginTop: 8 }}>답변 등록 시 사용자에게 알림이 전송됩니다.</p>
             <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminInquiries}?tab=support`}>전체보기</Button></div>
           </Card>
-          <Card title="공지 관리" icon="megaphone" aside={<Button size="sm" variant="soft" to={`${ROUTES.boardWrite}?tab=${encodeURIComponent('공지')}`}>새 공지 올리기</Button>}>
+          <Card title="공지 관리" icon="megaphone" aside={<Button size="sm" variant="soft" to={`${ROUTES.postWrite}?tab=${encodeURIComponent('공지')}`}>새 공지 올리기</Button>}>
             {notices.length
               ? notices.map((p) => (
                 <NoticeRow key={p.id} post={p} onSave={(v) => { updatePost(p.id, { tab: '공지', title: v.title, body: v.body }); toast('공지를 수정했습니다'); }} />

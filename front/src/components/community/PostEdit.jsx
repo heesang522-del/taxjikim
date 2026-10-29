@@ -11,7 +11,7 @@ export default function PostEdit() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [boardType, setBoardType] = useState('INFO');
+  const [postType, setPostType] = useState('INFO');
   const [isPublic, setIsPublic] = useState(true);
 
   const [existingFiles, setExistingFiles] = useState([]); // 기존 서버에 등록된 파일 메타 리스트 (FILE_META)
@@ -30,7 +30,7 @@ export default function PostEdit() {
         setIsLoaded(true);
         setTitle(data.title || '');
         setContent(data.content || '');
-        setBoardType(data.boardType || 'INFO');
+        setPostType(data.postType || 'INFO');
         setIsPublic(data.isPublic ?? true);
         setExistingFiles(data.files || []); // 🌟 통합 FILE_META 목록 바인딩
       })
@@ -77,7 +77,7 @@ export default function PostEdit() {
     const formData = new FormData();
     formData.append('title', title);
     formData.append('content', content);
-    formData.append('boardType', boardType);
+    formData.append('postType', postType);
     formData.append('isPublic', isPublic);
 
     // 삭제할 파일 ID 배열 전송 (백엔드의 deleteFileIds와 일치)

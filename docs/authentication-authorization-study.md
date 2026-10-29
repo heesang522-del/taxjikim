@@ -188,7 +188,7 @@ PostDto postDto = new PostDto();
 postDto.setUserId(principal.getUserId());
 postDto.setTitle(title);
 postDto.setContent(content);
-postDto.setBoardType(boardType);
+postDto.setPostType(postType);
 postDto.setPublic(isPublic);
 postDto.setWriter(principal.getUserDto().getNickname());
 

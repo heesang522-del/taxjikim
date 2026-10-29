@@ -91,7 +91,7 @@ export default function HelpPage() {
       const formData = new FormData();
       formData.append('title', title);
       formData.append('content', body);
-      formData.append('boardType', 'QNA');
+      formData.append('postType', 'QNA');
       formData.append('isPublic', visibility === 'public');
 
       await createPost(formData);
