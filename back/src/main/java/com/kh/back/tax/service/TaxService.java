@@ -1,9 +1,15 @@
 package com.kh.back.tax.service;
 
 import com.kh.back.tax.dto.TaxDto;
+import com.kh.back.tax.dto.MonthlyExpenseDto;
+
+import java.util.List;
 
 // 세금 분석 결과 처리 기능을 선언한다.
 public interface TaxService {
+
+    // 분석번호에 해당하는 월별 실제 지출 목록을 반환한다.
+    List<MonthlyExpenseDto> getMonthlyExpenses(Long taxInputId);
 
     // 분석번호에 해당하는 실제 총지출을 반환한다.
     TaxDto getTotalExpense(Long taxInputId);

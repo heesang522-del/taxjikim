@@ -3,6 +3,31 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <select id="findFirstTransactionDate" resultType="java.time.LocalDate">
+        SELECT MIN(TRANSACTION_DATE)
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <select id="findLastTransactionDate" resultType="java.time.LocalDate">
+        SELECT MAX(TRANSACTION_DATE)
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <!-- 날짜가 있는 지출을 월별로 묶고, NULL 금액은 합산에서 제외한다. -->
+    <select id="findMonthlyExpenses" resultType="com.kh.back.tax.dto.MonthlyExpenseDto">
+        SELECT YEAR(TRANSACTION_DATE) AS year,
+               MONTH(TRANSACTION_DATE) AS month,
+               COALESCE(SUM(AMOUNT), 0) AS actualExpense
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_TYPE = 'EXPENSE'
+          AND TRANSACTION_DATE IS NOT NULL
+        GROUP BY YEAR(TRANSACTION_DATE), MONTH(TRANSACTION_DATE)
+        ORDER BY YEAR(TRANSACTION_DATE), MONTH(TRANSACTION_DATE)
+    </select>
+
     <!-- 같은 분석의 지출만 합산하며, NULL 금액은 제외하고 합계가 없으면 0원을 반환한다. -->
     <select id="findTotalExpense" resultType="java.math.BigDecimal">
         SELECT COALESCE(SUM(AMOUNT), 0)
