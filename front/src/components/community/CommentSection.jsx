@@ -58,7 +58,10 @@ export default function CommentSection({ postId }) {
   const visibleCommentCount = list.filter((c) => !c.deleted).length;
 
   // 대댓글(1단계)만 지원하므로 부모 없는 댓글과, 부모 id별 답글 목록으로 나눠서 묶어 보여준다.
-  const topLevelComments = list.filter((c) => !c.parentCommentId);
+  // 최상위 댓글은 최신 작성 댓글이 가장 위에 보이도록 작성 시각 내림차순으로 정렬한다.
+  const topLevelComments = list
+    .filter((c) => !c.parentCommentId)
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const repliesByParent = list.reduce((map, c) => {
     if (c.parentCommentId) {
       (map[c.parentCommentId] ??= []).push(c);
@@ -253,6 +256,32 @@ export default function CommentSection({ postId }) {
           {error}
         </p>
       )}
+      {/* 댓글 작성 폼을 목록 상단에 고정해, 스크롤 없이 바로 작성할 수 있게 한다. */}
+      {loggedIn ? (
+        <form className="row" style={{ gap: 8, marginBottom: 12, alignItems: 'stretch' }} onSubmit={submit}>
+          <textarea
+            className="in"
+            style={{ flex: 1 }}
+            rows={3}
+            maxLength={500}
+            disabled={saving || loading}
+            placeholder="댓글을 입력하세요"
+            aria-label="댓글 내용"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+          />
+          <Button type="submit" variant="primary" size="sm" disabled={saving || loading}>
+            {saving ? '처리 중...' : '댓글 등록'}
+          </Button>
+        </form>
+      ) : (
+        <p className="small muted" style={{ marginBottom: 12 }}>
+          댓글은 로그인 후 작성할 수 있습니다.{' '}
+          <Button variant="link" size="sm" to={ROUTES.auth}>
+            로그인
+          </Button>
+        </p>
+      )}
       {!loading && !error && list.length === 0 && <p className="state-msg">첫 댓글을 남겨 보세요</p>}
       {topLevelComments.map((c) => (
         <div key={c.id}>
@@ -286,32 +315,6 @@ export default function CommentSection({ postId }) {
           {(repliesByParent[c.id] ?? []).map((reply) => renderComment(reply, { isReply: true }))}
         </div>
       ))}
-      {loggedIn ? (
-        <form className="grid" style={{ gap: 8, marginTop: 12 }} onSubmit={submit}>
-          <textarea
-            className="in"
-            rows={3}
-            maxLength={500}
-            disabled={saving || loading}
-            placeholder="댓글을 입력하세요"
-            aria-label="댓글 내용"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
-          <div>
-            <Button type="submit" variant="primary" size="sm" disabled={saving || loading}>
-              {saving ? '처리 중...' : '댓글 등록'}
-            </Button>
-          </div>
-        </form>
-      ) : (
-        <p className="small muted" style={{ marginTop: 12 }}>
-          댓글은 로그인 후 작성할 수 있습니다.{' '}
-          <Button variant="link" size="sm" to={ROUTES.auth}>
-            로그인
-          </Button>
-        </p>
-      )}
       {reporting && <ReportModal targetLabel="댓글" onSubmit={report} onClose={() => setReporting(null)} />}
     </Card>
   );
