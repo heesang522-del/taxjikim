@@ -1,5 +1,12 @@
 # 프론트 API 연결 안내
 
+## 총수입·총지출 Spring 연결 (2026-10-29)
+
+- `getTotalIncome(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-income`.
+- `getTotalExpense(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-expense`.
+- 응답 `data`는 `{ taxInputId, totalAmount }`이며 실제·예상 금액을 합산한 서버 계산 결과다.
+- 결과 페이지에서 `SummaryCards`에 월별 그래프와 같은 분석번호를 전달한다. 카드에서 합계를 조회하며 실패 시 오류를 표시한다.
+
 ## 월별 그래프 Spring 연결 (2026-10-29)
 
 - `getMonthlyIncomes(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/monthly-incomes`.

@@ -49,7 +49,7 @@ export default function CalcResultPage() {
         총 세금은 기납부세액을 차감하기 전 소득세와 지방소득세의 합계이며, 추가 납부액이나 환급액이 아닙니다.
         세율·공제는 예시값이며 실제 세액은 신고 시 달라질 수 있습니다.
       </p>
-      <SummaryCards result={c} />
+      <SummaryCards result={c} taxInputId={taxInputId} />
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         {!loggedIn && (
           <span className="small muted" style={{ alignSelf: 'center' }}>
