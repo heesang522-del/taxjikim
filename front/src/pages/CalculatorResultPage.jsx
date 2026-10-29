@@ -2,10 +2,12 @@
 'use no memo';
 
 import { Navigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { getMonthlyIncomes, getMonthlyExpenses } from '../api/taxApi';
 import { Button, Icon, Note } from '../components/common/index';
 import { SummaryCards } from '../components/calculator/SummaryCards';
 import { TaxChain } from '../components/calculator/TaxChain';
-import MonthlyChart from '../components/calculator/MonthlyChart';
+import { MonthlyChart } from '../components/calculator/MonthlyChart';
 import RegistrationCompare from '../components/calculator/RegistrationCompare';
 import ActionList from '../components/calculator/ActionList';
 import { ROUTES } from '../utils/routes';
@@ -21,6 +23,8 @@ const YELLOW_EXAMPLE = { ...TOTAL_TAX_OPTIONS, yellow: 3e6 };
 const EXPENSE_EXAMPLE = { ...TOTAL_TAX_OPTIONS, extraExp: 1e6 };
 
 export default function CalcResultPage() {
+  // 입력창의 분석번호 전달을 연결할 때 이 테스트 번호를 교체한다.
+  const taxInputId = 19;
   const { calculated } = useTax();
   const { loggedIn } = useAuth();
   const toast = useToast();
@@ -30,6 +34,34 @@ export default function CalcResultPage() {
   const withExpense = useTaxResult(EXPENSE_EXAMPLE);
   const simple = useSimpleResult(TOTAL_TAX_OPTIONS);
   const { save } = useHistory();
+  const [monthlyData, setMonthlyData] = useState({ incomes: [], expenses: [] });
+  const [monthlyLoading, setMonthlyLoading] = useState(true);
+  const [monthlyError, setMonthlyError] = useState('');
+
+  // Spring에서 받은 월별 목록을 그래프에 전달한다. 금액과 예상 여부는 서버 계산값을 사용한다.
+  useEffect(() => {
+    let cancelled = false;
+    const controller = new AbortController();
+    async function loadMonthlyData() {
+      try {
+        const [incomeResult, expenseResult] = await Promise.all([
+          getMonthlyIncomes(taxInputId, { signal: controller.signal }),
+          getMonthlyExpenses(taxInputId, { signal: controller.signal }),
+        ]);
+        if (!cancelled) setMonthlyData({ incomes: incomeResult.data, expenses: expenseResult.data });
+      } catch (error) {
+        if (!cancelled) setMonthlyError(error.message || '월별 데이터를 불러오지 못했습니다.');
+      } finally {
+        if (!cancelled) setMonthlyLoading(false);
+      }
+    }
+    loadMonthlyData();
+    // 화면을 떠난 뒤 도착한 응답으로 상태를 변경하지 않는다.
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [taxInputId]);
 
   const saveResult = () => {
     if (!loggedIn) {
@@ -72,7 +104,12 @@ export default function CalcResultPage() {
       </div>
       <div className="grid g2">
         <TaxChain result={c} />
-        <MonthlyChart monthly={c.monthly} />
+        <MonthlyChart
+          incomes={monthlyData.incomes}
+          expenses={monthlyData.expenses}
+          isLoading={monthlyLoading}
+          errorMessage={monthlyError}
+        />
       </div>
       <RegistrationCompare netNow={c.total} netSimple={simple.total} />
       <ActionList gainYellow={c.total - withYellow.total} gainExpense={c.total - withExpense.total} />

@@ -1,5 +1,13 @@
 # 프론트 API 연결 안내
 
+## 월별 그래프 Spring 연결 (2026-10-29)
+
+- `getMonthlyIncomes(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/monthly-incomes`.
+- `getMonthlyExpenses(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/monthly-expenses`.
+- 응답은 공통 `ApiResponse`이며 `data`는 `[{ month, amount, predicted }]` 목록이다.
+- 기존 공통 client와 Vite `/api` 프록시를 거쳐 Spring에 요청한다. 실패 시 그래프 영역에 오류를 표시하며 mock 데이터로 대체하지 않는다.
+- 결과 페이지는 테스트 분석번호 `19`를 전달한다. 분석번호 전달 흐름 확정 후 이 값만 교체한다.
+
 세금·ML 목표 요청·응답과 저장 시점은 [전체 명세](../../docs/creator-tax-dummy-format.md)를 따른다. 아래 건별 저장 등은 기존 연결 기록이다. 인증은 뒤의 쿠키 인증 통일 기록을 우선하며 오래된 Bearer·accessToken 인자를 현재 계약으로 간주하지 않는다.
 
 ## 알림 화면 연동 (2026-10-23)
