@@ -17,7 +17,7 @@ public class ApiResponse<T> {
 
     private final boolean success;
     private final T data;
-    private final PageMeta meta;   // 목록 조회일 때만 채운다
+    private final Object meta;     // 목록 조회일 때만 채운다. 번호 페이징은 PageMeta, 커서 페이징은 CursorMeta
     private final ErrorInfo error; // 실패일 때만 채운다
 
     // 단건 조회 성공
@@ -26,7 +26,7 @@ public class ApiResponse<T> {
     }
 
     // 목록 조회 성공 (페이징 정보 포함)
-    public static <T> ApiResponse<T> ok(T data, PageMeta meta) {
+    public static <T> ApiResponse<T> ok(T data, Object meta) {
         return new ApiResponse<>(true, data, meta, null);
     }
 

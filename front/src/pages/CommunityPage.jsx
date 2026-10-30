@@ -4,16 +4,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Tabs } from '../components/common/index';
-import { BOARD_TABS, BOARD_WRITE_TABS } from '../data/content';
+import { POST_TABS, POST_WRITE_TABS } from '../data/content';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
-import { getBoardPostsPage } from '../api/post';
+import { getPostsPage } from '../api/post';
 
 const CATEGORY_TONE = { 공지: 'danger', '정보 공유': 'primary', 팁: 'neutral' };
 
-export default function BoardPage() {
+export default function PostListPage() {
   const [params] = useSearchParams();
-  const [tab, setTab] = useState(BOARD_TABS.includes(params.get('tab')) ? params.get('tab') : BOARD_TABS[0]);
+  const [tab, setTab] = useState(POST_TABS.includes(params.get('tab')) ? params.get('tab') : POST_TABS[0]);
   const [queryInput, setQueryInput] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -39,7 +39,7 @@ export default function BoardPage() {
   useEffect(() => {
     let active = true;
     setLoading(true);
-    getBoardPostsPage({ page, boardType: tab === '전체' ? undefined : tab, keyword: query })
+    getPostsPage({ page, postType: tab === '전체' ? undefined : tab, keyword: query })
       .then(({ posts: items, meta }) => {
         if (!active) return;
         setPosts(items);
@@ -62,13 +62,13 @@ export default function BoardPage() {
     { key: 'w', header: '작성자', render: (p) => p.author },
     { key: 'v', header: '조회', align: 'right', num: true, render: (p) => p.views.toLocaleString('ko-KR') },
   ];
-  const writeTab = tab === '전체' || (tab === '공지' && !isAdmin) ? BOARD_WRITE_TABS[0] : tab;
+  const writeTab = tab === '전체' || (tab === '공지' && !isAdmin) ? POST_WRITE_TABS[0] : tab;
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
 
   return (
     <Card>
       <div className="row between" style={{ marginBottom: 16 }}>
-        <Tabs tabs={BOARD_TABS.map((t) => ({ id: t, label: t }))} active={tab} onChange={setTab} />
+        <Tabs tabs={POST_TABS.map((t) => ({ id: t, label: t }))} active={tab} onChange={setTab} />
         <div className="row" style={{ gap: 8 }}>
           <input
             className="in"
@@ -79,7 +79,7 @@ export default function BoardPage() {
             onChange={(e) => setQueryInput(e.target.value)}
             aria-label="검색어"
           />
-          <Button variant="soft" size="sm" to={`${ROUTES.boardWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
+          <Button variant="soft" size="sm" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
         </div>
       </div>
       {loading ? <p className="state-msg" role="status">게시글을 불러오는 중입니다.</p>
@@ -87,7 +87,7 @@ export default function BoardPage() {
         : posts.length
         ? (
           <>
-            <DataTable columns={columns} rows={posts} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.boardPost(p.id))} />
+            <DataTable columns={columns} rows={posts} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.postDetail(p.id))} />
             {pageNumbers.length > 1 && (
               <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
                 <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>

@@ -10,21 +10,21 @@ import ReportModal from '../components/community/ReportModal';
 import { DELETED_POST } from '../data/options';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
-import { useBoard } from '../store/useBoardStore';
+import { usePost } from '../store/usePostStore';
 import { useToast } from '../store/useToastStore';
 import { useReports } from '../utils/useReports';
 import { deletePost } from '../api/post';
 import { imagePreviewProps, videoPreviewProps } from '../store/post-preview';
 
-const listOf = (tab) => `${ROUTES.board}?tab=${encodeURIComponent(tab)}`;
+const listOf = (tab) => `${ROUTES.postList}?tab=${encodeURIComponent(tab)}`;
 
-export default function BoardPostPage() {
+export default function PostDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();
   const { loggedIn, user } = useAuth();
   const { addReport, hasReported } = useReports();
-  const { posts, addView, removePost, loadPosts } = useBoard();
+  const { posts, addView, removePost, loadPosts } = usePost();
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   // 상세 주소를 직접 열거나 새로고침해도 서버 게시글을 복원한다.
@@ -74,7 +74,7 @@ export default function BoardPostPage() {
         title="게시글을 찾을 수 없습니다"
         desc="삭제되었거나 주소가 잘못되었습니다."
         action={
-          <Button variant="primary" to={ROUTES.board}>
+          <Button variant="primary" to={ROUTES.postList}>
             목록으로
           </Button>
         }
@@ -173,7 +173,7 @@ export default function BoardPostPage() {
           <Button to={listOf(post.tab)}>목록</Button>
           {mine && (
             <div className="row">
-              <Button variant="soft" to={ROUTES.boardEdit(post.id)}>
+              <Button variant="soft" to={ROUTES.postEdit(post.id)}>
                 수정
               </Button>
               <Button variant="danger" onClick={() => setConfirm(true)}>

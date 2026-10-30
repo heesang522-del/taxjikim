@@ -3,7 +3,7 @@
 
 import { useEffect } from 'react';
 import { beatPresence, clearPresence, PRESENCE_BEAT, useAuth } from '../../store/useAuthStore';
-import { syncBoardFromStorage } from '../../store/useBoardStore';
+import { syncPostFromStorage } from '../../store/usePostStore';
 import { syncInquiryFromStorage } from '../../store/useInquiryStore';
 
 // store에 넣을 수 없는 부수 효과(브라우저 이벤트, 타이머)를 한 곳에서 처리한다. Layout에서 한 번만 렌더링한다.
@@ -15,7 +15,7 @@ export default function StoreSync() {
   // 인증 정보는 메모리로만 관리하고, 기존 게시글·문의의 탭 동기화는 유지한다.
   useEffect(() => {
     const handleStorage = (e) => {
-      syncBoardFromStorage(e.key);
+      syncPostFromStorage(e.key);
       syncInquiryFromStorage(e.key);
     };
     window.addEventListener('storage', handleStorage);

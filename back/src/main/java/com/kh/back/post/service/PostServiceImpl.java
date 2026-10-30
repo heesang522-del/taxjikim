@@ -129,7 +129,7 @@ public class PostServiceImpl implements PostService {
         }
 
         // QNA 비공개 글은 작성자 본인과 관리자만 볼 수 있다. 존재 여부가 드러나지 않도록 글이 없을 때와 같은 404로 응답한다.
-        boolean isPrivateQna = "QNA".equals(post.getBoardType()) && !post.isPublic();
+        boolean isPrivateQna = "QNA".equals(post.getPostType()) && !post.isPublic();
         if (isPrivateQna) {
             Long currentUserId = postValidator.currentUserIdOrNull();
             boolean isOwner = currentUserId != null && currentUserId.equals(post.getUserId());
@@ -143,11 +143,11 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String boardType) {
+    public ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String postType) {
         page = Math.max(page, 1);
 
-        int totalCount = countAll(keyword, boardType);
-        List<PostDto> posts = findPage(sort, keyword, page, boardType);
+        int totalCount = countAll(keyword, postType);
+        List<PostDto> posts = findPage(sort, keyword, page, postType);
 
         return ApiResponse.ok(posts, PageMeta.of(page, PAGE_SIZE, totalCount));
     }
@@ -169,7 +169,7 @@ public class PostServiceImpl implements PostService {
 
         attachFiles(post.getPostId(), files);
 
-        if ("NOTICE".equals(post.getBoardType())) {
+        if ("NOTICE".equals(post.getPostType())) {
             notificationService.broadcastNoticePost(post.getPostId(), post.getTitle());
         }
     }
@@ -215,7 +215,7 @@ public class PostServiceImpl implements PostService {
         postMapper.deleteById(postId);
     }
 
-    private List<PostDto> findPage(String sort, String keyword, int page, String boardType) {
+    private List<PostDto> findPage(String sort, String keyword, int page, String postType) {
         long offsetValue = ((long) page - 1) * PAGE_SIZE;
         if (offsetValue > Integer.MAX_VALUE) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "페이지 범위를 초과했습니다.");
@@ -225,7 +225,7 @@ public class PostServiceImpl implements PostService {
         postValidator.validatePage(offset, PAGE_SIZE);
 
         List<PostDto> posts = postMapper.findPage(sort, keyword, offset, PAGE_SIZE,
-                postValidator.normalizeBoardTypeFilter(boardType),
+                postValidator.normalizePostTypeFilter(postType),
                 postValidator.currentUserIdOrNull(),
                 postValidator.hasAdminRole());
 
@@ -233,8 +233,8 @@ public class PostServiceImpl implements PostService {
         return posts;
     }
 
-    private int countAll(String keyword, String boardType) {
-        return postMapper.countAll(keyword, postValidator.normalizeBoardTypeFilter(boardType),
+    private int countAll(String keyword, String postType) {
+        return postMapper.countAll(keyword, postValidator.normalizePostTypeFilter(postType),
                 postValidator.currentUserIdOrNull(), postValidator.hasAdminRole());
     }
 
