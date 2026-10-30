@@ -2,7 +2,7 @@ package com.kh.back.tax.service;
 
 import com.kh.back.tax.dto.TaxDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
-import com.kh.back.tax.dto.DonationCalculationDto;
+import com.kh.back.tax.dto.TaxBreakdownDto;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.tax.dto.MonthlyAmountDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
@@ -27,7 +27,7 @@ public class TaxServiceImpl implements TaxService {
     private final TaxMapper taxMapper;
 
     // 조회한 입력값으로 기부금 한도와 반영 후 사업소득을 계산한다.
-    private DonationCalculationDto calculateDonations(TaxCalculationInputDto input) {
+    private TaxBreakdownDto calculateDonations(TaxCalculationInputDto input) {
         // ① 적자 금액은 보존하되 기부금 인정 한도는 0원 아래로 내려가지 않게 한다.
         BigDecimal incomeBeforeDonation = input.getTotalIncome().subtract(input.getTotalExpense());
         BigDecimal donationBaseAmount = incomeBeforeDonation.max(BigDecimal.ZERO);
@@ -44,7 +44,7 @@ public class TaxServiceImpl implements TaxService {
         BigDecimal incomeAfterDonation = incomeBeforeDonation
                 .subtract(specialDonationAllowed).subtract(generalDonationAllowed);
 
-        DonationCalculationDto result = new DonationCalculationDto();
+        TaxBreakdownDto result = new TaxBreakdownDto();
         result.setIncomeBeforeDonation(incomeBeforeDonation);
         result.setDonationBaseAmount(donationBaseAmount);
         result.setSpecialDonationAmount(input.getSpecialDonationAmount());

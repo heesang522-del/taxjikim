@@ -6,11 +6,11 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 
-// 산출 근거에 사용할 기부금 한도·인정액과 반영 전후 사업소득을 전달한다.
+// 산출 근거에 표시할 단계별 계산 결과를 담고, 이후 공제·세금 계산값도 여기에 추가한다.
 @Getter
 @Setter
 @NoArgsConstructor
-public class DonationCalculationDto {
+public class TaxBreakdownDto {
 
     private BigDecimal incomeBeforeDonation;    // 기부금 반영 전 사업소득 (적자도 유지)
     private BigDecimal donationBaseAmount;      // 기부금 한도용 기준금액 (최소 0원)
