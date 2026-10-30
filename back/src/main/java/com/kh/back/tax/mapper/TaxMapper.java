@@ -1,6 +1,7 @@
 package com.kh.back.tax.mapper;
 
 import com.kh.back.tax.dto.MonthlyAmountDto;
+import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -12,6 +13,9 @@ import java.util.List;
 @Mapper
 @Repository("taxCalculationMapper")
 public interface TaxMapper {
+
+    // 같은 분석의 귀속연도·가족 수·기부금액을 조회한다.
+    TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId);
 
     // 분석에 저장된 전체 거래의 첫 날짜와 마지막 날짜를 함께 조회한다.
     TransactionPeriodDto findTransactionPeriod(@Param("taxInputId") Long taxInputId);

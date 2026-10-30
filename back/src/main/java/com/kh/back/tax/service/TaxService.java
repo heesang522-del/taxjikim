@@ -2,11 +2,15 @@ package com.kh.back.tax.service;
 
 import com.kh.back.tax.dto.TaxDto;
 import com.kh.back.tax.dto.MonthlyAmountDto;
+import com.kh.back.tax.dto.TaxCalculationInputDto;
 
 import java.util.List;
 
 // 세금 분석 결과 처리 기능을 선언한다.
 public interface TaxService {
+
+    // 실제·예상 합계와 DB 입력 조건을 모아 계산용 입력값을 반환한다.
+    TaxCalculationInputDto getCalculationInput(Long taxInputId);
 
     // 분석번호에 해당하는 월별 실제·예상 세전 수입 목록을 반환한다.
     List<MonthlyAmountDto> getMonthlyIncomes(Long taxInputId);

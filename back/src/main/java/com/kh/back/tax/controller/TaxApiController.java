@@ -2,6 +2,7 @@ package com.kh.back.tax.controller;
 
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.tax.dto.MonthlyAmountDto;
+import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TaxDto;
 import com.kh.back.tax.service.TaxService;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +20,12 @@ import java.util.List;
 public class TaxApiController {
 
     private final TaxService taxService;
+
+    // 분석번호에 해당하는 총수입·총지출과 공제 입력 조건을 조회한다.
+    @GetMapping("/{taxInputId}/calculation-input")
+    public ApiResponse<TaxCalculationInputDto> getCalculationInput(@PathVariable("taxInputId") Long taxInputId) {
+        return ApiResponse.ok(taxService.getCalculationInput(taxInputId));
+    }
 
     // 분석번호에 해당하는 월별 실제·예상 세전 수입을 조회한다.
     @GetMapping("/{taxInputId}/monthly-incomes")

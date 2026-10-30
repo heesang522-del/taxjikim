@@ -19,7 +19,7 @@ const TOTAL_TAX_OPTIONS = { excludeWithholding: true };
 
 export default function CalcResultPage() {
   // TODO: 입력창의 분석번호 전달을 연결할 때 이 테스트 번호를 교체한다.
-  const taxInputId = 18;
+  const taxInputId = 21;
   const { calculated } = useTax();
   const { loggedIn } = useAuth();
   const toast = useToast();
