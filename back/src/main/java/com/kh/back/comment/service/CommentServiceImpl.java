@@ -37,7 +37,7 @@ public class CommentServiceImpl implements CommentService {
         PostDto post = requirePost(postId);
 
         // QNA 게시판의 댓글은 1:1 문의에 대한 답변이므로 관리자만 작성할 수 있다.
-        boolean isQna = POST_TYPE_QNA.equals(post.getBoardType());
+        boolean isQna = POST_TYPE_QNA.equals(post.getPostType());
         if (isQna && !postValidator.isAdmin()) {
             throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "문의 답변은 관리자만 작성할 수 있습니다.");
         }
@@ -68,7 +68,8 @@ public class CommentServiceImpl implements CommentService {
                 && parentComment.getUserId().equals(post.getUserId());
 
         // 알림 대상 게시판이고 본인 글에 본인이 댓글을 단 게 아닐 때만 알림을 보낸다.
-        if (COMMENT_NOTIFY_POST_TYPES.contains(post.getBoardType()) && !post.getUserId().equals(userId)) {
+        if (COMMENT_NOTIFY_POST_TYPES.contains(post.getPostType()) && !post.getUserId().equals(userId)
+                && !isReplyToPostAuthorsOwnComment) {
             notificationService.notifyPostComment(postId, post.getUserId(), userId, writerNickname,
                     post.getTitle(), trimmedContent);
         }
