@@ -1,5 +1,21 @@
 # 프론트 API 연결 안내
 
+## 총수입·총지출 Spring 연결 (2026-10-29)
+
+- `getTotalIncome(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-income`.
+- `getTotalExpense(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-expense`.
+- 응답 `data`는 `{ taxInputId, totalAmount }`이며 실제·예상 금액을 합산한 서버 계산 결과다.
+- 결과 페이지에서 `SummaryCards`에 월별 그래프와 같은 분석번호를 전달한다. 카드에서 합계를 조회하며 실패 시 오류를 표시한다.
+
+## 월별 그래프 Spring 연결 (2026-10-29)
+
+- `getMonthlyIncomes(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/monthly-incomes`.
+- `getMonthlyExpenses(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/monthly-expenses`.
+- 응답은 공통 `ApiResponse`이며 `data`는 `[{ month, amount, predicted }]` 목록이다.
+- 기존 공통 client와 Vite `/api` 프록시를 거쳐 Spring에 요청한다. 실패 시 그래프 영역에 오류를 표시하며 mock 데이터로 대체하지 않는다.
+- 결과 페이지는 테스트 분석번호 `19`를 전달한다. 분석번호 전달 흐름 확정 후 이 값만 교체한다.
+- 결과 페이지는 `<MonthlyChart taxInputId={taxInputId} />`로 분석번호만 전달한다. `MonthlyChart`에서 월별 API 호출·조회 상태 관리·그래프 표시를 함께 처리한다.
+
 세금·ML 목표 요청·응답과 저장 시점은 [전체 명세](../../docs/creator-tax-dummy-format.md)를 따른다. 아래 건별 저장 등은 기존 연결 기록이다. 인증은 뒤의 쿠키 인증 통일 기록을 우선하며 오래된 Bearer·accessToken 인자를 현재 계약으로 간주하지 않는다.
 
 ## 알림 화면 연동 (2026-10-23)
@@ -37,40 +53,8 @@
 - GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED 목록, 최대 100개.
 - DELETE /admin/account-locks/{loginId}: ADMIN 전용 제한 해제, 기존 로그인 종료, 실패 기록 초기화.
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
-- 상세 정책·검증 범위는 프로젝트 루트 docs/login-failure-policy.md를 참고한다.
 
-아래는 초기 mock 함수 목록이다. 인증·회원·PDF·채팅 등 실제 연결도 있으므로 전체를 mock으로 간주하지 않는다. 현재 호출은 기능 코드로 확인한다.
-
-| 함수 | 파일 | 사용 화면 | 응답 mock |
-| --- | --- | --- | --- |
-| `getHomeData()` | `api/home.js` | 홈 | `mocks/home.json` |
-| `getProfile()` | `api/profile.js` | 마이페이지 | `mocks/profile.json` |
-| `getCalcOptions()` | `api/calculator.js` | 세금 계산 | `mocks/calculator.json` |
-| `getCommunity()` | `api/community.js` | 커뮤니티 | `mocks/community.json` |
-| `getFaqs()` | `api/support.js` | 고객센터 | `mocks/support.json` |
-| `getAdminStats()` | `api/admin.js` | 관리자 | `mocks/admin.json` |
-
-## getAdminStats() 응답 예시 (예시값)
-~~~json
-{
-  "model": { "accuracy": 0.912, "recall": 0.874 },
-  "data": { "transactionCount": 1284 },
-  "ops": [{ "id": "members", "label": "총 회원수", "value": "34,250명", "tone": "default" }],
-  "users": [{ "id": 1, "name": "baduser99 (홍*동)", "desc": "크리에이터 | 경고 3회 누적" }],
-  "inquiry": { "id": 1042, "title": "[문의 #1042] ...", "status": "답변 대기", "meta": "작성자: freelancer01 | ..." }
-}
-~~~
-
-## getCalcOptions() 응답
-~~~json
-{
-  "regions": ["서울특별시"],
-  "jobs": ["개발자 (소프트웨어)"],
-  "categories": ["소프트웨어 개발비", "장비구입비"],
-  "comparisonRows": [["부가가치세 신고", "해당 없음", "필요 (간이·일반과세자)"]],
-  "guideLinks": [{ "id": 1, "label": "...", "message": "..." }]
-}
-~~~
+홈 화면(`getHomeData()`, `api/home.js`)은 아직 `mocks/home.json`을 쓰는 mock이다. 초기에 같이 쓰던 프로필·세금계산·커뮤니티·고객센터·관리자 mock 함수는 실제 API로 교체되며 해당 파일을 삭제했다. 현재 호출은 기능 코드로 확인한다.
 
 ## 로컬 상태 (API 아님)
 - 거래 내역: `store/useTransactionStore.js` (zustand). 세액은 이 내역과 `utils/tax.js`로 화면에서 계산한다.

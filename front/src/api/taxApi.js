@@ -115,6 +115,26 @@ function transactionPath(taxInputId, transactionId) {
   return `${inputPath(taxInputId)}/transactions/${transactionId}`;
 }
 
+// 분석번호에 해당하는 실제·예상 세전 총수입을 조회한다.
+export async function getTotalIncome(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/total-income`, method: 'GET', signal });
+}
+
+// 분석번호에 해당하는 실제·예상 총지출을 조회한다.
+export async function getTotalExpense(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/total-expense`, method: 'GET', signal });
+}
+
+// 분석번호에 해당하는 월별 실제·예상 수입을 조회한다.
+export async function getMonthlyIncomes(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/monthly-incomes`, method: 'GET', signal });
+}
+
+// 분석번호에 해당하는 월별 실제·예상 지출을 조회한다.
+export async function getMonthlyExpenses(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/monthly-expenses`, method: 'GET', signal });
+}
+
 function dateText(value) {
   if (Array.isArray(value) && value.length === 3) {
     return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');

@@ -197,7 +197,7 @@ export default function BoardPostPage() {
           )}
         </div>
       </Card>
-      <CommentSection key={post.id} postId={post.id} serverPost={post.source === 'server'} />
+      <CommentSection key={post.id} postId={post.id} />
       {reporting && <ReportModal targetLabel="게시글" onSubmit={report} onClose={() => setReporting(false)} />}
       {confirm && (
         <Modal title="글 삭제" onClose={() => setConfirm(false)}>

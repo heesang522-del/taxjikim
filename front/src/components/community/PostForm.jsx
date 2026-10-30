@@ -16,6 +16,9 @@ import {
 import { createPost, updatePost } from '../../api/post.js';
 import { ROUTES } from '../../utils/routes';
 
+// 화면 분류(한글 라벨)를 서버가 저장하는 BOARD_TYPE 코드로 바꾼다. 매칭 안 되는 값은 그대로 보낸다.
+const BOARD_TYPE_CODE = { '정보 공유': 'INFO', 팁: 'TIP', 공지: 'NOTICE' };
+
 export default function PostForm({ heading, initial, submitLabel, onCancel, postId, onSubmit }) {
   const toast = useToast();
   const navigate = useNavigate();
@@ -124,7 +127,7 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       const formData = new FormData();
       formData.append('title', title);
       formData.append('content', body);
-      formData.append('boardType', tab);
+      formData.append('boardType', BOARD_TYPE_CODE[tab] ?? tab);
       formData.append('isPublic', true);
 
       if (uploadedFiles.length > 0) {

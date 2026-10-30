@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <!-- 수입·지출을 포함한 전체 자료 기간을 한 번에 조회한다. -->
+    <select id="findTransactionPeriod" resultType="com.kh.back.tax.dto.TransactionPeriodDto">
+        SELECT MIN(TRANSACTION_DATE) AS firstDate,
+               MAX(TRANSACTION_DATE) AS lastDate
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <!-- 날짜가 있는 세전 수입을 월별로 묶고, 합계를 정수 금액으로 반올림한다. -->
+    <select id="findMonthlyIncomes" resultType="com.kh.back.tax.dto.MonthlyAmountDto">
+        SELECT MONTH(TRANSACTION_DATE) AS month,
+               ROUND(COALESCE(SUM(PRE_TAX_INCOME), 0), 0) AS amount
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_TYPE = 'INCOME'
+        GROUP BY MONTH(TRANSACTION_DATE)
+        ORDER BY MONTH(TRANSACTION_DATE)
+    </select>
+
+    <!-- 날짜가 있는 지출을 월별로 묶고, 합계를 정수 금액으로 반올림한다. NULL 금액은 합산에서 제외한다. -->
+    <select id="findMonthlyExpenses" resultType="com.kh.back.tax.dto.MonthlyAmountDto">
+        SELECT MONTH(TRANSACTION_DATE) AS month,
+               ROUND(COALESCE(SUM(AMOUNT), 0), 0) AS amount
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_TYPE = 'EXPENSE'
+        GROUP BY MONTH(TRANSACTION_DATE)
+        ORDER BY MONTH(TRANSACTION_DATE)
+    </select>
+
+</mapper>
