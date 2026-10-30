@@ -2,10 +2,10 @@
 'use no memo';
 
 import { create } from 'zustand';
-import { getBoardPosts } from '../api/post.js';
+import { getPosts } from '../api/post.js';
 
-const KEY = 'taxlab.board.v2';
-const OLD_KEY = 'taxlab.board.v1';
+const KEY = 'taxlab.post.v2';
+const OLD_KEY = 'taxlab.post.v1';
 const COMMENT_KEY = 'taxlab.comments.v1';
 
 const isComment = (c) => c && [c.id, c.postId, c.author, c.body, c.createdAt].every((v) => typeof v === 'string');
@@ -32,13 +32,13 @@ const mergePosts = (serverPosts, browserPosts) => {
 };
 
 /** 다른 탭(예: 관리자 탭)에서 바뀐 글·댓글을 바로 반영한다. */
-export const syncBoardFromStorage = (key) => {
+export const syncPostFromStorage = (key) => {
   // 다른 탭의 브라우저 글 변경도 서버 글을 유지하면서 반영한다.
   if (key === KEY) {
-    const serverPosts = useBoardStore.getState().posts.filter((post) => post.source === 'server');
-    useBoardStore.setState({ posts: mergePosts(serverPosts, readPosts()) });
+    const serverPosts = usePostStore.getState().posts.filter((post) => post.source === 'server');
+    usePostStore.setState({ posts: mergePosts(serverPosts, readPosts()) });
   }
-  if (key === COMMENT_KEY) useBoardStore.setState({ comments: readComments() });
+  if (key === COMMENT_KEY) usePostStore.setState({ comments: readComments() });
 };
 
 /**
@@ -46,7 +46,7 @@ export const syncBoardFromStorage = (key) => {
  * deletedByAdmin이 true인 글은 관리자 삭제로 내용을 가리고 "관리자에 의해 삭제됨" 흔적만 남긴다.
  * comments/adminDeleteComment는 AdminReportsPage의 신고 댓글 처리용으로만 남겨 둔다.
  */
-export const useBoardStore = create((set, get) => {
+export const usePostStore = create((set, get) => {
   // 서버 글을 브라우저에 복제 저장하면 삭제 후 다시 나타날 수 있어 예시 글만 저장한다.
   const setPosts = (fn) => { const next = fn(get().posts); save(KEY, next.filter((post) => post.source !== 'server')); set({ posts: next }); };
   const setComments = (fn) => { const next = fn(get().comments); save(COMMENT_KEY, next); set({ comments: next }); };
@@ -55,7 +55,7 @@ export const useBoardStore = create((set, get) => {
     posts: readPosts(),
     // DB 최신 목록에 기존 브라우저 글을 더하고 같은 ID는 서버 데이터를 우선한다.
     loadPosts: async () => {
-      const posts = await getBoardPosts();
+      const posts = await getPosts();
       set({ posts: mergePosts(posts.map((post) => ({ ...post, source: 'server' })), readPosts()) });
     },
     comments: readComments(),
@@ -74,4 +74,4 @@ export const useBoardStore = create((set, get) => {
   };
 });
 
-export const useBoard = () => useBoardStore();
+export const usePost = () => usePostStore();

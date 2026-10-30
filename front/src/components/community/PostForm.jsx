@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, SelectField, TextAreaField, TextField } from '../common/index';
-import { BOARD_WRITE_TABS } from '../../data/content';
+import { POST_WRITE_TABS } from '../../data/content';
 import { useAuth } from '../../store/useAuthStore';
 import { useToast } from '../../store/useToastStore';
 import {
@@ -16,8 +16,8 @@ import {
 import { createPost, updatePost } from '../../api/post.js';
 import { ROUTES } from '../../utils/routes';
 
-// 화면 분류(한글 라벨)를 서버가 저장하는 BOARD_TYPE 코드로 바꾼다. 매칭 안 되는 값은 그대로 보낸다.
-const BOARD_TYPE_CODE = { '정보 공유': 'INFO', 팁: 'TIP', 공지: 'NOTICE' };
+// 화면 분류(한글 라벨)를 서버가 저장하는 POST_TYPE 코드로 바꾼다. 매칭 안 되는 값은 그대로 보낸다.
+const POST_TYPE_CODE = { '정보 공유': 'INFO', 팁: 'TIP', 공지: 'NOTICE' };
 
 export default function PostForm({ heading, initial, submitLabel, onCancel, postId, onSubmit }) {
   const toast = useToast();
@@ -41,7 +41,7 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
     []
   );
 
-  const tabOptions = isAdmin ? BOARD_WRITE_TABS : BOARD_WRITE_TABS.filter((t) => t !== '공지');
+  const tabOptions = isAdmin ? POST_WRITE_TABS : POST_WRITE_TABS.filter((t) => t !== '공지');
 
   const handleFileChange = (e) => {
     const pickedFiles = Array.from(e.target.files);
@@ -127,7 +127,7 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       const formData = new FormData();
       formData.append('title', title);
       formData.append('content', body);
-      formData.append('boardType', BOARD_TYPE_CODE[tab] ?? tab);
+      formData.append('postType', POST_TYPE_CODE[tab] ?? tab);
       formData.append('isPublic', true);
 
       if (uploadedFiles.length > 0) {
@@ -144,7 +144,7 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       else await createPost(formData);
 
       toast(postId ? '게시글이 수정되었습니다.' : '게시글이 성공적으로 등록되었습니다.');
-      navigate(ROUTES.board); // 등록 후 실제 게시판 목록을 다시 조회한다.
+      navigate(ROUTES.postList); // 등록 후 실제 게시판 목록을 다시 조회한다.
     } catch (error) {
       console.error('게시글 등록 실패:', error);
       toast(error.message || '게시글 등록 중 오류가 발생했습니다.');

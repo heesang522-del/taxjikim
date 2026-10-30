@@ -39,9 +39,12 @@
         ORDER BY c.COMMENT_ID ASC
     </select>
 
-    <!-- 답글 작성 시 부모 댓글 검증용. 삭제된 댓글은 부모로 쓸 수 없어 제외한다. -->
+    <!--
+        답글 작성 시 부모 댓글 검증용. 삭제된 댓글은 부모로 쓸 수 없어 제외한다.
+        USER_ID는 답글 알림(notifyCommentReply)의 수신자를 정하는 데 쓰인다.
+    -->
     <select id="findById" resultType="com.kh.back.comment.dto.CommentDto">
-        SELECT COMMENT_ID, POST_ID, PARENT_COMMENT_ID
+        SELECT COMMENT_ID, POST_ID, USER_ID, PARENT_COMMENT_ID
         FROM comments
         WHERE COMMENT_ID = #{commentId} AND DELETED_AT IS NULL
     </select>
