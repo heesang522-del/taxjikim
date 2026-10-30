@@ -3,12 +3,10 @@ package com.kh.back.taxupload.controller;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.TaxServiceResponse;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
-import com.kh.back.taxupload.dto.TaxTransactionDto.CategoryRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
-import com.kh.back.taxupload.dto.TaxTransactionDto.TaxResultResponse;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
-import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceResponse;
 import com.kh.back.taxupload.service.YearEndTaxService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -40,95 +38,65 @@ public class TaxUploadController {
 
     private final YearEndTaxService service;
 
-    @PostMapping("/inputs/create")
-    public ResponseEntity<ApiResponse<TaxInputRequest>> createInput(
+    /**
+     * 분석 기본정보와 거래 목록을 저장한다.
+     */
+    @PostMapping("/save")
+    public ResponseEntity<ApiResponse<TaxServiceResponse>> save(
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest,
-            @RequestBody TaxInputRequest request
+            @RequestBody TaxServiceRequest request
     ) {
-        // 비회원 분석의 소유권을 기록할 서버 세션을 준비한다.
-        HttpSession guestSession = principal == null
-                ? servletRequest.getSession(true)
-                : null;
+        boolean createAnalysis =
+                request.getTaxInputId() == null;
 
-        TaxInputRequest created = service.save(
+        // 새 비회원 분석의 소유권을 기록할 세션을 준비한다.
+        HttpSession guestSession =
+                principal == null && createAnalysis
+                        ? servletRequest.getSession(true)
+                        : servletRequest.getSession(false);
+
+        TaxServiceResponse saved = service.save(
                 principal,
-                readGuestInputs(servletRequest.getSession(false)),
+                readGuestInputs(guestSession),
                 request
         );
 
-        if (created.getUserId() == null) {
+        TaxInputRequest input = saved.getInput();
+
+        // 서비스 저장이 성공한 뒤 비회원 소유 분석번호를 기록한다.
+        if (createAnalysis && input.getUserId() == null) {
             changeGuestInput(
                     guestSession,
-                    created.getTaxInputId(),
+                    input.getTaxInputId(),
                     true
             );
         }
 
+        HttpStatus status = createAnalysis
+                ? HttpStatus.CREATED
+                : HttpStatus.OK;
+
         return ResponseEntity
-                .status(HttpStatus.CREATED)
-                .body(ApiResponse.ok(created));
+                .status(status)
+                .body(ApiResponse.ok(saved));
     }
-
-    @PostMapping("/inputs/list")
-    public ApiResponse<List<TaxInputRequest>> getSavedInputs(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @RequestParam(value = "taxYear", required = false)
-            Integer taxYear
-    ) {
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("SAVED_INPUTS")
-                .taxYear(taxYear)
-                .build();
-
-        TaxServiceResponse response = service.get(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        // 필요한 값만 꺼내 기존 목록 응답 형식을 유지한다.
-        return ApiResponse.ok(response.getInputs());
-    }
-
-    @PostMapping("/inputs/{taxInputId}/detail")
-    public ApiResponse<TaxInputRequest> getInput(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
-    ) {
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("INPUT")
-                .taxInputId(taxInputId)
-                .build();
-
-        TaxServiceResponse response = service.get(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        return ApiResponse.ok(response.getInput());
-    }
-
+    /**
+     * 기본정보와 거래 카테고리를 한 번에 수정한다.
+     */
     @PostMapping("/inputs/{taxInputId}/update")
-    public ApiResponse<TaxInputRequest> updateInput(
+    public ApiResponse<TaxInputRequest> update(
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest,
             @PathVariable("taxInputId") Long taxInputId,
-            @RequestBody TaxInputRequest input
+            @RequestBody TaxServiceRequest request
     ) {
-        // 수정 대상은 요청 본문이 아니라 Controller 경로에서 결정한다.
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("INPUT")
-                .taxInputId(taxInputId)
-                .input(input)
-                .build();
-
         TaxInputRequest updated = service.update(
                 principal,
-                readGuestInputs(servletRequest.getSession(false)),
+                readGuestInputs(
+                        servletRequest.getSession(false)
+                ),
+                taxInputId,
                 request
         );
 
@@ -144,146 +112,49 @@ public class TaxUploadController {
         return ApiResponse.ok(updated);
     }
 
+    /**
+     * 분석 전체 삭제와 거래 한 건 삭제를 하나의 API로 처리한다.
+     */
     @PostMapping("/inputs/{taxInputId}/delete")
-    public ResponseEntity<Void> deleteInput(
+    public ResponseEntity<Void> delete(
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
+            @PathVariable("taxInputId") Long taxInputId,
+            @RequestParam(
+                    value = "deleteAll",
+                    defaultValue = "false"
+            ) boolean deleteAll,
+            @RequestBody TaxServiceRequest request
     ) {
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("INPUT")
-                .taxInputId(taxInputId)
-                .build();
-
         service.delete(
                 principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        changeGuestInput(
-                servletRequest.getSession(false),
+                readGuestInputs(
+                        servletRequest.getSession(false)
+                ),
                 taxInputId,
-                false
+                request,
+                deleteAll
         );
+
+        // 분석 전체 삭제가 성공했을 때만 세션의 분석번호를 제거한다.
+        if (deleteAll) {
+            changeGuestInput(
+                    servletRequest.getSession(false),
+                    taxInputId,
+                    false
+            );
+        }
 
         return ResponseEntity.noContent().build();
     }
-
-    @PostMapping("/inputs/{taxInputId}/transactions/save")
-    public ApiResponse<List<TaxTransactionDto>> saveTransactions(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @RequestBody List<TaxTransactionDto> rows
-    ) {
-        return ApiResponse.ok(
-                service.transaction(
-                        principal,
-                        readGuestInputs(servletRequest.getSession(false)),
-                        taxInputId,
-                        rows
-                )
-        );
-    }
-
-    @PostMapping("/inputs/{taxInputId}/transactions/list")
-    public ApiResponse<List<TaxTransactionDto>> getTransactions(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
-    ) {
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("TRANSACTIONS")
-                .taxInputId(taxInputId)
-                .build();
-
-        TaxServiceResponse response = service.get(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        return ApiResponse.ok(response.getTransactions());
-    }
-
-    @PostMapping(
-            "/inputs/{taxInputId}/transactions/{transactionId}/category/update"
-    )
-    public ResponseEntity<Void> updateCategory(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @PathVariable("transactionId") Long transactionId,
-            @RequestBody CategoryRequest categoryRequest
-    ) {
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("CATEGORY")
-                .taxInputId(taxInputId)
-                .transactionId(transactionId)
-                .category(categoryRequest.getCategory())
-                .build();
-
-        service.update(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping(
-            "/inputs/{taxInputId}/transactions/{transactionId}/delete"
-    )
-    public ResponseEntity<Void> deleteTransaction(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId,
-            @PathVariable("transactionId") Long transactionId
-    ) {
-        // 거래 삭제는 TRANSACTION을 명시하고 거래번호를 반드시 전달한다.
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("TRANSACTION")
-                .taxInputId(taxInputId)
-                .transactionId(transactionId)
-                .build();
-
-        service.delete(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        return ResponseEntity.noContent().build();
-    }
-
-    @PostMapping("/inputs/{taxInputId}/results/detail")
-    public ApiResponse<TaxResultResponse> getResult(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
-    ) {
-        TaxServiceRequest request = TaxServiceRequest.builder()
-                .target("RESULT")
-                .taxInputId(taxInputId)
-                .build();
-
-        TaxServiceResponse response = service.get(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                request
-        );
-
-        return ApiResponse.ok(response.getResult());
-    }
-
-
+    /**
+     * PDF에서 거래 내역을 추출한다.
+     */
     @PostMapping(
             value = "/parse",
             consumes = MediaType.MULTIPART_FORM_DATA_VALUE
     )
-    public ApiResponse<PdfParseResponseDto> parsePdf(
+    public ApiResponse<PdfParseResponseDto> parse(
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest,
             @RequestParam(value = "taxInputId", required = false)
@@ -294,10 +165,12 @@ public class TaxUploadController {
             servletRequest.getSession(true);
         }
 
-        // PDF 추출만 수행하며 비회원 분석번호 등록은 생성 API가 처리한다.
-        PdfParseResponseDto response = service.parsePdf(
+        // 추출만 수행하며 DB 저장은 save 요청에서 처리한다.
+        PdfParseResponseDto response = service.parse(
                 principal,
-                readGuestInputs(servletRequest.getSession(false)),
+                readGuestInputs(
+                        servletRequest.getSession(false)
+                ),
                 taxInputId,
                 file
         );
@@ -305,13 +178,17 @@ public class TaxUploadController {
         return ApiResponse.ok(response);
     }
 
-    private Set<Long> readGuestInputs(HttpSession session) {
+    private Set<Long> readGuestInputs(
+            HttpSession session
+    ) {
         if (session == null) {
             return Set.of();
         }
 
         synchronized (session) {
-            Object value = session.getAttribute(GUEST_INPUT_IDS);
+            Object value = session.getAttribute(
+                    GUEST_INPUT_IDS
+            );
 
             Set<Long> ids = new HashSet<>();
 
@@ -323,7 +200,7 @@ public class TaxUploadController {
                 }
             }
 
-            // 서비스에는 서버 세션에서 읽은 복사본만 전달한다.
+            // 서비스에는 세션 원본 대신 복사본을 전달한다.
             return Set.copyOf(ids);
         }
     }
@@ -337,10 +214,11 @@ public class TaxUploadController {
             return;
         }
 
-        // 같은 세션의 분석번호 목록을 동시에 변경하지 않도록 처리한다.
+        // 같은 세션의 분석번호 목록이 동시에 변경되지 않도록 한다.
         synchronized (session) {
-            Set<Long> ids =
-                    new HashSet<>(readGuestInputs(session));
+            Set<Long> ids = new HashSet<>(
+                    readGuestInputs(session)
+            );
 
             if (add) {
                 ids.add(taxInputId);

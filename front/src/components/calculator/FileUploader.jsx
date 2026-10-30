@@ -2,11 +2,8 @@
 
 import { useRef, useState } from 'react';
 import styled from 'styled-components';
-
 import { Button } from '../common/index';
-
 import { uploadTaxPdfApi, saveInitialTaxRows } from '../../api/taxApi';
-
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
 
 const Container = styled.div`
@@ -109,11 +106,8 @@ function isPendingRow(row) {
 // 파싱 결과를 저장 전 임시 거래 구조로 변환한다.
 function toTransactionRow(item, index, key) {
   const date = normalizeDate(item.transactionDate);
-
   const actualAmount = parseTaxAmount(item.actualAmount ?? item.amount);
-
   const needsReview = item.needsReview === true || item.parseSuccess !== true;
-
   const excluded = item.excluded === true || needsReview;
 
   return {
@@ -122,41 +116,28 @@ function toTransactionRow(item, index, key) {
     sourceFileId: null,
     sourceItemIndex: index,
     autoImported: true,
-
     transactionId: null,
     taxInputId: null,
     persisted: false,
-
     kind: normalizeTaxKind(item.transactionType),
-
     date,
     month: null,
     year: null,
     documentYear: item.documentYear ?? null,
-
     memo: item.description ?? '',
     cat: normalizeCategory(item.category),
     amt: actualAmount ?? '',
     actualAmount,
-
     preTaxIncome: parseTaxAmount(item.preTaxIncome),
-
     taxDeducted: parseTaxAmount(item.taxDeducted),
-
     deductedTaxRate: item.deductedTaxRate ?? null,
-
     amountBasis: item.amountBasis ?? 'UNSPECIFIED',
-
     valueKind: item.valueKind ?? 'DETAIL',
-
     pageNumber: item.pageNumber ?? null,
     rawText: item.rawText ?? '',
-
     parseSuccess: item.parseSuccess === true,
     needsReview,
-
     failureReason: needsReview ? item.failureReason || '거래 내용을 확인해주세요.' : null,
-
     selected: !excluded,
     excluded,
   };
@@ -184,7 +165,6 @@ function rememberPdfInput(key, { taxYear, taxInputId }) {
 
       return {
         ...file,
-
         pendingInputIdsByYear: {
           ...(file.pendingInputIdsByYear ?? {}),
           [taxYear]: taxInputId,
@@ -215,9 +195,7 @@ function commitPdfGroup(key, { taxYear, taxInputId, rows: savedRows, bindings })
 
       return {
         ...file,
-
         pendingInputIdsByYear: pending,
-
         stagedRows: (file.stagedRows ?? []).map((row) => {
           const saved = savedById.get(row.id);
 
@@ -235,10 +213,8 @@ function commitPdfGroup(key, { taxYear, taxInputId, rows: savedRows, bindings })
             failureReason: null,
           };
         }),
-
         savedGroups: [
           ...(file.savedGroups ?? []).filter((group) => group.taxInputId !== taxInputId),
-
           {
             taxYear,
             taxInputId,
@@ -265,7 +241,6 @@ function publishPdfRows(key) {
     const idsByYear = {
       ...(current.taxInputIdsByYear ?? {}),
     };
-
     const groupIds = new Set(savedGroups.map((group) => group.taxInputId));
 
     for (const group of savedGroups) {
@@ -275,7 +250,6 @@ function publishPdfRows(key) {
     return {
       // 다른 파일의 기존 거래는 유지한다.
       fileRows: [...(current.fileRows ?? []).filter((row) => row.sourceFileKey !== key), ...stagedRows],
-
       uploadedFiles: (current.uploadedFiles ?? []).map((file) =>
         file.key === key
           ? {
@@ -287,15 +261,11 @@ function publishPdfRows(key) {
             }
           : file
       ),
-
       taxInputIdsByYear: idsByYear,
-
       taxSavedSnapshots: [
         ...(current.taxSavedSnapshots ?? []).filter((snapshot) => !groupIds.has(snapshot.taxInputId)),
-
         ...savedGroups,
       ],
-
       taxLastSavedSignature: null,
       calculated: false,
       inputMethod: 'file',
@@ -303,9 +273,7 @@ function publishPdfRows(key) {
   });
 
   const savedCount = stagedRows.filter(isSavedRow).length;
-
   const reviewCount = stagedRows.filter(isReviewRow).length;
-
   const taxInputIdsByYear = {};
 
   for (const group of savedGroups) {
@@ -334,12 +302,10 @@ async function saveParsedPdf(key) {
 
   const scopedState = {
     ...current,
-
     // 다른 파일이나 수동 입력 거래가 함께 저장되지 않도록 제한한다.
     manualRows: [],
     fileRows: record.stagedRows ?? [],
     evidenceDocuments: [],
-
     taxPendingInputIdsByYear: {
       ...(record.pendingInputIdsByYear ?? {}),
     },
@@ -347,7 +313,6 @@ async function saveParsedPdf(key) {
 
   await saveInitialTaxRows(scopedState, {
     onInputCreated: (input) => rememberPdfInput(key, input),
-
     onGroupSaved: (group) => commitPdfGroup(key, group),
   });
 
@@ -359,9 +324,7 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
   const uploadingRef = useRef(false);
 
   const saving = useTaxStore((state) => state.taxSaveBusy === true);
-
   const uploadedFiles = useTaxStore((state) => state.uploadedFiles) ?? [];
-
   const fileRows = useTaxStore((state) => state.fileRows) ?? [];
 
   const [loading, setLoading] = useState(false);
@@ -397,7 +360,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
     }
 
     const key = fileKey(file);
-
     const alreadyUploaded = (useTaxStore.getState().uploadedFiles ?? []).some((entry) => entry.key === key);
 
     if (alreadyUploaded) {
@@ -408,7 +370,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
     uploadingRef.current = true;
     setLoading(true);
     setMessage('PDF를 분석하고 있습니다.');
-
     useTaxStore.setState({
       taxSaveBusy: true,
     });
@@ -417,14 +378,12 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
 
     try {
       const result = await uploadTaxPdfApi(file);
-
       const transactionRows = result.transactions.map((item, index) => toTransactionRow(item, index, key));
 
       // 저장 전에는 파싱 결과를 임시로 보관한다.
       useTaxStore.setState((current) => ({
         uploadedFiles: [
           ...(current.uploadedFiles ?? []),
-
           {
             key,
             name: file.name,
@@ -473,9 +432,7 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
     uploadingRef.current = true;
     setLoading(true);
     setError('');
-
     setMessage('저장되지 않은 거래를 다시 저장하고 있습니다.');
-
     useTaxStore.setState({
       taxSaveBusy: true,
     });
@@ -491,7 +448,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
     } finally {
       uploadingRef.current = false;
       setLoading(false);
-
       useTaxStore.setState({
         taxSaveBusy: false,
       });
@@ -525,7 +481,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
         : (current.fileRows ?? []).filter((row) => row.sourceFileKey === key);
 
     const hasSavedRows = rows.some(isSavedRow);
-
     const hasUnconfirmedSave = Object.keys(record.pendingInputIdsByYear ?? {}).length > 0;
 
     // 저장된 거래를 화면에서만 제거하여 DB와 불일치하지 않도록 한다.
@@ -540,9 +495,7 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
 
     useTaxStore.setState((state) => ({
       uploadedFiles: (state.uploadedFiles ?? []).filter((entry) => entry.key !== key),
-
       fileRows: (state.fileRows ?? []).filter((row) => row.sourceFileKey !== key),
-
       taxLastSavedSignature: null,
       calculated: false,
     }));
@@ -567,7 +520,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
 
           // 같은 파일도 다시 선택할 수 있도록 입력값을 비운다.
           event.target.value = '';
-
           void handleUpload(file);
         }}
       />
@@ -578,17 +530,11 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
 
       {uploadedFiles.map((file) => {
         const unpublished = file.published === false;
-
         const rows = unpublished ? (file.stagedRows ?? []) : fileRows.filter((row) => row.sourceFileKey === file.key);
-
         const reviewRows = rows.filter(isReviewRow);
-
         const savedCount = rows.filter(isSavedRow).length;
-
         const pendingCount = rows.filter(isPendingRow).length;
-
         const hasUnconfirmedSave = Object.keys(file.pendingInputIdsByYear ?? {}).length > 0;
-
         const cannotRemove = savedCount > 0 || hasUnconfirmedSave;
 
         return (
@@ -635,15 +581,10 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
                   {reviewRows.map((row) => (
                     <li key={row.id}>
                       {row.pageNumber ? `${row.pageNumber}페이지 · ` : ''}
-
                       {row.date || '날짜 확인 필요'}
-
                       {' · '}
-
                       {row.memo || '설명 확인 필요'}
-
                       {' — '}
-
                       {row.failureReason || '거래 내용을 확인해주세요.'}
                     </li>
                   ))}

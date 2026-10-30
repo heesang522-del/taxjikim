@@ -39,35 +39,34 @@ public class PostServiceImpl implements PostService {
     // 목록 응답 한 페이지에 보여줄 글 수. 클라이언트가 바꿀 수 없는 고정값이라 상수로 둔다.
     private static final int PAGE_SIZE = 9;
 
-    // 단일 서버에서 청크 병합이 동시에 실행되지 않게 한다.
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public synchronized String processChunkUpload(ChunkDto dto) throws IOException {
-        postValidator.requireLogin();
+    public String processChunkUpload(ChunkDto dto) throws IOException { //업로드 정보를 dto로 받아 처리하고 문자열을 반환 , 파일처리중 오류시 ioexception 이 발생
+        postValidator.requireLogin(); // 파일 조각 업로드 전 로그인과 권한을 확인하는 부분
 
-        PostDto targetPost = null;
-        if (dto != null && dto.getPostId() != null) {
+        PostDto targetPost = null; // 업로드할 대상 게시글을 담을 변수를 우선 비워둠
+        if (dto != null && dto.getPostId() != null) { // 요청에 기존 게시글 번호가 있으면 해당 게시글을 조회하고 db행을 잠금 , 게시글 번호가 없으면 targetPost 는 null로 유지
             targetPost = postMapper.lockById(dto.getPostId());
         }
 
-        Long userId = postValidator.requireUpload(dto, targetPost);
+        Long userId = postValidator.requireUpload(dto, targetPost); //업로드 요청과 게시글 접근 권한등을 검증하고 인증된 업로더의 사용자 번호를 받음
 
         // 같은 업로드 ID라도 사용자별로 청크 폴더를 분리한다.
-        Path directory = tempRoot.resolve(userId + "_" + dto.getUploadId()).normalize();
-        Files.createDirectories(directory);
+        Path directory = tempRoot.resolve(userId + "_" + dto.getUploadId()).normalize(); // 사용자 번호와 업로드 id를 합쳐 임시 폴더 경로를 만듬
+        Files.createDirectories(directory); // 청크를 보관할 임시 폴더와 최종 파일 저장 폴더를 만듬, 이미 있으면 그대로 사용
         Files.createDirectories(uploadRoot);
 
-        Path metadataPath = directory.resolve("upload.txt");
+        Path metadataPath = directory.resolve("upload.txt"); // 업로드 정보를 기록할 파일 경로를 만듬
         String requestedMetadata = dto.getTotalChunks() + "\n" + dto.getOriginalName() + "\n" + String.valueOf(dto.getPostId());
-
-        if (Files.exists(metadataPath)) {
+         // 전체 조각수 원본 파일명 게시글 번호를 줄바꿈으로 연결
+        if (Files.exists(metadataPath)) { // 이미 정보 파일이 있으면 기존 내용을 읽어 이번 요청의 정보와 일치하는지 검사
             postValidator.validateUploadMetadata(Files.readString(metadataPath, StandardCharsets.UTF_8), requestedMetadata);
-        } else {
+        } else { // 첫 요청이면 정보를 새 파일에 기록, Create_New는 같은 파일이 이미 있으면 덮어쓰지 않고 예외처리
             Files.writeString(metadataPath, requestedMetadata, StandardCharsets.UTF_8, StandardOpenOption.CREATE_NEW);
         }
 
-        Path chunkPath = directory.resolve("chunk_" + dto.getChunkIndex());
-        try (InputStream input = dto.getFile().getInputStream();
+        Path chunkPath = directory.resolve("chunk_" + dto.getChunkIndex()); // 현재 조각을 저장할 경로를 만듬 , 조각 번호가 2라면 다음 파일에 저장
+        try (InputStream input = dto.getFile().getInputStream(); // input : 요청으로 받은 파일 조각을 읽음, output: 서버의 조각 파일에 씀 ,
              OutputStream output = Files.newOutputStream(chunkPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
             input.transferTo(output);
         }

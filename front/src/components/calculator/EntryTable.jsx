@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-
 import { Button, Card } from '../common/index';
 import { getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
@@ -88,7 +87,6 @@ function collectRows(state) {
 
   add(state.manualRows, 'manual');
   add(state.fileRows, 'file');
-
   return result;
 }
 
@@ -243,7 +241,6 @@ export function EntryTable() {
     setDrafts((previous) => {
       const next = { ...previous };
       delete next[key];
-
       return next;
     });
   }
@@ -296,7 +293,6 @@ export function EntryTable() {
     useTaxStore.setState((current) => applyOperation(current, operation));
 
     resetCategory(operation.key);
-
     setCheckedKeys((previous) => previous.filter((key) => key !== operation.key));
   }
 
@@ -638,14 +634,11 @@ export function EntryTable() {
               <tr key={row.key}>
                 <td>{kindLabel(row.kind)}</td>
                 <td>{row.date}</td>
-
                 <td title={row.description}>
                   {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
                   {row.description}
                 </td>
-
                 <td className="tax-amount">{formatMoney(row.amount)}</td>
-
                 <td>{getTransactionCategoryLabel(row.category)}</td>
               </tr>
             ))}
@@ -671,7 +664,6 @@ export function EntryTable() {
         >
           <header className="tax-toolbar">
             <h2 id="tax-review-title">수입·지출 내역 수정</h2>
-
             <Button disabled={busy} onClick={handleCloseEditor}>
               닫기
             </Button>
@@ -772,7 +764,6 @@ export function EntryTable() {
                       }}
                     />
                   </th>
-
                   <th>구분</th>
                   <th>날짜</th>
                   <th>설명</th>
@@ -797,17 +788,13 @@ export function EntryTable() {
                           onChange={(event) => handleToggleCheck(row.key, event.target.checked)}
                         />
                       </td>
-
                       <td>{kindLabel(row.kind)}</td>
                       <td>{row.date}</td>
-
                       <td className="tax-description" title={row.description}>
                         {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
                         {row.description}
                       </td>
-
                       <td className="tax-amount">{formatMoney(row.amount)}</td>
-
                       <td>
                         <select
                           aria-label={`${row.description} 카테고리`}
@@ -815,7 +802,6 @@ export function EntryTable() {
                           disabled={busy}
                           onChange={(event) => {
                             clearStatus();
-
                             setDrafts((previous) => ({
                               ...previous,
                               [row.key]: event.target.value,

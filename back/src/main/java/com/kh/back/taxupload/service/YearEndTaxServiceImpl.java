@@ -1,34 +1,25 @@
 package com.kh.back.taxupload.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.taxupload.dto.PageOcrResultDto;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
+import com.kh.back.taxupload.dto.TaxServiceResponse;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
-import com.kh.back.taxupload.dto.TaxTransactionDto.TaxResultResponse;
-import com.kh.back.taxupload.dto.TaxTransactionDto.TaxResultRow;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
-import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceResponse;
 import com.kh.back.taxupload.mapper.TaxMapper;
 import com.kh.back.taxupload.validator.TaxValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,377 +36,416 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     private final TaxMapper taxMapper;
     private final TaxOcrService taxOcrService;
     private final PythonPdfClient pythonPdfClient;
-    private final PlatformTransactionManager transactionManager;
-
-    private final ObjectMapper objectMapper = new ObjectMapper(); // db에 저장된 결과 json을 java 객체로 해석할때 사용
 
     /**
-     * 새 분석 기본정보를 생성한다.
+     * 분석 기본정보 생성과 거래 최초 저장을 처리한다.
+     * 기본정보와 거래를 함께 전달하면 하나의 트랜잭션에서 저장한다.
      */
     @Override
     @Transactional
-    public TaxInputRequest save( // 분석 기본정보 생성 , 새로운 분석 기본정보 한건 저장
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
-            TaxInputRequest request
-    ) {
-        AccessContext access = createAccess(principal, guestInputIds); // 접근 정보를 만듬
-
-        // 소유자는 요청 본문 대신 인증 정보에서 결정한다.
-        TaxInputRequest input = normalizeInput( // 저장할 기본정보 객체 생성
-                request,
-                null,
-                access.getUserId()
-        );
-
-        taxValidator.validateInput(input); // 연도 , 기부금 , 저장 상태등을 검사
-
-        // 비회원은 TEMP로 생성할 수 있고 SAVED에는 로그인이 필요하다.
-        if ("SAVED".equals(input.getSaveStatus())) {
-            input.setUserId(taxValidator.requireLogin(access));
-        }
-
-        taxMapper.insertInput(input); // db에 저장한뒤 생성된 분석을 반환 , mapper 의 생성 키 설정에 따라 분석번호도 input으로 채워짐
-
-        return input;
-    }
-
-    /**
-     * 분석·저장 목록·거래 목록·계산 결과 조회를 통합한다.
-     */
-    @Override
-    @Transactional(readOnly = true)
-    public TaxServiceResponse get(  // 여러 조회 기능 통합
+    public TaxServiceResponse save( // 분석 기본정보를 만들고 거래를 처음 db에 저장하는 기능
             CustomUserDetails principal,
             Set<Long> guestInputIds,
             TaxServiceRequest request
     ) {
-        if (request == null) {  // 먼저 요청이 있는지 검사
-            throw invalid("request", "조회 요청이 필요합니다.");
-        }
-
-        String target = request.getTarget();   // 어떤 데이터를 조회할지는 request.target으로 구분
-
-        // 잘못된 구분값은 다른 조회로 해석하지 않고 거절한다.
-        if (!"INPUT".equals(target)    // 지원하는 구분값인지 검사
-                && !"SAVED_INPUTS".equals(target)
-                && !"TRANSACTIONS".equals(target)
-                && !"RESULT".equals(target)) {  //  네 값중 어느것도 해당하지 않으면 오류 반환
-            throw invalid("target", "지원하지 않는 조회 대상입니다.");
-        }   // "Input".equals (target) 형태이므로 target 이 null 이어도 비교 오류가 나지 않음
-
-        AccessContext access = createAccess(principal, guestInputIds);
-
-        // 저장 목록 조회는 회원 전용이며 특정 분석번호를 요구하지 않는다.
-        if ("SAVED_INPUTS".equals(target)) { // 이 조회는 로그인이 필요하고 특정 분석번호는 필요하지 않는다.
-            Long loginUserId = taxValidator.requireLogin(access);
-
-            if (request.getTaxYear() != null) { // 만약 귀속연도가 null 이 아니면 taxvalidator에서 귀속연도 검증
-                taxValidator.validateTaxYear(request.getTaxYear());
-            }
-
-            return TaxServiceResponse.builder() // 응답은 builder로 만듬
-                    .inputs(
-                            taxMapper.findSavedInputs( // 연도가 전달됐다고 검사하고 목록 조회
-                                    loginUserId,
-                                    request.getTaxYear()
-                            )
-                    )
-                    .build();
-        }
-
-        Long taxInputId = request.getTaxInputId();
-
-        // 나머지 조회는 해당 분석에 대한 권한을 먼저 확인한다.
-        TaxInputRequest input =
-                requireInput(access, taxInputId, false);
-
-        if ("INPUT".equals(target)) {
-            return TaxServiceResponse.builder() // 분석 기본정보
-                    .input(input)
-                    .build();
-        }
-
-        if ("TRANSACTIONS".equals(target)) {
-            return TaxServiceResponse.builder() // 거래 목록
-                    .transactions(
-                            taxMapper.findTransactions(taxInputId, null)
-                    )
-                    .build();
-        }
-
-        return TaxServiceResponse.builder() // 계산 결과
-                .result(readStoredResult(taxInputId))
-                .build();
-    }
-
-    /**
-     * 거래 목록을 최초 저장한다.
-     * 기존 거래 전체를 새 목록으로 교체하지 않는다.
-     */
-    @Override
-    @Transactional
-    public List<TaxTransactionDto> transaction( // 거래 목록 최초 저장
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
-            Long taxInputId,
-            List<TaxTransactionDto> rows
-    ) {
-        AccessContext access = createAccess(principal, guestInputIds);
-
-        TaxInputRequest input =  // 먼저 분석을 확인하고 잠금
-                requireInput(access, taxInputId, true);
-
-        taxValidator.validateTransactionRows(rows); // 목록이 전달됐는지 확인
-
-        List<TaxTransactionDto> requested = new ArrayList<>(); // 검증후 저장할 거래를 담을 목록을 만듬
-
-        for (TaxTransactionDto source : rows) {
-            taxValidator.validateTransactionSource(source, taxInputId);
-            taxValidator.validateCashTransaction(source);
-
-            TaxTransactionDto row =
-                    copyStoredTransaction(source, taxInputId);
-
-            // 실제 입출금액이 있으면 저장 금액에 우선 적용한다.
-            if (source.getActualAmount() != null) {
-                row.setAmount(source.getActualAmount());
-            }
-
-            taxValidator.validateStoredTransaction(row);
-            taxValidator.validateStoredTransactionDate(
-                    row,
-                    input.getTaxYear()
-            );
-
-            requested.add(row);
-        }
-
-        if (!requested.isEmpty()) {
-            taxValidator.validateTransactions(requested); // 목록 정리가 끝나면 상세 검사를 수행
-        }
-
-        List<TaxTransactionDto> existing =
-                taxMapper.findTransactions(taxInputId, null); // 기존 db거래는 다음 코드로 조회
-
-                                          // 동일한 저장 재요청은 INSERT하지 않고 기존 목록을 반환한다.
-        if (sameTransactions(existing, requested)) {
-            return existing;
-        }
-
-        if (!existing.isEmpty()) { // 기존 거래가 있는데 다른 목록이 전달되면 전체 교체를 거절
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "USE_TRANSACTION_CHANGE_API",
-                    "기존 거래는 개별 수정·삭제 API로 변경해주세요."
-            );
-        }
-
-        taxValidator.validateNewTransactionIds(rows);  // 신규 저장 가능한 경우 기존 거래번호가 없는지 검사한뒤
-
-        for (TaxTransactionDto row : requested) {  // 한건씩 insert , 저장 후에는 이전 계산 결과를 무효화하고 , 저장된 목록을 조회해 반환
-            taxMapper.insertTransaction(row);
-        }
-
-        if (!requested.isEmpty()) {
-            invalidateAfterTransactionChange(taxInputId);
-        }
-
-        return taxMapper.findTransactions(taxInputId, null);
-    }
-
-    /**
-     * INPUT은 분석 기본정보, CATEGORY는 거래 카테고리를 수정한다.
-     * 반환값은 수정 대상이 속한 분석의 기본정보다.
-     */
-    @Override
-    @Transactional
-    public TaxInputRequest update( // 기본정보, 카테고리 수정 통합
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
-            TaxServiceRequest request
-    ) {
-        if (request == null) { // 수정 요청 객체가 없으면 예외를 발생시켜 중단
-            throw invalid("request", "수정 요청이 필요합니다.");
-        }
-
-        String target = request.getTarget(); // 수정 대상 확인
-
-        if (!"INPUT".equals(target) // 만약 input도 아니고 category도 아니면 거절
-                && !"CATEGORY".equals(target)) {
-            throw invalid("target", "지원하지 않는 수정 대상입니다.");
-        }
-
-        // 수정 대상과 전달값이 서로 섞이지 않도록 검사한다.
-        if ("INPUT".equals(target)
-                && (request.getTransactionId() != null
-                || request.getCategory() != null)) {
+        if (request == null) { // 저장 요청이 없으면 거절
             throw invalid(
                     "request",
-                    "분석 기본정보 수정에는 거래번호와 카테고리를 전달할 수 없습니다."
-            ); // 기본정보 수정인데 거래번호 , 카테고리가 함께 들어오면 오류
+                    "저장 요청이 필요합니다."
+            );
         }
 
-        if ("CATEGORY".equals(target)) {  // 카테고리 수정에 필요한 값 검사
-            taxValidator.validateId(  // 요청에서 거래번호를 꺼내 값이 있고 0보다 큰지 검사합니다. 잘못됐으면 transactionId 필드 오류를 발생시킴
-                    request.getTransactionId(),
-                    "transactionId"
+        AccessContext access = createAccess(  // 로그인 사용자와 비회원에게 허용된 분석번호를 이용해 접근 권한 정보를 구성
+                principal,
+                guestInputIds
+        );
+
+        Long taxInputId = request.getTaxInputId(); // 프론트가 보낸 요청에서 분석번호를 꺼냄, 분석번호를 보내지 않으면 null
+
+        List<TaxTransactionDto> rows = // 요청에서 저장할 거래 목록을 꺼내 rows에 담음,
+                request.getTransactions();
+
+        boolean createAnalysis = taxInputId == null; // 분석번호가 없는지 검사
+
+        // 기존 분석의 기본정보 변경은 update에서 처리한다.
+        if (!createAnalysis && request.getInput() != null) { // 신규생성이 아니라 기존 분석번호를 사용하는 경우
+            throw invalid( // 요청에 사업자등록 여부,나이, 기부금 등의 기본정보가 포함되어 있다는 뜻
+                    "input",
+                    "기존 분석의 기본정보는 수정 API를 이용해주세요."
             );
-            taxValidator.validateCategory(request.getCategory()); // 요청에서 카테고리를 꺼내 대문자로 시작하는 50자 이하 코드 형식인지 검사
-            if (request.getInput() != null) { // 만약 요청에 분석 기본정보 객체 까지 함께 들어왔는지 확인 , != null 은 값이 있다 는 뜻
-                throw invalid( // 카테고리만 수정하는 요청인데 분석 기본정보도 들어왔다면 입력 오류를 발생시키고 처리를 중단 시킴
-                        "input",
-                        "카테고리 수정에는 분석 기본정보를 전달할 수 없습니다."
+        }
+
+        // 기존 분석에 저장할 때는 거래 목록이 필요하다.
+        if (!createAnalysis && rows == null) {
+            throw invalid(
+                    "transactions",
+                    "저장할 거래 목록이 필요합니다."
+            );
+        }  // !createAnalysis 기존 분석번호를 사용하는 경우 , // rows == null  요청에 거래 목록이 없는 경우 , 두조건이 모두 맞으면 오류 반환
+
+        if (rows != null) {
+            taxValidator.validateTransactionRows(rows);
+        } // 목록이 저장 가능한 형식인지 검사하는 단계이며 정확한 검사 항목은 validateTransactionRows() 내부에 있음
+
+        TaxInputRequest input;
+
+        if (createAnalysis) { // 분석번호가 없어 새분석을 생성해야 할떄만 실행
+            // 새 분석의 소유자는 요청 본문 대신 인증 정보에서 결정한다.
+            input = normalizeInput( // request.getInput() 프론트가 보낸 기본정보,
+                    request.getInput(),
+                    null,   // null 신규 분석이므로 아직 분석번호가 없음,
+                    access.getUserId() // 서버가 인증 정보로 확인한 사용자 번호, 비회원이면 null 일수있음
+            );
+
+            taxValidator.validateInput(input); // 정리한 기본정보가 유효한지 검사, 문제가 있으면 예외를 발생 시켜 저장 진행을 막음
+
+            // 정식 저장에는 로그인이 필요하다.
+            if ("SAVED".equals(input.getSaveStatus())) { // 새 분석이면 db에 생성하고 , 기존 분석이면 권한을 확인하며 조회하는 부분
+                input.setUserId(
+                        taxValidator.requireLogin(access)
+                );
+            }
+
+            taxMapper.insertInput(input); // 새 분석 기본정보를 db에 insert
+
+            taxInputId = input.getTaxInputId(); // db에서 생성된 분석번호를 꺼냄, 매퍼의 생성 키 설정으로 input 에 번호가 채워지는 구조
+            //  반면 기존 분석번호가 있으면 else가 실행됨
+        } else {
+            // 기존 분석에 거래를 저장하기 전에 접근 권한과 잠금을 확인한다.
+            input = requireInput(
+                    access,
+                    taxInputId,
+                    true
+            );
+        }
+
+        List<TaxTransactionDto> savedRows = List.of(); // 최종 반환할 저장결과를 우선 빈 목록으로 초기화, 이후 저장 결과가 생기면 다른 목록 대입
+
+        if (rows != null) { // 프론트가 거래 목록을 보냈을떄 만 처리
+            List<TaxTransactionDto> requested = // 검증이 끝난 저장 대상 거래를 모을 목록을 만듬
+                    new ArrayList<>();
+
+            for (TaxTransactionDto source : rows) { // 받은 거래를 하나씩 꺼냄, source는 현재 검사할 원본 거래
+                taxValidator.validateTransactionSource( // 해당 거래가 요청한 분석에 저장 가능한지 검사 , 정확한 검사 항목은 이 함수 내부에 정의되있음
+                        source,
+                        taxInputId
+                );
+
+                taxValidator.validateCashTransaction(source); // 실제 입출금 거래로 저장 가능한지 검사, 공제대상금액이나 검산용 합계를 실제 거래 금액으로 저장하지 않도록 확인하는 역할
+
+                TaxTransactionDto row =  // 프론트가 보낸 거래에서 db에 저장할 필드를 복사, 서버가 확인한 분석번호를 연결한 새 객체 생성
+                        copyStoredTransaction(
+                                source,
+                                taxInputId
+                        );
+
+                // 실제 입출금액이 있으면 저장 금액에 우선 적용한다.
+                if (source.getActualAmount() != null) {
+                    row.setAmount(source.getActualAmount());
+                }
+
+                taxValidator.validateStoredTransaction(row);
+
+                taxValidator.validateStoredTransactionDate(
+                        row,
+                        input.getTaxYear()
+                );
+
+                requested.add(row);
+            }
+
+            if (!requested.isEmpty()) {
+                taxValidator.validateTransactions(requested);
+            }
+
+            List<TaxTransactionDto> existing =
+                    taxMapper.findTransactions(
+                            taxInputId,
+                            null
+                    );
+
+            // 같은 저장 요청을 재전송하면 기존 거래를 반환한다.
+            if (sameTransactions(existing, requested)) {
+                savedRows = existing;
+
+            } else {
+                // 최초 저장 요청으로 기존 거래 전체를 교체하지 않는다.
+                if (!existing.isEmpty()) {
+                    throw new ApiException(
+                            HttpStatus.CONFLICT,
+                            "USE_TRANSACTION_CHANGE_API",
+                            "기존 거래는 수정·삭제 API로 변경해주세요."
+                    );
+                }
+
+                taxValidator.validateNewTransactionIds(rows);
+
+                for (TaxTransactionDto row : requested) {
+                    taxMapper.insertTransaction(row);
+                }
+
+                if (!requested.isEmpty()) {
+                    invalidateAfterTransactionChange(
+                            taxInputId
+                    );
+                }
+
+                savedRows = taxMapper.findTransactions(
+                        taxInputId,
+                        null
                 );
             }
         }
 
-        AccessContext access = createAccess(principal, guestInputIds); // 회원 인증 정보인 principal 과 서버 세션의 비회원 분석 번호목록인
-                                                                       // guestInputIds를 합쳐, 접근 권한 검사에 사용할 객체 access를 만듬.
-        Long taxInputId = request.getTaxInputId();
-        // 요청객체 request 에서 수정할 분석번호를 꺼내 taxinputid 변수에 담음
+        return TaxServiceResponse.builder()
+                .input(input)
+                .transactions(savedRows)
+                .build();
+    }
+    /**
+     * 기본정보와 거래 카테고리를 한 요청에서 수정한다.
+     * input이 있으면 기본정보를 수정한다.
+     * transactionId와 category가 있으면 카테고리를 수정한다.
+     */
+    @Override
+    @Transactional
+    public TaxInputRequest update(
+            CustomUserDetails principal,
+            Set<Long> guestInputIds,
+            Long taxInputId,
+            TaxServiceRequest request
+    ) {
+        if (request == null) {
+            throw invalid(
+                    "request",
+                    "수정 요청이 필요합니다."
+            );
+        }
 
-        // 두 수정 작업 모두 부모 분석의 권한 확인과 잠금을 먼저 수행한다.
-        TaxInputRequest existingInput = // 해당 분석을 조회하고 접근 권한을 확인한뒤 , 기존 분석정보를 existingInput 에 담는 부분
-                requireInput(access, taxInputId, true);
+        boolean updateProfile = request.getInput() != null;
 
-        if ("INPUT".equals(target)) { // 수정 대상이 input 분석 기본정보일 때만 이 코드를 실행
-            TaxInputRequest updated = normalizeInput( //  normalizeInput()은 기본정보를 복사하고, 누락된 부양가족 수·기부금·저장 상태에 기본값을 넣고, 분석번호와 소유자는 서버에서 확인한 값을 사용
-                    // 수정에 사용할 새 분석정보 객체를 만들어 updated 에 담음
-                    request.getInput(), // 요청에서 꺼낸 새로운 기본 정보
-                    taxInputId, // 수정할 분석번호
-                    existingInput.getUserId() // 기존 분석의 소유 회원번호
+        boolean updateCategory =
+                request.getTransactionId() != null
+                        || request.getCategory() != null;
+
+        if (!updateProfile && !updateCategory) {
+            throw invalid(
+                    "request",
+                    "수정할 기본정보 또는 카테고리를 전달해주세요."
+            );
+        }
+
+        // 수정할 분석은 URL에서 결정한다. 본문과 경로가 다르면 거절한다.
+        if (request.getTaxInputId() != null
+                && !Objects.equals(
+                request.getTaxInputId(),
+                taxInputId
+        )) {
+            throw invalid(
+                    "taxInputId",
+                    "경로와 요청 본문의 분석번호가 다릅니다."
+            );
+        }
+
+        // 카테고리 수정에는 거래번호와 카테고리가 모두 필요하다.
+        if (updateCategory) {
+            taxValidator.validateId(
+                    request.getTransactionId(),
+                    "transactionId"
             );
 
-            taxValidator.validateInput(updated); // 기본정보 수정 요청이면 , 수정할 객체를 정리해서 만들고 그 값이 올바른지 검사한다
+            taxValidator.validateCategory(
+                    request.getCategory()
+            );
+        }
+
+        AccessContext access = createAccess(
+                principal,
+                guestInputIds
+        );
+
+        // 두 수정 작업이 같은 분석을 기준으로 처리되도록 먼저 잠근다.
+        TaxInputRequest existingInput = requireInput(
+                access,
+                taxInputId,
+                true
+        );
+
+        TaxInputRequest updatedInput = existingInput;
+
+        if (updateProfile) {
+            updatedInput = normalizeInput(
+                    request.getInput(),
+                    taxInputId,
+                    existingInput.getUserId()
+            );
+
+            taxValidator.validateInput(updatedInput);
 
             // 직접 만든 비회원 분석만 현재 회원 소유로 전환할 수 있다.
-            if (existingInput.getUserId() == null // 비회원 분석을 회원 소유로 저장하는 조건을 확인하고 기본정보를 db에 수정하는 부분
-                    && "SAVED".equals(updated.getSaveStatus())) { // 다음 두 조건을 만족할때 안쪽 코드를 실행
-                Long loginUserId = taxValidator.requireLogin(access); // 현재 로그인 했는지 확인하고 회원번호를 가져옴, 비회원 상태라면 예외가 발생해 처리가 중단됨
+            if (existingInput.getUserId() == null
+                    && "SAVED".equals(updatedInput.getSaveStatus())) {
+
+                Long loginUserId =
+                        taxValidator.requireLogin(access);
 
                 if (!access.getGuestInputIds().contains(taxInputId)) {
-                    throw new ApiException( // 만약 직접 만든 비회원 분석이 아니라면  403 접근 거절 예외 발생
+                    throw new ApiException(
                             HttpStatus.FORBIDDEN,
                             "ACCESS_DENIED",
                             "직접 생성한 비회원 분석만 저장할 수 있습니다."
                     );
                 }
 
-                updated.setUserId(loginUserId); // 검사를 통과하면 수정할 분석의 소유자를 현재 로그인한 회원으로 설정 , java 객체만 변경
+                updatedInput.setUserId(loginUserId);
             }
-
-            taxMapper.updateInput(updated); // 정리한 기본정보를 실제 db 의 tax_inputs 에 반영 , 위의 비회원 전환 조건에 해당하지 않는 일반 기본정보수정도 이 줄을 실행
-            taxMapper.deleteResult(taxInputId); // 해당 분석의 이전 계싼 결과를 삭제 , 입력 조건이 바뀌었기 때문이고 거래내역 삭제 X
-
-            return updated;
         }
 
-        Long transactionId = request.getTransactionId(); // 요청에서 수정할 거래번호를 꺼낸 transactionId에 담음
-        String category = request.getCategory(); // 요청에서 새로 적용할 카테고리를 꺼내 category에 담음
+        TaxTransactionDto existingTransaction = null;
+        boolean categoryChanged = false;
 
-        TaxTransactionDto existing = // 해당 분석에 속한 거래를 db에서 조회하고, 기존 거래정보를 existing에 담음
-                requireTransaction(taxInputId, transactionId); // requireTransaction(거래 번호가 유효한지 검사, 분석번호 + 거래번호로 조회 , 거래가 없으면 오류 -> 있으면 기존 객체 반환)
+        if (updateCategory) {
+            // 다른 분석의 거래를 수정하지 못하도록 분석번호와 함께 조회한다.
+            existingTransaction = requireTransaction(
+                    taxInputId,
+                    request.getTransactionId()
+            );
 
-        log.debug(
-                "카테고리 수정 요청: 분석번호={}, 거래번호={}, 기존값={}, 요청값={}",
-                taxInputId, // 거래가 속한 분석번호
-                transactionId, // 수정할 거래번호
-                existing.getCategory(), // 기존값( db에서 조회한 기존 카테고리)
-                category    // 요청값(카테고리)
-        );
-
-        // 기존값과 같으면 SQL 수정과 후처리를 생략한다.
-        if (Objects.equals(existing.getCategory(), category)) { // db의 기존 카테고리와 요청한 새 카테고리가 같은지 비교
-            log.debug(
-                    "카테고리 수정 생략: 거래번호={}, 기존값과 요청값이 같음",
-                    transactionId
-            ); // Objects.equals() : 두 값을 null 에도 안전하게 비교
-
-            return existingInput; // 두 값이 같으면 수정 생략 으로 반환
-        }
-
-        int updated = taxMapper.updateCategory( // 지정한 거래 한건의 카테고리를 db에서 수정하고, 영향받은 행 수를 updated 에 담는 부분
-                taxInputId,
-                transactionId,
-                category
-        );
-
-        log.debug(
-                "카테고리 UPDATE 결과: 분석번호={}, 거래번호={}, 반영행수={}",
-                taxInputId,
-                transactionId,
-                updated
-        );
-
-        if (updated != 1) {  // 수정 행 수를 확인 하고 변경값을 다시 조회해 로그를 남긴뒤 후처리 하는 부분
-            throw new ApiException( // 앞에서 실행한 카테고리 update 의 영향 행 수가 1이 아닌지 확인
-                    HttpStatus.CONFLICT, // 정확히 한건이 아니면 409 conflict 예외처리 , 해당건 롤백
-                    "TRANSACTION_UPDATE_FAILED",
-                    "거래 수정 결과를 확인하지 못했습니다."
+            categoryChanged = !Objects.equals(
+                    existingTransaction.getCategory(),
+                    request.getCategory()
             );
         }
 
-        TaxTransactionDto after = // 수정한 거래를 db에서 다시 조회해 after 에 담음
-                requireTransaction(taxInputId, transactionId); // existing :수정전 거래정보 , after: 수정후 재조회한 거래정보
+        // 필요한 검증이 모두 끝난 뒤 DB 변경을 시작한다.
+        if (updateProfile) {
+            taxMapper.updateInput(updatedInput);
+        }
 
-        log.debug(
-                "카테고리 DB 재조회: 거래번호={}, 변경전={}, 요청값={}, DB조회값={}, 일치여부={}",
-                transactionId, // 수정한 거래번호
-                existing.getCategory(), // 수정 전 카테고리
-                category, // 요청한 새 카테고리
-                after.getCategory(), // 수정후 db에서 다시 조회한 카테고리
-                Objects.equals(category, after.getCategory()) // 요청값과 재조회 값이 같으면 true, 다르면 false
-        );
+        if (categoryChanged) {
+            Long transactionId = request.getTransactionId();
+            String category = request.getCategory();
 
-        invalidateAfterTransactionChange(taxInputId); // 거래가 변경됐으므로, 이전 계산 결과를 삭제하고 분석수정 시각을 갱신
+            log.debug(
+                    "카테고리 수정 요청: 분석번호={}, 거래번호={}, 기존값={}, 요청값={}",
+                    taxInputId,
+                    transactionId,
+                    existingTransaction.getCategory(),
+                    category
+            );
 
-        return existingInput; // 해당 거래가 속한 분석 기본정보를 반환하고 메서드 종료
+            int updated = taxMapper.updateCategory(
+                    taxInputId,
+                    transactionId,
+                    category
+            );
+
+            log.debug(
+                    "카테고리 UPDATE 결과: 분석번호={}, 거래번호={}, 반영행수={}",
+                    taxInputId,
+                    transactionId,
+                    updated
+            );
+
+            if (updated != 1) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "TRANSACTION_UPDATE_FAILED",
+                        "거래 수정 결과를 확인하지 못했습니다."
+                );
+            }
+
+            TaxTransactionDto after = requireTransaction(
+                    taxInputId,
+                    transactionId
+            );
+
+            log.debug(
+                    "카테고리 DB 재조회: 거래번호={}, 변경전={}, 요청값={}, DB조회값={}, 일치여부={}",
+                    transactionId,
+                    existingTransaction.getCategory(),
+                    category,
+                    after.getCategory(),
+                    Objects.equals(
+                            category,
+                            after.getCategory()
+                    )
+            );
+        }
+
+        // 기본정보와 카테고리를 함께 바꿔도 결과 무효화는 한 번만 수행한다.
+        if (categoryChanged) {
+            invalidateAfterTransactionChange(taxInputId);
+
+        } else if (updateProfile) {
+            taxMapper.deleteResult(taxInputId);
+        }
+
+        return updatedInput;
     }
 
     /**
-     * INPUT은 분석 전체, TRANSACTION은 거래 한 건을 삭제한다.
+     * 분석 전체 삭제와 거래 한 건 삭제를 처리한다.
      */
     @Override
     @Transactional
     public void delete(
             CustomUserDetails principal,
             Set<Long> guestInputIds,
-            TaxServiceRequest request
+            Long taxInputId,
+            TaxServiceRequest request,
+            boolean deleteAll
     ) {
         if (request == null) {
-            throw invalid("request", "삭제 요청이 필요합니다.");
+            throw invalid(
+                    "request",
+                    "삭제 요청이 필요합니다."
+            );
         }
 
-        String target = request.getTarget();
+        Long transactionId = request.getTransactionId();
 
-        if (!"INPUT".equals(target)
-                && !"TRANSACTION".equals(target)) {
-            throw invalid("target", "지원하지 않는 삭제 대상입니다.");
+        // 경로와 본문에 서로 다른 분석번호가 전달되면 거절한다.
+        if (request.getTaxInputId() != null
+                && !Objects.equals(
+                request.getTaxInputId(),
+                taxInputId
+        )) {
+            throw invalid(
+                    "taxInputId",
+                    "경로와 요청 본문의 분석번호가 다릅니다."
+            );
         }
 
-        if ("INPUT".equals(target)
-                && request.getTransactionId() != null) {
+        // 전체 삭제와 개별 거래 삭제를 동시에 요청하지 못하도록 한다.
+        if (deleteAll && transactionId != null) {
             throw invalid(
                     "transactionId",
                     "분석 전체 삭제에는 거래번호를 전달할 수 없습니다."
             );
         }
 
-        // 거래번호 누락을 분석 전체 삭제로 처리하지 않는다.
-        if ("TRANSACTION".equals(target)) {
+        // 전체 삭제를 명시하지 않았다면 거래번호가 반드시 필요하다.
+        if (!deleteAll) {
             taxValidator.validateId(
-                    request.getTransactionId(),
+                    transactionId,
                     "transactionId"
             );
         }
 
-        AccessContext access = createAccess(principal, guestInputIds);
-        Long taxInputId = request.getTaxInputId();
+        AccessContext access = createAccess(
+                principal,
+                guestInputIds
+        );
 
-        requireInput(access, taxInputId, true);
+        // 삭제 전에 분석 접근 권한을 확인하고 부모 분석을 잠근다.
+        requireInput(
+                access,
+                taxInputId,
+                true
+        );
 
-        if ("INPUT".equals(target)) {
+        if (deleteAll) {
             int deleted = taxMapper.deleteInput(taxInputId);
 
             if (deleted != 1) {
@@ -429,9 +459,11 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             return;
         }
 
-        Long transactionId = request.getTransactionId();
-
-        requireTransaction(taxInputId, transactionId);
+        // 지정한 거래가 해당 분석에 속하는지 확인한다.
+        requireTransaction(
+                taxInputId,
+                transactionId
+        );
 
         int deleted = taxMapper.deleteTransaction(
                 taxInputId,
@@ -446,20 +478,32 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             );
         }
 
+        // 거래 변경으로 이전 계산 결과를 무효화한다.
         invalidateAfterTransactionChange(taxInputId);
     }
 
+    /**
+     * PDF에서 거래 내역을 추출한다.
+     * 추출한 거래는 이 메서드에서 DB에 저장하지 않는다.
+     */
     @Override
-    public PdfParseResponseDto parsePdf(
+    public PdfParseResponseDto parse(
             CustomUserDetails principal,
             Set<Long> guestInputIds,
             Long taxInputId,
             MultipartFile file
     ) throws IOException {
-        AccessContext access = createAccess(principal, guestInputIds);
+        AccessContext access = createAccess(
+                principal,
+                guestInputIds
+        );
 
         if (taxInputId != null) {
-            requireInput(access, taxInputId, false);
+            requireInput(
+                    access,
+                    taxInputId,
+                    false
+            );
         }
 
         try {
@@ -468,11 +512,12 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             List<PageOcrResultDto> pages =
                     taxOcrService.extractPages(bytes);
 
-            PdfParseResponseDto response = pythonPdfClient.analyze(
-                    bytes,
-                    file.getOriginalFilename(),
-                    pages
-            );
+            PdfParseResponseDto response =
+                    pythonPdfClient.analyze(
+                            bytes,
+                            file.getOriginalFilename(),
+                            pages
+                    );
 
             if (response == null
                     || response.getTransactions() == null
@@ -485,7 +530,9 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             }
 
             List<TaxTransactionDto> transactions =
-                    preparePdfTransactions(response.getTransactions());
+                    preparePdfTransactions(
+                            response.getTransactions()
+                    );
 
             long reviewCount = transactions.stream()
                     .filter(row ->
@@ -494,11 +541,13 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                     )
                     .count();
 
-            // 추출만 수행했으며 거래 저장은 별도 요청에서 처리한다.
+            // PDF 추출 결과에는 저장 완료 상태를 부여하지 않는다.
             response.setTransactions(transactions);
             response.setSavedCount(0);
             response.setPersisted(false);
-            response.setTaxInputIdsByYear(new LinkedHashMap<>());
+            response.setTaxInputIdsByYear(
+                    new LinkedHashMap<>()
+            );
 
             log.info(
                     "PDF 파싱 완료. 거래={}건, 검토={}건, DB 저장 없음",
@@ -518,45 +567,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
     }
 
-    private TaxResultResponse readStoredResult(Long taxInputId) {
-        TaxResultRow row = taxMapper.findResult(taxInputId);
-
-        if (row == null) {
-            throw new ApiException(
-                    HttpStatus.NOT_FOUND,
-                    "TAX_RESULT_NOT_FOUND",
-                    "저장된 계산 결과가 없습니다."
-            );
-        }
-
-        try {
-            Map<String, Object> detail = objectMapper.readValue(
-                    row.getResultDetail(),
-                    new TypeReference<Map<String, Object>>() {}
-            );
-
-            // 기존 날짜·시간에 한국 시간 오프셋을 붙인다.
-            String calculatedAt = row.getCalculatedAt() == null
-                    ? null
-                    : row.getCalculatedAt()
-                    .atOffset(ZoneOffset.ofHours(9))
-                    .toString();
-
-            return TaxResultResponse.builder()
-                    .taxInputId(row.getTaxInputId())
-                    .resultDetail(detail)
-                    .calculatedAt(calculatedAt)
-                    .build();
-
-        } catch (JsonProcessingException exception) {
-            throw new ApiException(
-                    HttpStatus.INTERNAL_SERVER_ERROR,
-                    "INVALID_STORED_RESULT",
-                    "저장된 계산 결과를 읽을 수 없습니다."
-            );
-        }
-    }
-
     private List<TaxTransactionDto> preparePdfTransactions(
             List<TaxTransactionDto> sources
     ) {
@@ -570,13 +580,14 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 );
             }
 
-            // 추출 데이터에는 DB 식별자를 연결하지 않는다.
+            // 추출 데이터에 포함된 DB 식별자는 사용하지 않는다.
             source.setTaxInputId(null);
             source.setTransactionId(null);
 
             if (!Boolean.TRUE.equals(source.getParseSuccess())
                     || Boolean.TRUE.equals(source.getNeedsReview())
                     || Boolean.TRUE.equals(source.getExcluded())) {
+
                 String reason = source.getFailureReason();
 
                 markPdfReview(
@@ -596,7 +607,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 taxValidator.validateCashTransaction(source);
                 taxValidator.validatePdfTransactionDate(source);
 
-                row = copyStoredTransaction(source, null);
+                row = copyStoredTransaction(
+                        source,
+                        null
+                );
 
                 if (source.getActualAmount() != null) {
                     row.setAmount(source.getActualAmount());
@@ -608,7 +622,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             } catch (ApiException exception) {
                 String reason = exception.getMessage();
 
-                // 검증 실패 거래는 버리지 않고 검토 대상으로 반환한다.
+                // 검증 실패 거래도 버리지 않고 검토 대상으로 반환한다.
                 markPdfReview(
                         source,
                         reason == null || reason.isBlank()
@@ -682,7 +696,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             category = "UNCLASSIFIED";
         }
 
-        // 저장할 필드만 복사해 새 객체를 생성한다.
+        // 저장에 필요한 필드만 새 객체에 복사한다.
         return TaxTransactionDto.builder()
                 .taxInputId(taxInputId)
                 .transactionType(type)
@@ -707,7 +721,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             );
         }
 
-        // 식별자와 소유자는 서버에서 확인한 값을 사용한다.
+        // 분석번호와 소유자는 서버에서 확인한 값으로 고정한다.
         return TaxInputRequest.builder()
                 .taxInputId(taxInputId)
                 .userId(ownerId)
@@ -739,13 +753,19 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long taxInputId,
             boolean lock
     ) {
-        taxValidator.validateId(taxInputId, "taxInputId");
+        taxValidator.validateId(
+                taxInputId,
+                "taxInputId"
+        );
 
         TaxInputRequest input = lock
                 ? taxMapper.lockInput(taxInputId)
                 : taxMapper.findInput(taxInputId);
 
-        taxValidator.requireAccess(access, input);
+        taxValidator.requireAccess(
+                access,
+                input
+        );
 
         return input;
     }
@@ -754,13 +774,16 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long taxInputId,
             Long transactionId
     ) {
-        // null 거래번호가 전체 조회로 해석되지 않도록 먼저 검사한다.
-        taxValidator.validateId(transactionId, "transactionId");
-
-        List<TaxTransactionDto> rows = taxMapper.findTransactions(
-                taxInputId,
-                transactionId
+        taxValidator.validateId(
+                transactionId,
+                "transactionId"
         );
+
+        List<TaxTransactionDto> rows =
+                taxMapper.findTransactions(
+                        taxInputId,
+                        transactionId
+                );
 
         if (rows.isEmpty()) {
             throw new ApiException(
@@ -773,8 +796,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return rows.get(0);
     }
 
-    private void invalidateAfterTransactionChange(Long taxInputId) {
-        // 거래 변경 후 기존 계산 결과와 부모 분석의 수정 시각을 정리한다.
+    private void invalidateAfterTransactionChange(
+            Long taxInputId
+    ) {
+        // 거래 변경 후 기존 결과를 무효화하고 분석 수정 시각을 갱신한다.
         taxMapper.deleteResult(taxInputId);
         taxMapper.touchInput(taxInputId);
     }
@@ -820,35 +845,35 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return true;
     }
 
-    private boolean sameDecimal( // 두 숫자가 같은지 비교
+    private boolean sameDecimal(
             BigDecimal left,
             BigDecimal right
     ) {
-        if (left == null || right == null) { // left 와 right 를 비교해 같으면 true, 다르면 false 반환
+        if (left == null || right == null) {
             return left == right;
         }
 
-        return left.compareTo(right) == 0; // 왼쪽이 작으면 음수, 같으면 0, 왼쪽이 크면 양수
+        return left.compareTo(right) == 0;
     }
 
-    private AccessContext createAccess( // 회원 번호를 가져오고 관리자 권한이 있는지 확인하는 부분
-            CustomUserDetails principal, // 회원 인증 정보와 비회원 분석번호 목록을 받아 접근 정보 객체를 만드는 메서드
+    private AccessContext createAccess(
+            CustomUserDetails principal,
             Set<Long> guestInputIds
     ) {
-        Long userId = principal == null // 조건 , 참일떄 값 : 거짓일때 값 형태의 삼항 연산자
+        Long userId = principal == null
                 ? null
-                : principal.getUserId();  // principal 이 null 이면 - > 비회원이므로 userid =null
-                                          // principal 이 있으면 인증 정보에서 회원번호를 가져옴
-        boolean admin = principal != null // 관리자 여부 검사하는 부분 , 인증정보가 있는지 확인, 없으면 뒤쪽은 실해아지 않고 admin 은 false
-                && principal.getAuthorities() // 사용자가 가진 권한 목록을 가져옴
-                .stream() // 권한 목록을 하나씩 검사할 수 있도록 처리
-                .anyMatch(authority -> // 각 권한중 조건에 맞는 것이 하나라도 있는지 확인
+                : principal.getUserId();
+
+        boolean admin = principal != null
+                && principal.getAuthorities()
+                .stream()
+                .anyMatch(authority ->
                         "ROLE_ADMIN".equals(
-                                authority.getAuthority() // 
+                                authority.getAuthority()
                         )
                 );
 
-        // 로그인한 뒤에도 직접 만든 비회원 분석의 저장 전환에 사용한다.
+        // 로그인 이후에도 직접 만든 비회원 분석의 소유권 전환에 사용한다.
         Set<Long> ownedGuestInputIds = guestInputIds == null
                 ? Set.of()
                 : Set.copyOf(guestInputIds);
@@ -872,7 +897,9 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         );
     }
 
-    private String failureCode(Exception exception) {
+    private String failureCode(
+            Exception exception
+    ) {
         if (exception instanceof ApiException apiException) {
             return apiException.getCode();
         }
@@ -880,41 +907,5 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return exception instanceof IOException
                 ? "PDF_IO_ERROR"
                 : "PDF_PROCESSING_FAILED";
-    }
-
-    private void writeProcessLog(
-            Long taxInputId,
-            Long userId,
-            String processType,
-            String status,
-            String failReason
-    ) {
-        TransactionTemplate template =
-                new TransactionTemplate(transactionManager);
-
-        // 본 작업의 롤백과 실패 이력 저장을 분리한다.
-        template.setPropagationBehavior(
-                TransactionDefinition.PROPAGATION_REQUIRES_NEW
-        );
-
-        try {
-            template.executeWithoutResult(
-                    transactionStatus ->
-                            taxMapper.insertProcessLog(
-                                    taxInputId,
-                                    userId,
-                                    processType,
-                                    status,
-                                    failReason
-                            )
-            );
-        } catch (RuntimeException exception) {
-            log.error(
-                    "처리 이력 저장 실패. 유형={}, 상태={}, 예외={}",
-                    processType,
-                    status,
-                    exception.getClass().getName()
-            );
-        }
     }
 }

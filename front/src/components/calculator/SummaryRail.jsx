@@ -1,13 +1,9 @@
 'use no memo';
 
 import { useRef, useState } from 'react';
-
 import { Button, Card, KeyValue } from '../common/index';
-
 import { getTaxInput, getTransactions, getTaxReviewSignature, updateTaxInput } from '../../api/taxApi';
-
 import { normalizeTaxKind, useTax, useTaxStore } from '../../store/useTaxStore';
-
 import { getTaxInputSummary, getTransactionCashAmount } from '../../utils/taxInputSummary';
 
 function money(value) {
@@ -136,7 +132,6 @@ function transactionSignature(rows, fromDatabase) {
     }
 
     seen.add(key);
-
     return transactionValue(row, fromDatabase);
   });
 
@@ -148,7 +143,6 @@ export function SummaryRail({ onCalculate }) {
   const { rows } = useTax();
 
   const movingRef = useRef(false);
-
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState('');
 
@@ -161,6 +155,7 @@ export function SummaryRail({ onCalculate }) {
 
   const { income, expense, unclassified } = getTaxInputSummary(transactionRows);
 
+  // 저장 상태와 기본정보를 확인한 뒤 결과 화면으로 이동한다.
   async function handleCalculate() {
     const initial = useTaxStore.getState();
 
@@ -233,7 +228,6 @@ export function SummaryRail({ onCalculate }) {
       }
 
       const screenSignature = transactionSignature(savedScreenRows, false);
-
       const databaseSignature = transactionSignature(databaseRows, true);
 
       if (screenSignature !== databaseSignature) {
@@ -290,9 +284,7 @@ export function SummaryRail({ onCalculate }) {
       <KeyValue label="합계 대상 거래">{transactionRows.length}건</KeyValue>
 
       <KeyValue label="수입 합계">{money(income)}</KeyValue>
-
       <KeyValue label="지출 합계">{money(expense)}</KeyValue>
-
       <KeyValue label="미분류 합계">{money(unclassified)}</KeyValue>
 
       <KeyValue label="수입·지출 차액" total>
