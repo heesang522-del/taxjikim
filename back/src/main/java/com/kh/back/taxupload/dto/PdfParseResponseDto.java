@@ -36,7 +36,7 @@ public class PdfParseResponseDto {
     // 연도별로 생성된 원본 분석번호를 전달한다.
     private Map<Integer, Long> taxInputIdsByYear;
 
-    // 실제 DB에 저장한 거래 수다.
+    // 실제 DB에 저장한 거래 수
     private int savedCount;
 
     @Getter

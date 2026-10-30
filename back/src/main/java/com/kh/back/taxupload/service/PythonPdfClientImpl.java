@@ -60,28 +60,28 @@ public class PythonPdfClientImpl implements PythonPdfClient {
             );
         }
 
-        SimpleClientHttpRequestFactory factory =
-                new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory factory =  // 외부 서버에 요청을 보낼 http 클라이언트를 만들고 , 연결 응답 대기 시간을 설정하는 부분
+                new SimpleClientHttpRequestFactory(); // http 연결을 실제로 처리할 객체 생성
 
-        factory.setConnectTimeout(connectTimeout);
-        factory.setReadTimeout(readTimeout);
+        factory.setConnectTimeout(connectTimeout); // 외부 서버에 연결될 때까지 기다리는 최대시간 설정
+        factory.setReadTimeout(readTimeout); // 연결후 응답 데이터를 읽으며 기다리는 최대 시간 설정, 전체 요청의 총 제한 시간과는 다름
 
-        this.client = RestClient.builder()
-                .baseUrl(baseUrl)
-                .requestFactory(factory)
-                .build();
+        this.client = RestClient.builder()  // 설정을 조합하여 RestClient 를  생성하고, 현재 객체의 client 필드에 저장
+                .baseUrl(baseUrl) // 요청에 사용할 기본 서버 주소 지정
+                .requestFactory(factory) // 위에서 설정한 연결 방식과 대기 시간 적용
+                .build(); // 설정을 적용한 클라이언트 생성
 
-        this.objectMapper = createObjectMapper();
+        this.objectMapper = createObjectMapper(); // createObjectMapper()가 반환하는 객체를 objectmapper 필드에 저장
     }
 
-    private ObjectMapper createObjectMapper() {
-        SimpleModule dateModule = new SimpleModule();
+    private ObjectMapper createObjectMapper() { // python 서버가 보낸 json을 java 객체로 바꿀떄 적용할 규칙을 설정하는 함수
+        SimpleModule dateModule = new SimpleModule(); // SimpleModule 은 ObjectMapper 에 추가할 사용자 정의 변환 규칙을 담는 객체
 
         /*
          * Python이 반환하는 YYYY-MM-DD 문자열을 LocalDate로 변환한다.
          * 날짜가 없는 월별 자료의 null은 그대로 유지한다.
          */
-        dateModule.addDeserializer(
+        dateModule.addDeserializer( // java 필드가 LOcalDate 타입이면 아래의 deserialize ()를 사용하도록 등록
                 LocalDate.class,
                 new JsonDeserializer<LocalDate>() {
 
@@ -96,14 +96,14 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                                     parser,
                                     "거래 날짜는 YYYY-MM-DD 문자열 또는 null이어야 합니다."
                             );
-                        }
+                        } // 만약 날짜 값이 문자열인지 검사, 숫자나 배열등이 오면 오류 발생시킴
 
-                        String value = parser.getText().trim();
+                        String value = parser.getText().trim(); // 문자열의 앞뒤 공백을 제거하고 날짜로 변환시킴
 
                         try {
                             return LocalDate.parse(value);
 
-                        } catch (DateTimeParseException exception) {
+                        } catch (DateTimeParseException exception) { // 날짜 형식이 잘못됬거나 실제로 존재하지 않으면 json 변환 오류로 전달
                             throw JsonMappingException.from(
                                     parser,
                                     "거래 날짜의 형식이 올바르지 않습니다."
@@ -113,9 +113,10 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                 }
         );
 
-        ObjectMapper mapper = new ObjectMapper();
+        ObjectMapper mapper = new ObjectMapper(); // json 변환기를 만들고 위에서 정의한 날짜 변환 규칙을 적용
 
-        mapper.registerModule(dateModule);
+        mapper.registerModule(dateModule); // python 응답에 java dto에는 없는 필드가 추가되어도 변환을 계속함
+        //   ex : dto에 amount 만 있는데 다음 응답이 오면 extrainfo 는 무시
 
         /*
          * 분석 서버에 보조 필드가 추가되어도 기존 DTO 변환을 유지한다.
@@ -123,15 +124,15 @@ public class PythonPdfClientImpl implements PythonPdfClient {
          */
         mapper.disable(
                 DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES
-        );
-
+        ); // python 응답에 java dto에는 없는 필드가 추가되어도 변환을 계속함
         mapper.enable(
                 DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS
-        );
+        );   // // Map<String, Object> 처럼 숫자의 구체적인 java 타입이 정해지지 않은 경우 , 소수를 double 대신 BigDecimal로 읽음
+
 
         mapper.enable(
                 DeserializationFeature.FAIL_ON_TRAILING_TOKENS
-        );
+        ); // 정상 json뒤에 다른 값이 이어지는 응답을 거부
 
         return mapper;
     }
