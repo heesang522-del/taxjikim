@@ -3,11 +3,13 @@ package com.kh.back.tax.service;
 import com.kh.back.tax.dto.TaxDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
+import com.kh.back.tax.exception.TaxCalculationException;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.tax.dto.MonthlyAmountDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
 import com.kh.back.tax.mapper.TaxMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,38 +24,34 @@ import java.util.List;
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
 
-    // 조회한 입력값으로 기부금 한도와 반영 후 사업소득을 계산한다.
-    private TaxBreakdownDto calculateDonations(TaxCalculationInputDto input) {
-        // ① 적자 금액은 보존하되 기부금 인정 한도는 0원 아래로 내려가지 않게 한다.
-        BigDecimal incomeBeforeDonation = input.getTotalIncome().subtract(input.getTotalExpense());
-        BigDecimal donationBaseAmount = incomeBeforeDonation.max(BigDecimal.ZERO);
-
-        // ② 개인사업자의 특례기부금은 기준금액 안에서 입력액만큼 인정한다.
-        BigDecimal specialDonationAllowed = input.getSpecialDonationAmount().min(donationBaseAmount);
-
-        // ③ 특례 인정액을 먼저 차감하고 남은 기준금액의 30%를 일반기부금 한도로 삼는다.
-        BigDecimal generalDonationLimit = donationBaseAmount.subtract(specialDonationAllowed)
-                .max(BigDecimal.ZERO).multiply(new BigDecimal("0.30"));
-        BigDecimal generalDonationAllowed = input.getGeneralDonationAmount().min(generalDonationLimit);
-
-        // ④ 기부금 입력액 전부가 아닌, 실제 인정된 두 금액만 한 번씩 차감한다.
-        BigDecimal incomeAfterDonation = incomeBeforeDonation
-                .subtract(specialDonationAllowed).subtract(generalDonationAllowed);
-
-        TaxBreakdownDto result = new TaxBreakdownDto();
-        result.setIncomeBeforeDonation(incomeBeforeDonation);
-        result.setDonationBaseAmount(donationBaseAmount);
-        result.setSpecialDonationAmount(input.getSpecialDonationAmount());
-        result.setSpecialDonationAllowed(specialDonationAllowed);
-        result.setGeneralDonationAmount(input.getGeneralDonationAmount());
-        result.setGeneralDonationLimit(generalDonationLimit);
-        result.setGeneralDonationAllowed(generalDonationAllowed);
-        result.setIncomeAfterDonation(incomeAfterDonation);
-        return result;
+    // 같은 산출 근거 객체에서 입력 조회 후 ①~⑩ 계산을 순서대로 진행한다.
+    @Override
+    @Transactional(readOnly = true)
+    public TaxBreakdownDto getTaxBreakdown(Long taxInputId) {
+        // 조회 실패는 내부 계산 오류로 바꾸지 않도록 계산 예외 처리와 분리한다.
+        TaxCalculationInputDto input = getCalculationInput(taxInputId);
+        try {
+            return TaxBreakdownDto.from(input)
+                    .calculateIncomeBeforeDonation()
+                    .calculateSpecialDonation()
+                    .calculateGeneralDonation()
+                    .calculateIncomeAfterDonation()
+                    .calculateBasicDeduction()
+                    .calculateTaxBase()
+                    .calculateAssessedTax()
+                    .calculateIncomeTax()
+                    .calculateLocalIncomeTax()
+                    .calculateTotalTax();
+        } catch (RuntimeException exception) {
+            // 계산 단계의 실패만 변환하며, DB 조회 오류는 이 범위에 포함하지 않는다.
+            log.error("내부 세금 계산 실패", exception);
+            throw new TaxCalculationException(exception);
+        }
     }
 
     // 같은 분석의 DB 조건과 기존 총수입·총지출 조회 결과를 모은다.
