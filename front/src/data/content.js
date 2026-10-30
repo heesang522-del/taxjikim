@@ -1,5 +1,5 @@
-export const BOARD_TABS = ['전체', '정보 공유', '팁', '공지'];
-export const BOARD_WRITE_TABS = BOARD_TABS.filter((t) => t !== '전체');
+export const POST_TABS = ['전체', '정보 공유', '팁', '공지'];
+export const POST_WRITE_TABS = POST_TABS.filter((t) => t !== '전체');
 export const ME = '민준'; // 프로토타입: 로그인한 사용자의 닉네임. 이 닉네임이 쓴 글만 수정·삭제할 수 있다.
 
 // 프로토타입용 계정. 가입하면 localStorage에 계정이 추가된다. 실제 서비스에서는 서버가 비밀번호를 해시로 보관한다.
