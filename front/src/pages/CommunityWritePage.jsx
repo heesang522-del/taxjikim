@@ -6,10 +6,10 @@ import { Button } from '../components/common/index';
 import PostForm from '../components/community/PostForm';
 import NoticeCard from '../components/community/NoticeCard';
 import { ROUTES } from '../utils/routes';
-import { BOARD_WRITE_TABS } from '../data/content';
+import { POST_WRITE_TABS } from '../data/content';
 import { useAuth } from '../store/useAuthStore';
 
-export default function BoardWritePage() {
+export default function PostWritePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { loggedIn, isAdmin } = useAuth();
@@ -19,7 +19,7 @@ export default function BoardWritePage() {
   }
 
   // 공지 분류는 관리자만 쓸 수 있다. 일반 회원이 ?tab=공지로 들어오면 첫 번째 분류로 바꾼다.
-  const writable = isAdmin ? BOARD_WRITE_TABS : BOARD_WRITE_TABS.filter((t) => t !== '공지');
+  const writable = isAdmin ? POST_WRITE_TABS : POST_WRITE_TABS.filter((t) => t !== '공지');
   const tab = writable.includes(params.get('tab')) ? params.get('tab') : writable[0];
 
   return (
@@ -27,7 +27,7 @@ export default function BoardWritePage() {
       heading="글쓰기"
       initial={{ tab, title: '', body: '', files: [] }}
       submitLabel="등록"
-      onCancel={() => navigate(`${ROUTES.board}?tab=${encodeURIComponent(tab)}`)}
+      onCancel={() => navigate(`${ROUTES.postList}?tab=${encodeURIComponent(tab)}`)}
     />
   );
 }

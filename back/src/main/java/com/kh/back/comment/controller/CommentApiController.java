@@ -2,7 +2,7 @@ package com.kh.back.comment.controller;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.comment.dto.CommentDto;
-import com.kh.back.comment.service.CommentServiceImpl;
+import com.kh.back.comment.service.CommentService;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +15,7 @@ import java.util.List;
 @RequestMapping("/api/posts/{postId}/comments")
 @RequiredArgsConstructor
 public class CommentApiController {
-    private final CommentServiceImpl commentService;
+    private final CommentService commentService;
 
     // 작성자(userId)는 클라이언트가 보낸 값이 아니라 JwtAuthenticationFilter가
     // 쿠키의 토큰을 검증해 넘겨준 로그인 사용자에서 가져온다. userId를 이 타입에

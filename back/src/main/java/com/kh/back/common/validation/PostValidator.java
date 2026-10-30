@@ -34,7 +34,7 @@ public class PostValidator {
 
     private static final int MAX_FILE_COUNT = 5;
 
-    private static final Set<String> BOARD_TYPES = Set.of(
+    private static final Set<String> POST_TYPES = Set.of(
             "INFO",
             "TIP",
             "NOTICE",
@@ -158,7 +158,7 @@ public class PostValidator {
         // 한국어 게시판 이름도 여기에서 영문 코드로 변환된다.
         validatePost(post);
 
-        requireBoardPermission(post.getBoardType());
+        requirePostPermission(post.getPostType());
 
         return userId;
     }
@@ -193,7 +193,7 @@ public class PostValidator {
             );
         }
 
-        requireBoardPermission(post.getBoardType());
+        requirePostPermission(post.getPostType());
 
         return userId;
     }
@@ -237,8 +237,8 @@ public class PostValidator {
         }
 
         // 프론트는 수정하지 않고 서버에서 한국어 값을 변환한다.
-        post.setBoardType(
-                normalizeBoardType(post.getBoardType())
+        post.setPostType(
+                normalizePostType(post.getPostType())
         );
     }
 
@@ -255,15 +255,15 @@ public class PostValidator {
         validatePost(request);
 
         // 기존 데이터도 비교 전에 같은 기준으로 정규화한다.
-        String existingBoardType =
-                normalizeBoardType(existing.getBoardType());
+        String existingPostType =
+                normalizePostType(existing.getPostType());
 
         if (!Objects.equals(
-                request.getBoardType(),
-                existingBoardType
+                request.getPostType(),
+                existingPostType
         )) {
             throw invalid(
-                    "boardType",
+                    "postType",
                     "게시글 수정 시 게시판 종류를 변경할 수 없습니다."
             );
         }
@@ -619,61 +619,61 @@ public class PostValidator {
     /**
      * 한국어 화면 이름과 영문 코드를 같은 DB 코드로 변환한다.
      */
-    private String normalizeBoardType(String value) {
+    private String normalizePostType(String value) {
 
         if (value == null || value.isBlank()) {
             throw invalid(
-                    "boardType",
+                    "postType",
                     "게시판 종류가 필요합니다."
             );
         }
 
-        return toBoardTypeCode(value);
+        return toPostTypeCode(value);
     }
 
     /**
      * 목록 조회 필터용 정규화. 값이 없으면 전체 게시판(필터 없음)으로 본다.
      */
-    public String normalizeBoardTypeFilter(String value) {
+    public String normalizePostTypeFilter(String value) {
 
         if (value == null || value.isBlank()) {
             return null;
         }
 
-        return toBoardTypeCode(value);
+        return toPostTypeCode(value);
     }
 
-    private String toBoardTypeCode(String value) {
+    private String toPostTypeCode(String value) {
 
         String trimmed = value.trim();
 
-        String boardType = switch (trimmed) {
+        String postType = switch (trimmed) {
             case "정보 공유" -> "INFO";
             case "팁" -> "TIP";
             case "공지" -> "NOTICE";
             default -> trimmed.toUpperCase(Locale.ROOT);
         };
 
-        if (!BOARD_TYPES.contains(boardType)) {
+        if (!POST_TYPES.contains(postType)) {
             throw invalid(
-                    "boardType",
+                    "postType",
                     "지원하지 않는 게시판 종류입니다."
             );
         }
 
-        return boardType;
+        return postType;
     }
 
     /**
      * 한국어로 저장된 기존 데이터도 정규화한 뒤 권한을 검사한다.
      */
-    private void requireBoardPermission(String value) {
+    private void requirePostPermission(String value) {
 
-        String boardType = normalizeBoardType(value);
+        String postType = normalizePostType(value);
 
         boolean administratorOnly =
-                "NOTICE".equals(boardType)
-                        || "FAQ".equals(boardType);
+                "NOTICE".equals(postType)
+                        || "FAQ".equals(postType);
 
         if (administratorOnly && !isAdmin()) {
             throw new ApiException(
