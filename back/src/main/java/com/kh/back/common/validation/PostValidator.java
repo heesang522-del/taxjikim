@@ -1,8 +1,8 @@
+
 package com.kh.back.common.validation;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
-
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.FileMetadataDto;
 import com.kh.back.post.dto.PostDto;
@@ -15,7 +15,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -50,6 +49,15 @@ public class PostValidator {
                     + "[0-9a-f]{4}-[0-9a-f]{4}-"
                     + "[0-9a-f]{12}\\."
                     + "(jpg|jpeg|png|gif|webp|mp4|webm|mov)";
+
+    // 청크 업로드 보완용 제한값
+    private static final long MAX_CHUNK_SIZE =
+            10L * 1024 * 1024;
+
+    private static final long MAX_FILE_SIZE =
+            100L * 1024 * 1024;
+
+    private static final int MAX_TOTAL_CHUNKS = 100;
 
     /**
      * 현재 로그인한 사용자의 실제 회원 번호를 반환한다.
@@ -106,7 +114,8 @@ public class PostValidator {
     }
 
     /**
-     * 비로그인도 허용하는 목록 조회에서 쓴다. 로그인하지 않았으면 null을 반환한다.
+     * 비로그인도 허용하는 목록 조회에서 쓴다.
+     * 로그인하지 않았으면 null을 반환한다.
      */
     public Long currentUserIdOrNull() {
 
@@ -124,7 +133,8 @@ public class PostValidator {
     }
 
     /**
-     * 비로그인도 허용하는 목록 조회에서 쓴다. 로그인하지 않았거나 관리자가 아니면 false를 반환한다.
+     * 비로그인도 허용하는 목록 조회에서 쓴다.
+     * 로그인하지 않았거나 관리자가 아니면 false를 반환한다.
      */
     public boolean hasAdminRole() {
 
@@ -632,7 +642,8 @@ public class PostValidator {
     }
 
     /**
-     * 목록 조회 필터용 정규화. 값이 없으면 전체 게시판(필터 없음)으로 본다.
+     * 목록 조회 필터용 정규화.
+     * 값이 없으면 전체 게시판(필터 없음)으로 본다.
      */
     public String normalizePostTypeFilter(String value) {
 
@@ -800,5 +811,184 @@ public class PostValidator {
                 message,
                 Map.of(field, message)
         );
+    }
+
+    // =====================================================
+    // 신규 추가: 청크 업로드 전용 검증
+    // =====================================================
+
+    /**
+     * 청크 요청의 크기와 개수를 검증한다.
+     * 기존 권한 검사는 requireUpload()에서 처리한다.
+     */
+    public void validateChunkRequest(ChunkDto dto) {
+
+        if (dto == null) {
+            throw invalid("업로드 입력값이 없습니다.");
+        }
+
+        String uploadId = dto.getUploadId();
+
+        if (uploadId == null
+                || !uploadId.matches("[A-Za-z0-9_-]{1,80}")) {
+
+            throw invalid(
+                    "uploadId",
+                    "업로드 ID 형식이 올바르지 않습니다."
+            );
+        }
+
+        if (dto.getTotalChunks() < 1
+                || dto.getTotalChunks() > MAX_TOTAL_CHUNKS
+                || dto.getChunkIndex() < 0
+                || dto.getChunkIndex() >= dto.getTotalChunks()) {
+
+            throw invalid(
+                    "chunkIndex",
+                    "청크 번호와 전체 청크 수를 확인해주세요."
+            );
+        }
+
+        if (dto.getFile() == null
+                || dto.getFile().isEmpty()) {
+
+            throw invalid(
+                    "file",
+                    "업로드 파일이 비어 있습니다."
+            );
+        }
+
+        validateIncomingChunkSize(dto.getFile().getSize());
+
+        validateOriginalFileName(dto.getOriginalName());
+
+        if (dto.getOriginalName().indexOf('\r') >= 0
+                || dto.getOriginalName().indexOf('\n') >= 0
+                || dto.getOriginalName().indexOf('\0') >= 0) {
+
+            throw invalid(
+                    "file",
+                    "파일명에 허용되지 않는 문자가 포함되어 있습니다."
+            );
+        }
+    }
+
+    /**
+     * 기존 사진·동영상 확장자 정책을 유지하면서
+     * 확장자를 추출한다.
+     */
+    public String extractExtension(String originalName) {
+
+        validateOriginalFileName(originalName);
+
+        int dotIndex = originalName.lastIndexOf('.');
+
+        return originalName
+                .substring(dotIndex)
+                .toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * 저장 경로가 허용된 루트 내부인지 검사한다.
+     */
+    public void validateUploadPath(
+            Path root,
+            Path target
+    ) {
+
+        if (root == null || target == null) {
+            throw invalid(
+                    "file",
+                    "업로드 경로가 올바르지 않습니다."
+            );
+        }
+
+        Path normalizedRoot =
+                root.toAbsolutePath().normalize();
+
+        Path normalizedTarget =
+                target.toAbsolutePath().normalize();
+
+        if (!normalizedTarget.startsWith(normalizedRoot)) {
+            throw invalid(
+                    "file",
+                    "업로드 경로가 올바르지 않습니다."
+            );
+        }
+    }
+
+    /**
+     * 개별 청크는 최대 10MB이다.
+     * 스트리밍 중 누적 크기 검사에도 사용한다.
+     */
+    public void validateIncomingChunkSize(long bytes) {
+
+        if (bytes < 0 || bytes > MAX_CHUNK_SIZE) {
+            throw new ApiException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "CHUNK_TOO_LARGE",
+                    "파일 조각 크기는 최대 10MB입니다."
+            );
+        }
+    }
+
+    /**
+     * 실제 저장한 청크 크기를 검증한다.
+     */
+    public void validateChunkBytes(
+            long bytes,
+            long expectedBytes
+    ) {
+
+        if (bytes <= 0 || bytes != expectedBytes) {
+            throw invalid(
+                    "file",
+                    "파일 조각 크기가 일치하지 않습니다."
+            );
+        }
+
+        validateIncomingChunkSize(bytes);
+    }
+
+    /**
+     * 전체 파일은 최대 100MB이다.
+     * 덧셈 오버플로우를 피하기 위해 차감 방식으로 검사한다.
+     */
+    public void validateTotalFileSize(
+            long total,
+            long partSize
+    ) {
+
+        if (total < 0
+                || partSize <= 0
+                || partSize > MAX_CHUNK_SIZE
+                || total > MAX_FILE_SIZE
+                || partSize > MAX_FILE_SIZE - total) {
+
+            throw new ApiException(
+                    HttpStatus.PAYLOAD_TOO_LARGE,
+                    "FILE_TOO_LARGE",
+                    "전체 업로드 파일 크기는 최대 100MB입니다."
+            );
+        }
+    }
+
+    /**
+     * 병합한 파일 크기가 예상 크기와 일치하는지 검사한다.
+     */
+    public void validateMergedFileSize(
+            long mergedSize,
+            long expectedSize
+    ) {
+
+        if (expectedSize <= 0
+                || mergedSize != expectedSize) {
+
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "FILE_SIZE_MISMATCH",
+                    "병합한 파일의 크기가 일치하지 않습니다."
+            );
+        }
     }
 }

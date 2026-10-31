@@ -1,12 +1,17 @@
 package com.kh.back.post.dto;
 
-import lombok.Data;
+import lombok.*;
+
 import java.util.List;
 import java.time.LocalDateTime;
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.kh.back.common.util.DateTimeUtil;
 
-@Data
+@Getter
+@Setter
+@Builder
+@AllArgsConstructor
+@NoArgsConstructor
 public class PostDto {
     private Long postId;
     private Long userId; // 작성자 ID (USERS.USER_ID)
