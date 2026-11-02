@@ -3,7 +3,6 @@ package com.kh.back.taxupload.mapper;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxResultRow;
-
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -39,17 +38,10 @@ public interface TaxMapper {
 
     int insertTransaction(TaxTransactionDto transaction);
 
+    // 거래번호가 없으면 분석의 전체 거래, 있으면 특정 거래를 조회한다.
     List<TaxTransactionDto> findTransactions(
-            @Param("taxInputId") Long taxInputId
-    );
-
-    TaxTransactionDto findTransaction(
             @Param("taxInputId") Long taxInputId,
             @Param("transactionId") Long transactionId
-    );
-
-    int deleteTransactions(
-            @Param("taxInputId") Long taxInputId
     );
 
     int updateCategory(

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
+import java.util.Map;
 
 @Getter
 @Setter
@@ -18,16 +19,25 @@ public class PdfParseResponseDto {
     private String fileName;
 
     private int totalPages;
-
     private int extractedCount;
-
     private int parsedCount;
-
     private int failedCount;
 
     private List<PageResult> pageResults;
 
     private List<TaxTransactionDto> transactions;
+
+    // 표 원문과 좌표 등 분석 정보를 전달한다.
+    private List<Map<String, Object>> tables;
+
+    // DB 저장이 완료된 경우에만 true로 반환한다.
+    private boolean persisted;
+
+    // 연도별로 생성된 원본 분석번호를 전달한다.
+    private Map<Integer, Long> taxInputIdsByYear;
+
+    // 실제 DB에 저장한 거래 수
+    private int savedCount;
 
     @Getter
     @Setter
@@ -35,12 +45,10 @@ public class PdfParseResponseDto {
     @AllArgsConstructor
     public static class PageResult {
 
-        private int pageNumber;   // 페이지숫자
+        private int pageNumber;
+        private String method;
 
-        private String method;    // 메소드
-
-        private int extractedCount;   // 추출된 횟수
-
-        private int parsedCount;   // 파싱된 횟수
+        private int extractedCount;
+        private int parsedCount;
     }
 }

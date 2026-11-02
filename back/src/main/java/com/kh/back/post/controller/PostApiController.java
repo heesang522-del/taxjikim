@@ -31,7 +31,7 @@ public class PostApiController {
 
     private final PostService postService;
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper(); // json을 읽거나 변환하는 객체
 
     @GetMapping
     public ApiResponse<List<PostDto>> getPostPage(@RequestParam(defaultValue = "latest") String sort,
@@ -43,27 +43,28 @@ public class PostApiController {
                                                   @RequestParam(required = false) String postType) {
 
         return postService.getPostPage(sort, keyword, page, postType);
-    }
+    } // latest 정렬방식, "" 검색어, 1 페이지 번호, null 게시판 종류 ( 받은 조건으로 서비스에 게시글 조회를 요청하고 그결과를 반환)
 
     @GetMapping("/{postId}")
     public ApiResponse<PostDto> getPost(@PathVariable Long postId) {
 
         return ApiResponse.ok(postService.findById(postId));
-    }
+    } // url 의 {postId} 부분을 변수로 받음 , 서비스에 해당 번호의 게시글 조회를 요청
+    // 조회한 게시글을 공통 성공 응답 형식으로 감싸 반환
 
 
     @PostMapping(value = "/upload-chunk", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<Map<String, Object>> uploadChunk(@ModelAttribute ChunkDto dto) throws IOException {
-
+     // /upload-chunck로 들어오는 post 요청을 처리하고 파일을 전송하는 multipart/form-data 형식만 받음  , // 전송된 파일 조각과 업로드 정보등을 chunkdto 객체에 담음
         String savedFileName = postService.processChunkUpload(dto);
-
+    // 서비스가 조각을 저장하고 모두 모였다면 파일을 합침 , 아직 조각이 부족하면 null , 파일 처리가 완료되면 저장된 파일명 반환
         Map<String, Object> result = new HashMap<>();
-
-        result.put("completed", savedFileName != null);
+ // 응답에 넣을 이름 . 값 묶음을 만듬
+        result.put("completed", savedFileName != null);  // 파일명이 있으면 완료 여부를 true로 설정하고 파일명도 함꼐 담음
 
         result.put("savedFileName", savedFileName);
 
-        return ApiResponse.ok(result);
+        return ApiResponse.ok(result); // 이 데이터를 공통 성공 응답 형식으로 감싸 프론트에 반환
     }
 
     @PostMapping(consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
@@ -128,7 +129,7 @@ public class PostApiController {
     private List<String> parseFileNames(String savedFileNamesJson) {
 
         if (savedFileNamesJson == null || savedFileNamesJson.isBlank()) {
-            return List.of();
+            return List.of(); // 만약 저장된 json형식 파일 이름이 null 이면 업으면, 그리고 저장된 파일이름이 비었을때 () 으로 반환
         }
 
         try {

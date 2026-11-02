@@ -1,17 +1,28 @@
+"""Spring OCR 결과를 받아 날짜별 거래를 분석한다."""
+
+from __future__ import annotations
+
 import json
 import logging
 import math
 
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Event, Thread
-from typing import Annotated
+from typing import Annotated, Any
 
 import joblib
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from pdfminer.pdfdocument import PDFPasswordIncorrect
 from pdfminer.pdfparser import PDFSyntaxError
 from pdfplumber.utils.exceptions import PdfminerException
+from fastapi import (
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+)
 
 from . import pdf_parser
 from .expense_classifier import classify_descriptions
@@ -24,27 +35,54 @@ else:
 
 
 logger = logging.getLogger("uvicorn.error")
-MODEL_DIR = Path(__file__).resolve().parents[1] / "models/expense_classifier"
 
+MAX_FILE_BYTES = 6 * 1024 * 1024
+MAX_PAGES = 50
+
+MODEL_DIR = (
+    Path(__file__).resolve().parent.parent
+    / "models"
+    / "expense_classifier"
+)
 
 def load_expense_model() -> dict:
-    """전체 데이터로 학습한 지출 모델과 전처리 파이프라인을 읽는다."""
+    """기존 지출 모델 로딩 함수를 유지한다."""
+
     try:
-        report = json.loads((MODEL_DIR / "model_report.json").read_text(encoding="utf-8"))
+        report = json.loads(
+            (MODEL_DIR / "model_report.json").read_text(
+                encoding="utf-8"
+            )
+        )
+
         selected = report["selected_model"]
-        if selected not in ("logistic_regression", "linear_svc"):
-            raise ValueError("선택한 모델 이름이 올바르지 않습니다.")
-        # 학습 코드가 로컬에 생성한 파일만 읽는다. 서버에서 다시 학습하지 않는다.
-        return joblib.load(MODEL_DIR / f"{selected}_bundle.pkl")
-    except (FileNotFoundError, KeyError, ValueError) as exc:
+
+        if selected not in (
+            "logistic_regression",
+            "linear_svc",
+        ):
+            raise ValueError(
+                "선택한 모델 이름이 올바르지 않습니다."
+            )
+
+        return joblib.load(
+            MODEL_DIR / f"{selected}_bundle.pkl"
+        )
+
+    except (
+        FileNotFoundError,
+        KeyError,
+        ValueError,
+    ) as exc:
         raise RuntimeError(
-            "지출 모델을 먼저 준비해주세요: python scripts/train_expense.py"
+            "지출 모델을 먼저 준비해주세요: "
+            "python scripts/train_expense.py"
         ) from exc
 
 
 # 서버 시작 시 모델과 스케줄러를 준비하고 종료 시 스케줄러를 정리한다.
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(
         "사용 중인 PDF 파서: %s",
         Path(pdf_parser.__file__).resolve(),
@@ -68,13 +106,26 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Taxjikim ML API",
+    title="TaxJiKim ML API",
+    version="1.0.0",
     lifespan=lifespan,
 )
 
 
-def validation_error(message: str) -> HTTPException:
-    """기존 PDF 입력 오류의 응답 형식을 만든다."""
+@app.get("/")
+def root() -> dict[str, str]:
+    return {
+        "service": "TaxJiKim ML API",
+        "status": "running",
+    }
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "UP"}
+
+
+def input_error(message: str) -> HTTPException:
     return HTTPException(
         status_code=400,
         detail={
@@ -84,37 +135,34 @@ def validation_error(message: str) -> HTTPException:
     )
 
 
-def valid_coordinate(value: object) -> bool:
-    return (
-        type(value) in (int, float)
-        and math.isfinite(value)
-        and value >= 0
-    )
-
-
-def parse_ocr_pages(value: str | None) -> list[dict]:
-    """Spring에서 전달한 페이지별 OCR 텍스트를 읽는다."""
+def parse_ocr_pages(
+    value: str | None,
+) -> list[dict[str, Any]]:
     if value is None:
         return []
 
     try:
         pages = json.loads(value)
 
-    except (json.JSONDecodeError, TypeError) as exception:
-        raise validation_error(
-            "ocrPages는 JSON 배열이어야 합니다."
-        ) from exception
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise input_error(
+            "ocrPages는 올바른 JSON 배열이어야 합니다."
+        ) from exc
 
-    if not isinstance(pages, list):
-        raise validation_error(
-            "ocrPages는 JSON 배열이어야 합니다."
+    if (
+        not isinstance(pages, list)
+        or len(pages) > MAX_PAGES
+    ):
+        raise input_error(
+            "OCR 페이지 목록을 확인해주세요."
         )
 
+    result = []
     seen = set()
 
     for page in pages:
         if not isinstance(page, dict):
-            raise validation_error(
+            raise input_error(
                 "OCR 페이지 형식이 올바르지 않습니다."
             )
 
@@ -122,46 +170,159 @@ def parse_ocr_pages(value: str | None) -> list[dict]:
 
         if (
             type(number) is not int
-            or number < 1
+            or not 1 <= number <= MAX_PAGES
             or number in seen
             or not isinstance(page.get("text"), str)
             or type(page.get("ocrUsed")) is not bool
         ):
-            raise validation_error(
-                "OCR 페이지 번호와 텍스트를 확인해주세요."
+            raise input_error(
+                "OCR 페이지 번호가 잘못되었거나 중복되었습니다."
             )
 
+        # 단어 목록의 형식을 먼저 확인하고, 좌표 검증은 아래에서 한 번만 수행한다.
         words = page.get("words")
-
-        if words is None:
-            page["words"] = []
-            words = []
-
-        if not isinstance(words, list):
-            raise validation_error(
+        if words is not None and not isinstance(words, list):
+            raise input_error(
                 "OCR 단어 목록은 배열이어야 합니다."
             )
 
-        for word in words:
-            if not isinstance(word, dict):
-                raise validation_error(
-                    "OCR 단어 형식이 올바르지 않습니다."
-                )
-
-            if (
-                not isinstance(word.get("text"), str)
-                or not valid_coordinate(word.get("x0"))
-                or not valid_coordinate(word.get("x1"))
-                or not valid_coordinate(word.get("top"))
-                or word["x1"] < word["x0"]
-            ):
-                raise validation_error(
-                    "OCR 단어와 좌표를 확인해주세요."
-                )
-
         seen.add(number)
 
-    return pages
+        source = page.get("text") or ""
+        words = page.get("words") or []
+        rows = page.get("rows") or []
+
+        if (
+            not isinstance(source, str)
+            or not isinstance(words, list)
+            or not isinstance(rows, list)
+        ):
+            raise input_error(
+                "OCR의 text, words, rows 형식을 확인해주세요."
+            )
+
+        checked_words = []
+
+        for word in words:
+            if (
+                not isinstance(word, dict)
+                or not isinstance(word.get("text"), str)
+            ):
+                raise input_error(
+                    "OCR 단어의 text는 문자열이어야 합니다."
+                )
+
+            coordinates = [
+                word.get(key)
+                for key in ("x0", "x1", "top")
+            ]
+
+            if not all(
+                type(coordinate) in (int, float)
+                and math.isfinite(coordinate)
+                and coordinate >= 0
+                for coordinate in coordinates
+            ):
+                raise input_error(
+                    "OCR 단어 좌표가 올바르지 않습니다."
+                )
+
+            if word["x1"] <= word["x0"]:
+                raise input_error(
+                    "OCR 단어의 가로 좌표가 올바르지 않습니다."
+                )
+
+            if word["text"].strip():
+                checked_words.append(
+                    {
+                        "text": word["text"].strip(),
+                        "x0": word["x0"],
+                        "x1": word["x1"],
+                        "top": word["top"],
+                    }
+                )
+
+        checked_rows = []
+
+        for row in rows:
+            if not isinstance(row, dict):
+                raise input_error(
+                    "OCR 행 형식이 올바르지 않습니다."
+                )
+
+            cells = row.get("cells")
+
+            if cells is not None and (
+                not isinstance(cells, list)
+                or any(
+                    cell is not None
+                    and not isinstance(cell, str)
+                    for cell in cells
+                )
+            ):
+                raise input_error(
+                    "OCR cells는 문자열 목록이어야 합니다."
+                )
+
+            for key in ("text", "rawText"):
+                if (
+                    key in row
+                    and not isinstance(row[key], str)
+                ):
+                    raise input_error(
+                        "OCR 행의 텍스트는 문자열이어야 합니다."
+                    )
+
+            reasons = row.get("reviewReasons") or []
+
+            if (
+                not isinstance(reasons, list)
+                or any(
+                    not isinstance(reason, str)
+                    for reason in reasons
+                )
+            ):
+                raise input_error(
+                    "OCR 검토 사유는 문자열 목록이어야 합니다."
+                )
+
+            checked_rows.append(
+                {
+                    "cells": [
+                        cell or ""
+                        for cell in (cells or [])
+                    ],
+                    "text": (
+                        row.get("text")
+                        or row.get("rawText")
+                        or ""
+                    ),
+                    "needsReview": bool(
+                        row.get("needsReview")
+                    ),
+                    "reviewReasons": reasons,
+                }
+            )
+
+        # 거래 원문 대신 전달 개수만 기록한다.
+        logger.info(
+            "OCR 입력 확인: page=%s, words=%s, rows=%s, chars=%s",
+            number,
+            len(checked_words),
+            len(checked_rows),
+            len(source),
+        )
+
+        result.append(
+            {
+                "pageNumber": number,
+                "text": source,
+                "words": checked_words,
+                "rows": checked_rows,
+            }
+        )
+
+    return result
 
 
 def classify_expense_transactions(transactions: list[dict]) -> None:
@@ -200,83 +361,109 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
         }) from exc
 
 
-@app.get("/health")
-def health() -> dict:
-    """서버 상태 확인 요청에 응답한다."""
-    return {"status": "ok"}
-
-
 @app.post("/api/pdf/analyze")
 def analyze_pdf(
     file: Annotated[UploadFile, File()],
-    ocrPages: Annotated[str | None, Form()] = None,
-) -> dict:
-    """기존 PDF 거래 추출 결과에 지출 카테고리를 추가해 반환한다."""
-    pages = parse_ocr_pages(ocrPages)
-    data = file.file.read()
-
-    if not data.startswith(b"%PDF-"):
-        raise validation_error(
-            "올바른 PDF 파일이 아닙니다."
+    ocr_pages_json: Annotated[
+        str | None,
+        Form(alias="ocrPages"),
+    ] = None,
+) -> dict[str, Any]:
+    try:
+        data = file.file.read(
+            MAX_FILE_BYTES + 1
         )
 
-    try:
+        if (
+            not data
+            or not data.startswith(b"%PDF-")
+        ):
+            raise input_error(
+                "올바른 PDF 파일이 아닙니다."
+            )
+
+        if len(data) > MAX_FILE_BYTES:
+            raise HTTPException(
+                status_code=413,
+                detail={
+                    "code": "PDF_TOO_LARGE",
+                    "message": "PDF 파일은 6MB 이하여야 합니다.",
+                },
+            )
+
+        pages = parse_ocr_pages(
+            ocr_pages_json
+        )
+
         result = pdf_parser.extract_transactions(
             data,
             ocr_pages=pages,
         )
 
-        if any(
-            page["pageNumber"] > result["totalPages"]
-            for page in pages
-        ):
-            raise validation_error(
+        if any(page["pageNumber"] > result["totalPages"] for page in pages):
+            raise input_error(
                 "OCR 페이지 번호가 PDF 페이지 수를 초과했습니다."
             )
 
-        # 수입·거래 구분·원문·금액은 유지하고 지출 거래의 category만 추가한다.
+        # 추출한 거래의 날짜·금액은 유지하고 지출 카테고리만 분류한다.
         classify_expense_transactions(result["transactions"])
 
-        # 처리 건수를 먼저 출력한다.
         logger.info(
-            "PDF 분석 결과: 추출 %s건, 성공 %s건, 실패 %s건",
+            "PDF 분석 완료: pages=%s, extracted=%s, parsed=%s, review=%s",
+            result["totalPages"],
             result["extractedCount"],
             result["parsedCount"],
-            result["failedCount"],
+            result["needsReviewCount"],
         )
-
-        # 거래별 금액·날짜·설명·원문을 포함한 분석 결과를 출력한다.
-        if logger.isEnabledFor(logging.INFO):
-            logger.info(
-                "PDF 파싱 상세 결과:\n%s",
-                json.dumps(
-                    result,
-                    ensure_ascii=False,
-                    indent=2,
-                ),
-            )
 
         return {
             "fileName": file.filename,
             **result,
         }
 
-    except (
-        ValueError,
-        PDFSyntaxError,
-        PDFPasswordIncorrect,
-        PdfminerException,
-    ) as exception:
-        raise validation_error(
-            "손상되었거나 분석할 수 없는 PDF 파일입니다."
-        ) from exception
-
     except HTTPException:
         raise
 
-    except Exception as exception:
-        logger.exception(
-            "PDF 분석 중 오류가 발생했습니다."
+    except ValueError as exc:
+        messages = {
+            "PDF_DAILY_DETAILS_REQUIRED": (
+                "날짜별 상세 내역을 업로드해주세요. "
+                "월별·지출처별 합계는 일별 거래로 저장하지 않습니다."
+            ),
+            "PDF_OCR_REQUIRED": (
+                "이미지형 PDF의 OCR 결과가 전달되지 않았습니다. "
+                "서버의 OCR 처리와 전달 결과를 확인해주세요."
+            ),
+            "PDF_TRANSACTIONS_NOT_FOUND": (
+                "날짜별 거래 내역을 찾지 못했습니다. "
+                "상세 내역 또는 OCR 인식 결과를 확인해주세요."
+            ),
+        }
+
+        code = str(exc)
+
+        if code in messages:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "code": code,
+                    "message": messages[code],
+                },
+            ) from exc
+
+        raise input_error(
+            "PDF 내용 또는 OCR 입력 형식을 확인해주세요."
+        ) from exc
+
+    except (PDFSyntaxError, PDFPasswordIncorrect, PdfminerException) as exc:
+        raise input_error(
+            "손상되었거나 분석할 수 없는 PDF 파일입니다."
+        ) from exc
+
+    except Exception as exc:
+        logger.error(
+            "PDF 분석 실패: exceptionType=%s",
+            type(exc).__name__,
         )
 
         raise HTTPException(
@@ -285,4 +472,7 @@ def analyze_pdf(
                 "code": "PDF_ANALYSIS_FAILED",
                 "message": "PDF 분석에 실패했습니다.",
             },
-        ) from exception
+        ) from exc
+
+    finally:
+        file.file.close()

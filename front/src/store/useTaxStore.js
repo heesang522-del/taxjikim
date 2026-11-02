@@ -81,7 +81,6 @@ export function getPdfItemPeriod(item, year) {
 
 export function getRowTaxYear(row) {
   const value = row?.date || row?.month || row?.year;
-
   const match = String(value ?? '').match(/^(\d{4})(?:[-./]|$)/);
 
   if (!match) {
@@ -160,10 +159,7 @@ function getLevel(row) {
   return 'unknown';
 }
 
-/**
- * 모든 연도를 선택하되 같은 파일·연도의 상세와 합계가
- * 중복 반영되지 않도록 기존 우선순위를 적용한다.
- */
+// 같은 파일·연도의 상세와 합계가 중복 반영되지 않도록 한다.
 function selectPreferredRows(rows, selected, fileKey = null) {
   const keys = new Set(
     rows.filter((row) => fileKey === null || row.sourceFileKey === fileKey).map((row) => row.sourceFileKey)
@@ -180,13 +176,9 @@ function selectPreferredRows(rows, selected, fileKey = null) {
       );
 
       const nonTotals = available.filter((row) => row.valueKind !== 'VALIDATION_TOTAL');
-
       const detail = nonTotals.filter((row) => getLevel(row) === 'detail');
-
       const monthly = nonTotals.filter((row) => getLevel(row) === 'month');
-
       const yearly = nonTotals.filter((row) => getLevel(row) === 'year');
-
       const undated = nonTotals.filter((row) => getLevel(row) === 'unknown');
 
       const preferred = detail.length
@@ -263,12 +255,10 @@ export function getPdfCalculationIssue(state) {
 
   for (const file of state.uploadedFiles ?? []) {
     const fileRows = rows.filter((row) => row.sourceFileKey === file.key);
-
     const years = new Set(fileRows.map(getRowTaxYear));
 
     for (const year of years) {
       const selected = fileRows.filter((row) => getRowTaxYear(row) === year);
-
       const label = year === null ? '연도 미확인' : `${year}년`;
 
       if (selected.length > 1 && selected.some((row) => row.valueKind === 'VALIDATION_TOTAL')) {
@@ -288,14 +278,12 @@ export function getPdfCalculationIssue(state) {
 
 export const useTaxStore = create((set, get) => ({
   inputMethod: 'manual',
-
   manualRows: [],
   fileRows: [],
   uploadedFiles: [],
 
   // 기존 SummaryRail.jsx 호환용
   evidenceDocuments: [],
-
   pendingRows: [],
 
   profile: {
@@ -313,6 +301,7 @@ export const useTaxStore = create((set, get) => ({
   sim: { ...EMPTY_SIM },
   calculated: false,
 
+  // 입력이 변경되면 이전 계산 완료 상태를 해제한다.
   addRow: (row) =>
     set((state) => ({
       manualRows: [
@@ -342,7 +331,6 @@ export const useTaxStore = create((set, get) => ({
   addFileResult: (rows, file) =>
     set((state) => {
       const normalized = rows.map((row) => normalizeFileRow(row, file));
-
       const selectedRows = selectPreferredRows(normalized, true, file.key);
 
       return {
