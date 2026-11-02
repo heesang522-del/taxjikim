@@ -1,7 +1,7 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { create } from 'zustand';
 import {
@@ -70,6 +70,12 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
     if (!roomId) setMessages([]);
   }, [roomId]);
 
+  // 재연결 시 끊긴 동안 쌓였을 수 있는 메시지를 다시 불러오기 위해, "이미 한 번 연결됐었는지"를 방마다 추적한다.
+  const hasConnectedRef = useRef(false);
+  useEffect(() => {
+    hasConnectedRef.current = false;
+  }, [roomId]);
+
   const { connected, sendText } = useChatSocket(active ? roomId : null, {
     // roomClosed가 true면 상대가 방금 종료하며 남긴 안내 메시지다. 메시지를 먼저 붙이고,
     // 그 다음에 방 상태를 바꾼다(onRoomClosed) — 안내를 보기 전에 입력창이 사라지지 않게 순서를 맞춘다.
@@ -87,6 +93,17 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
       }
     },
   });
+
+  // 최초 연결이 아니라 "재연결"일 때만 메시지를 다시 불러온다. 끊긴 동안 상대가 보낸 메시지는
+  // 서버가 다시 보내주지 않으므로(연결 안 된 세션에는 보낼 대상이 없어서), 재연결 성공 시 REST로 따라잡는다.
+  useEffect(() => {
+    if (!connected) return;
+    if (hasConnectedRef.current) {
+      reload().then(() => markRead(roomId).catch(() => {}));
+    }
+    hasConnectedRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected]);
 
   const send = async (content) => {
     if (sendText(content)) {

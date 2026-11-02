@@ -51,11 +51,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 session.getAttributes().get("userId"));
     }
 
-    // 클라이언트가 메시지를 보낼 때마다 호출된다. (연결을 끊고 싶을 때 보내는 "quit"만 예외로 처리)
+    // 클라이언트가 메시지를 보낼 때마다 호출된다. (연결을 끊고 싶을 때 보내는 "quit", 하트비트용 "ping"만 예외로 처리)
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         if ("quit".equals(message.getPayload())) {
             closeQuietly(session);
+            return;
+        }
+        if ("ping".equals(message.getPayload())) {
+            sendPong(session);
             return;
         }
 
@@ -157,6 +161,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     // 저장이 실패했을 때(종료된 방 등). 상대방에게는 보내지 않고, 보낸 사람 본인에게만 알려준다.
     private void sendError(WebSocketSession session, String code, String errorMessage) {
         send(session, Map.of("type", "ERROR", "code", code, "message", errorMessage));
+    }
+
+    // 하트비트 응답. 클라이언트가 보낸 "ping"과 형식을 맞추기 위해 다른 메시지처럼 JSON으로 감싸지 않고 그대로 보낸다.
+    private void sendPong(WebSocketSession session) {
+        try {
+            session.sendMessage(new TextMessage("pong"));
+        } catch (IOException e) {
+            log.warn("pong 전송 실패: sessionId={}", session.getId(), e);
+        }
     }
 
     // 상대가 연결을 끊었거나 네트워크가 잠깐 끊긴 경우 전송이 실패할 수 있다. 실패하면 로그만 남기고
