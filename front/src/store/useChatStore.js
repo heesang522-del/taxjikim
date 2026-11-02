@@ -40,7 +40,7 @@ export const useChat = () => useChatPanelStore();
  * active가 true인 동안만 연결하며(=실제로 그 화면을 보고 있는 동안), 연결돼 있으면 서버가 상대 메시지를 곧장 읽음 처리한다.
  * WebSocket은 보낸 사람 본인에게는 메시지를 되돌려주지 않으므로, 소켓으로 보낸 내 메시지는 화면에 직접 붙인다(낙관적 갱신).
  */
-function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, markRead, onRoomClosed }) {
+function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, markRead, onRoomClosed, checkRoomClosed }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -96,10 +96,19 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
 
   // 최초 연결이 아니라 "재연결"일 때만 메시지를 다시 불러온다. 끊긴 동안 상대가 보낸 메시지는
   // 서버가 다시 보내주지 않으므로(연결 안 된 세션에는 보낼 대상이 없어서), 재연결 성공 시 REST로 따라잡는다.
+  // 메시지를 먼저 반영한 뒤에 방 상태를 확인한다 — 끊긴 동안 상대가 상담을 종료했을 수도 있고,
+  // 그 경우 종료 안내 메시지를 먼저 보여주고 그 다음에 입력창을 막아야(onRoomClosed) 순서가 자연스럽다.
   useEffect(() => {
     if (!connected) return;
     if (hasConnectedRef.current) {
-      reload().then(() => markRead(roomId).catch(() => {}));
+      reload().then(() => {
+        markRead(roomId).catch(() => {});
+        checkRoomClosed?.()
+          .then((closed) => {
+            if (closed) onRoomClosed?.();
+          })
+          .catch(() => {});
+      });
     }
     hasConnectedRef.current = true;
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -168,6 +177,10 @@ export function useMemberChat(open, myUserId) {
     setRoom((prev) => (prev ? { ...prev, status: 'CLOSED' } : prev));
   }, []);
 
+  // 재연결 시 방 상태를 다시 확인한다. getMyRoom()은 열린 방(WAITING/IN_PROGRESS)만 찾으므로,
+  // 끊긴 동안 상대가 종료해 더 이상 열린 방이 없다면 이 방이 끊긴 사이에 종료된 것으로 본다.
+  const checkRoomClosedOnReconnect = useCallback(() => getMyRoom().then((result) => !result.data), []);
+
   const {
     messages,
     loading: messagesLoading,
@@ -183,6 +196,7 @@ export function useMemberChat(open, myUserId) {
     sendRest: sendMemberMessage,
     markRead: markMemberRead,
     onRoomClosed: handleClosedByAdmin,
+    checkRoomClosed: checkRoomClosedOnReconnect,
   });
 
   // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 주기적으로 확인한다.
@@ -295,7 +309,7 @@ export function useAdminChat(myUserId) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 탭을 바꾸거나 주기적으로 다시 불러올 때는 항상 최신 1페이지로 목록을 통째로 새로 불러온다.
+  // 탭을 바꿀 때는 항상 최신 1페이지로 목록을 통째로 새로 불러온다.
   const reloadList = useCallback(
     () =>
       getAdminRooms(status, { size: ROOM_PAGE_SIZE })
@@ -315,11 +329,24 @@ export function useAdminChat(myUserId) {
   }, [reloadList]);
 
   // 새 대기 상담이 들어와도 알림 채널이 없으므로, 목록은 짧은 주기로 다시 불러온다.
-  // 이때마다 1페이지로 돌아가므로, 스크롤로 더 불러온 뒷부분은 다음 polling에서 사라질 수 있다.
+  // reloadList(1페이지만)를 그대로 쓰면 스크롤로 더 불러온 뒷부분이 매번 사라지므로, 지금까지
+  // 불러온 개수만큼 다시 가져와 이미 보고 있던 목록이 줄어들지 않게 한다.
+  const refreshList = useCallback(
+    () =>
+      getAdminRooms(status, { size: Math.max(rooms.length, ROOM_PAGE_SIZE) })
+        .then((result) => {
+          setRooms(result.data);
+          setHasMore(Boolean(result.meta?.hasMore));
+          setNextCursor(result.meta?.nextCursor ?? null);
+        })
+        .catch((cause) => setListError(cause.message)),
+    [status, rooms.length]
+  );
+
   useEffect(() => {
-    const timer = setInterval(reloadList, LIST_POLL_MS);
+    const timer = setInterval(refreshList, LIST_POLL_MS);
     return () => clearInterval(timer);
-  }, [reloadList]);
+  }, [refreshList]);
 
   // 스크롤이 끝에 닿았을 때 다음 페이지를 이어붙인다. 이미 불러오는 중이거나 더 없으면 그대로 둔다.
   const loadMore = useCallback(() => {
@@ -361,7 +388,8 @@ export function useAdminChat(myUserId) {
   const selectedRoomId = selectedRoom?.roomId ?? null;
   const active = Boolean(selectedRoomId) && selectedRoom.status === 'IN_PROGRESS';
 
-  // 회원이 먼저 상담을 종료했을 때(소켓 전송이 CHAT_ROOM_CLOSED로 거절됨): 화면 상태를 최신으로 맞추고 안내한다.
+  // 회원이 먼저 상담을 종료했을 때(소켓 전송이 CHAT_ROOM_CLOSED로 거절됐거나, 재연결 후 상태 확인으로 발견한 경우):
+  // 화면 상태를 최신으로 맞추고 안내한다.
   const handleRoomClosedByOther = useCallback(() => {
     setNotice('회원이 상담을 종료했습니다.');
     if (selectedRoomId) {
@@ -369,6 +397,12 @@ export function useAdminChat(myUserId) {
     }
     reloadList();
   }, [selectedRoomId, reloadList]);
+
+  // 재연결 시 방 상태를 다시 확인한다. getAdminRoom은 상태 무관하게 조회되므로 바로 CLOSED 여부를 알 수 있다.
+  const checkRoomClosedOnReconnect = useCallback(() => {
+    if (!selectedRoomId) return Promise.resolve(false);
+    return getAdminRoom(selectedRoomId).then((result) => result.data?.status === 'CLOSED');
+  }, [selectedRoomId]);
 
   const {
     messages,
@@ -385,6 +419,7 @@ export function useAdminChat(myUserId) {
     sendRest: (content) => sendAdminMessage(selectedRoomId, content),
     markRead: markAdminRead,
     onRoomClosed: handleRoomClosedByOther,
+    checkRoomClosed: checkRoomClosedOnReconnect,
   });
 
   // 종료된 방을 선택했을 때는 실시간 연결 없이 지난 메시지만 한 번 불러온다.
