@@ -51,11 +51,12 @@ public class CommentServiceImpl implements CommentService {
         Long resolvedParentCommentId = resolveStorageParentCommentId(parentComment);
 
         // 작성자 번호는 요청 본문을 신뢰하지 않고 인증된 회원 정보에서 받는다.
-        CommentDto comment = new CommentDto();
-        comment.setPostId(postId);
-        comment.setUserId(userId);
-        comment.setParentCommentId(resolvedParentCommentId);
-        comment.setContent(trimmedContent);
+        CommentDto comment = CommentDto.builder()
+                                        .postId(postId)
+                                        .userId(userId)
+                                        .parentCommentId(resolvedParentCommentId)
+                                        .content(trimmedContent)
+                                        .build();
         commentMapper.insert(comment);
 
         // 관리자 답변(댓글)이 달리면 QNA 글의 답변 상태를 완료로 전환한다.
