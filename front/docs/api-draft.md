@@ -1,5 +1,13 @@
 # 프론트 API 연결 안내
 
+## 총세금·산출 근거 연결 (2026-11-02)
+
+- `getTaxBreakdown(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/breakdown`.
+- `TaxBreakdownDto`를 공통 응답 `data`로 반환한다. 총수입·총지출, 기부금 인정액, 사업소득, 기본공제, 과세표준, 세율·누진공제, 산출세액·표준세액공제·소득세·지방소득세·총세금을 포함한다.
+- 결과 페이지가 한 번 조회해 `SummaryCards`와 `TaxChain`에 같은 결과·로딩·오류 상태를 전달한다. 요약 카드의 기존 개별 합계 요청은 제거했다.
+- 월별 그래프는 기존 월별 API를 유지한다. 분석번호는 여전히 테스트용 `21`이며 입력 화면에서의 실제 분석번호 전달 연결은 별도 후속 작업이다.
+- 오류는 서버 안내를 표시하며 예시 결과로 대체하지 않는다. 결과 저장은 기존 브라우저 저장 방식을 유지하되 화면에 표시한 서버 금액을 저장한다.
+
 ## 총수입·총지출 Spring 연결 (2026-10-29)
 
 - `getTotalIncome(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-income`.

@@ -103,6 +103,11 @@ function normalizeTaxInput(input) {
   };
 }
 
+// 총세금 카드와 산출 근거에서 공유할 서버 계산 결과를 조회한다.
+export async function getTaxBreakdown(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/breakdown`, method: 'GET', signal });
+}
+
 function inputPath(taxInputId) {
   validateId(taxInputId, '분석번호');
 
@@ -147,24 +152,6 @@ function transactionKey(row) {
     row.preTaxIncome == null ? null : Number(row.preTaxIncome),
     row.deductedTaxRate == null ? null : Number(row.deductedTaxRate),
   ]);
-}
-
-// 분석번호에 해당하는 실제·예상 세전 총수입을 조회한다.
-export async function getTotalIncome(taxInputId, { signal } = {}) {
-  return request({
-    url: `${inputPath(taxInputId)}/total-income`,
-    method: 'GET',
-    signal,
-  });
-}
-
-// 분석번호에 해당하는 실제·예상 총지출을 조회한다.
-export async function getTotalExpense(taxInputId, { signal } = {}) {
-  return request({
-    url: `${inputPath(taxInputId)}/total-expense`,
-    method: 'GET',
-    signal,
-  });
 }
 
 // 분석번호에 해당하는 월별 실제·예상 수입을 조회한다.
