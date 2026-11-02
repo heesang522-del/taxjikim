@@ -61,7 +61,8 @@ function validateCategory(value) {
   return value;
 }
 
-function optionalNumber(value, label, fallback = null) {
+// 화면과 API 요청에서 같은 숫자 변환·검증 기준을 사용한다.
+export function optionalNumber(value, label, fallback = null) {
   if (value == null || String(value).trim() === '') {
     return fallback;
   }
@@ -75,7 +76,7 @@ function optionalNumber(value, label, fallback = null) {
   return number;
 }
 
-function optionalInteger(value, label, fallback = null) {
+export function optionalInteger(value, label, fallback = null) {
   const number = optionalNumber(value, label, fallback);
 
   if (number !== null && !Number.isSafeInteger(number)) {
@@ -109,7 +110,9 @@ function inputPath(taxInputId) {
   return `/tax/inputs/${taxInputId}`;
 }
 
-function dateText(value) {
+// 서버 날짜 배열과 화면 날짜 문자열을 같은 형식으로 맞춘다.
+// 날짜의 실제 유효성은 validateTransactionDate에서 검사한다.
+export function dateText(value) {
   if (Array.isArray(value) && value.length === 3) {
     return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
   }
@@ -149,7 +152,6 @@ function transactionKey(row) {
   ]);
 }
 
-// 분석번호에 해당하는 실제·예상 세전 총수입을 조회한다.
 export async function getTotalIncome(taxInputId, { signal } = {}) {
   return request({
     url: `${inputPath(taxInputId)}/total-income`,
@@ -158,7 +160,6 @@ export async function getTotalIncome(taxInputId, { signal } = {}) {
   });
 }
 
-// 분석번호에 해당하는 실제·예상 총지출을 조회한다.
 export async function getTotalExpense(taxInputId, { signal } = {}) {
   return request({
     url: `${inputPath(taxInputId)}/total-expense`,
@@ -167,7 +168,6 @@ export async function getTotalExpense(taxInputId, { signal } = {}) {
   });
 }
 
-// 분석번호에 해당하는 월별 실제·예상 수입을 조회한다.
 export async function getMonthlyIncomes(taxInputId, { signal } = {}) {
   return request({
     url: `${inputPath(taxInputId)}/monthly-incomes`,
@@ -176,7 +176,6 @@ export async function getMonthlyIncomes(taxInputId, { signal } = {}) {
   });
 }
 
-// 분석번호에 해당하는 월별 실제·예상 지출을 조회한다.
 export async function getMonthlyExpenses(taxInputId, { signal } = {}) {
   return request({
     url: `${inputPath(taxInputId)}/monthly-expenses`,
@@ -185,41 +184,16 @@ export async function getMonthlyExpenses(taxInputId, { signal } = {}) {
   });
 }
 
-export async function getTaxInput(taxInputId) {
+// 분석 기본정보와 전체 거래를 한 번에 조회한다.
+export async function getTaxData(taxInputId) {
   return request({
-    url: `${inputPath(taxInputId)}/detail`,
-    method: 'POST',
-  });
-}
-
-export async function getSavedTaxInputs(taxYear = null) {
-  const year = taxYear === null ? null : validateYear(taxYear);
-
-  return request({
-    url: '/tax/inputs/list',
-    method: 'POST',
-    params: year === null ? {} : { taxYear: year },
-  });
-}
-
-export async function getTransactions(taxInputId) {
-  return request({
-    url: `${inputPath(taxInputId)}/transactions/list`,
-    method: 'POST',
-  });
-}
-
-export async function getTaxResult(taxInputId) {
-  return request({
-    url: `${inputPath(taxInputId)}/results/detail`,
-    method: 'POST',
+    url: inputPath(taxInputId),
+    method: 'GET',
   });
 }
 
 // 기본정보 생성과 거래 최초 저장을 하나의 API로 전달한다.
-// input만 전달하면 기본정보를 생성한다.
-// taxInputId와 transactions를 전달하면 기존 분석에 거래를 최초 저장한다.
-// input과 transactions를 전달하면 기본정보와 거래를 한 요청으로 저장한다.
+// 기존 분석의 기본정보 수정은 updateTaxData에서 처리한다.
 export async function saveTaxData({ input, taxInputId, transactions } = {}) {
   const data = {};
 
@@ -254,9 +228,7 @@ export async function saveTaxData({ input, taxInputId, transactions } = {}) {
 
 // 기존 화면에서 사용하는 생성 함수 이름과 응답 형식을 유지한다.
 export async function createTaxInput(input) {
-  const result = await saveTaxData({
-    input,
-  });
+  const result = await saveTaxData({ input });
 
   return {
     ...result,
@@ -265,7 +237,6 @@ export async function createTaxInput(input) {
 }
 
 // 기존 화면에서 사용하는 거래 저장 함수 이름과 응답 형식을 유지한다.
-// 기존 거래의 수정 반영에서는 호출하지 않는다.
 export async function saveTransactions(taxInputId, rows) {
   if (!Array.isArray(rows)) {
     throw new Error('저장할 거래 목록이 필요합니다.');
@@ -314,14 +285,10 @@ export async function updateTaxData(taxInputId, { input, transactionId, category
   });
 }
 
-// 기존 화면의 기본정보 수정 호출을 통합 API로 연결한다.
 export async function updateTaxInput(taxInputId, input) {
-  return updateTaxData(taxInputId, {
-    input,
-  });
+  return updateTaxData(taxInputId, { input });
 }
 
-// 기존 화면의 카테고리 수정 호출을 통합 API로 연결한다.
 export async function updateTransaction(taxInputId, transactionId, category) {
   return updateTaxData(taxInputId, {
     transactionId,
@@ -330,6 +297,7 @@ export async function updateTransaction(taxInputId, transactionId, category) {
 }
 
 // 분석 전체 삭제와 거래 한 건 삭제를 하나의 API로 전달한다.
+// 분석 전체 삭제 기능은 deleteAll 옵션으로 유지한다.
 export async function deleteTaxData(taxInputId, { deleteAll = false, transactionId = null } = {}) {
   const url = `${inputPath(taxInputId)}/delete`;
 
@@ -343,7 +311,6 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
 
   const data = {};
 
-  // 전체 삭제를 명시하지 않았다면 거래번호가 반드시 필요하다.
   if (!deleteAll) {
     data.transactionId = validateId(transactionId, '거래번호');
   }
@@ -351,21 +318,11 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
   return request({
     url,
     method: 'POST',
-    params: {
-      deleteAll,
-    },
+    params: { deleteAll },
     data,
   });
 }
 
-// 기존 화면의 분석 전체 삭제 호출을 통합 API로 연결한다.
-export async function deleteTaxInput(taxInputId) {
-  return deleteTaxData(taxInputId, {
-    deleteAll: true,
-  });
-}
-
-// 기존 화면의 거래 삭제 호출을 통합 API로 연결한다.
 export async function deleteTransaction(taxInputId, transactionId) {
   return deleteTaxData(taxInputId, {
     transactionId,
@@ -373,7 +330,7 @@ export async function deleteTransaction(taxInputId, transactionId) {
 }
 
 // PDF 분석만 요청한다.
-// 분석한 거래의 최초 저장은 별도 저장 API에서 수행한다.
+// 추출한 거래의 최초 저장은 별도 저장 API에서 수행한다.
 export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   if (!file) {
     throw new Error('PDF 파일을 선택해주세요.');
@@ -560,7 +517,6 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
         throw new Error('현재 편집창에서는 카테고리 수정과 거래 삭제만 지원합니다.');
       }
 
-      // 변경하지 않은 거래는 요청 대상에서 제외한다.
       if (next.category === previous.category) {
         continue;
       }
@@ -569,19 +525,15 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
     }
 
     const transactionId = previous.row.transactionId ?? null;
-
     const taxInputId = previous.row.taxInputId ?? null;
-
     const persisted = transactionId !== null;
 
-    // 미저장 거래는 기존 DB 행을 수정할 수 없다.
     if (!persisted && !removing) {
       throw new Error('아직 DB에 저장되지 않은 거래입니다. ' + '거래 저장 후 다시 수정해주세요.');
     }
 
     if (persisted) {
       validateId(transactionId, '기존 거래번호');
-
       validateId(taxInputId, '기존 분석번호');
 
       const target = `${taxInputId}:${transactionId}`;

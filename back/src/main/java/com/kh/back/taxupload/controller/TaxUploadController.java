@@ -4,7 +4,6 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
-import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import com.kh.back.taxupload.service.YearEndTaxService;
@@ -15,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,7 +25,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @RestController
@@ -81,6 +80,26 @@ public class TaxUploadController {
                 .status(status)
                 .body(ApiResponse.ok(saved));
     }
+
+    /**
+     * 분석 기본정보와 전체 거래를 함께 조회한다.
+     */
+    @GetMapping("/inputs/{taxInputId}")
+    public ApiResponse<TaxServiceResponse> getTaxData(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            HttpServletRequest servletRequest,
+            @PathVariable("taxInputId") Long taxInputId
+    ) {
+        // 기존 비회원 세션의 분석번호와 회원 정보를 전달해 소유권을 확인한다.
+        TaxServiceResponse response = service.getTaxData(
+                principal,
+                readGuestInputs(servletRequest.getSession(false)),
+                taxInputId
+        );
+
+        return ApiResponse.ok(response);
+    }
+
     /**
      * 기본정보와 거래 카테고리를 한 번에 수정한다.
      */
@@ -147,6 +166,7 @@ public class TaxUploadController {
 
         return ResponseEntity.noContent().build();
     }
+
     /**
      * PDF에서 거래 내역을 추출한다.
      */
@@ -157,8 +177,10 @@ public class TaxUploadController {
     public ApiResponse<PdfParseResponseDto> parse(
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest,
-            @RequestParam(value = "taxInputId", required = false)
-            Long taxInputId,
+            @RequestParam(
+                    value = "taxInputId",
+                    required = false
+            ) Long taxInputId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
         if (principal == null) {

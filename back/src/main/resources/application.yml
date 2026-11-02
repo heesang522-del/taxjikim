@@ -1,16 +1,34 @@
 spring:
+  ai:
+    openai:
+      # 실제 키는 Windows 사용자 환경변수에 등록한다.
+      # no-key일 때 호출을 막는 처리는 Java 코드에서 수행한다.
+      api-key: ${OPENAI_API_KEY:no-key}
+
+      # 재시도가 있으면 전체 소요 시간은 30초를 넘을 수 있다.
+      timeout: 30s
+      max-retries: 1
+
+      chat:
+        model: gpt-5.6-luna
+
+    retry:
+      max-attempts: 1
+
   servlet:
     multipart:
-      # 2MB 청크와 multipart 필드·경계 데이터까지 받을 수 있게 여유를 둔다.
+      # 파일과 multipart 부가 데이터를 받을 수 있게 여유를 둔다.
       max-file-size: 6MB
       max-request-size: 7MB
+
   mail:
     host: smtp.gmail.com
     port: 587
-    # 메일 설정이 없어도 서버는 시작하고, 발송 요청 시 설정 여부를 확인한다.
+
+    # 발신용 Gmail 주소와 앱 비밀번호를 환경변수에서 읽는다.
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
-    # Gmail 앱 비밀번호를 환경변수로 제공한다.
+
     properties:
       mail:
         smtp:
@@ -19,11 +37,11 @@ spring:
           timeout: 5000
           starttls:
             enable: true
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
-
 
   datasource:
     url: ${DB_URL:jdbc:mysql://192.168.10.16:3306/TAXJIKIM?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
@@ -31,29 +49,22 @@ spring:
     password: ${DB_PASSWORD:server}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
-# 서버 포트 (React 의 vite.config.js API_TARGET 과 같아야 한다)
+# React의 vite.config.js API_TARGET과 맞춘다.
 server:
   port: ${SERVER_PORT:8080}
 
 mybatis:
-  # Mapper XML 위치
   mapper-locations: classpath:mappers/**/*.xml
-  # XML 에서 패키지 없이 클래스명만 쓸 수 있게 해 주는 기준 패키지
   type-aliases-package: com.kh.back.**.dto
   configuration:
-    # 컬럼명이 sector_name 처럼 snake_case 여도 자바 필드 sectorName 에 자동 매핑
     map-underscore-to-camel-case: true
 
-# 실행되는 SQL 을 콘솔에서 보기 위한 로그 레벨
 logging:
   level:
     com.kh.back: debug
 
-
-
 python:
   api-url: ${PYTHON_API_URL:http://127.0.0.1:8000}
-
 
 tax:
   ocr:
@@ -63,16 +74,16 @@ tax:
     max-pages: 50
     max-rendered-pixels: 12000000
 
-# 회원 정리·휴면 처리 주기. 실제 실행에는 @EnableScheduling이 필요하다.
-# 별도 zone 지정이 없으므로 JVM의 시간대를 기준으로 실행한다.
+# 실제 실행에는 @EnableScheduling이 필요하다.
+# 별도 zone 지정이 없으면 JVM 시간대를 기준으로 실행한다.
 custom:
   cron: "0 0 3 * * *"
 
 jwt:
   secret: my-temporary-secret-key-for-jwt-authentication-demo-project-2026-safe
-  access-token-expiration: 1800000 # 30분, 밀리초
-  refresh-token-expiration: 1209600000 # 14일, 밀리초
+  access-token-expiration: 1800000
+  refresh-token-expiration: 1209600000
 
-  file:
-    upload-dir:
-      post: C:/TAXJIKIM/back/uploads/posts
+file:
+  upload-dir:
+    post: C:/TAXJIKIM/back/uploads/posts

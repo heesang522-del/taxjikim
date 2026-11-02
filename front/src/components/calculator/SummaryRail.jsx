@@ -1,45 +1,18 @@
-'use no memo';
-
 import { useRef, useState } from 'react';
 import { Button, Card, KeyValue } from '../common/index';
-import { getTaxInput, getTransactions, getTaxReviewSignature, updateTaxInput } from '../../api/taxApi';
+import {
+  dateText,
+  optionalNumber,
+  optionalInteger,
+  getTaxData,
+  getTaxReviewSignature,
+  updateTaxInput,
+} from '../../api/taxApi';
 import { normalizeTaxKind, useTax, useTaxStore } from '../../store/useTaxStore';
 import { getTaxInputSummary, getTransactionCashAmount } from '../../utils/taxInputSummary';
 
 function money(value) {
   return `${Number(value ?? 0).toLocaleString('ko-KR')}원`;
-}
-
-function dateText(value) {
-  if (Array.isArray(value) && value.length === 3) {
-    return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
-  }
-
-  return String(value ?? '').trim();
-}
-
-function optionalNumber(value, label, fallback = null) {
-  if (value == null || String(value).trim() === '') {
-    return fallback;
-  }
-
-  const number = Number(String(value).replace(/,/g, '').trim());
-
-  if (!Number.isFinite(number) || number < 0) {
-    throw new Error(`${label}를 확인해주세요.`);
-  }
-
-  return number;
-}
-
-function optionalInteger(value, label, fallback = null) {
-  const number = optionalNumber(value, label, fallback);
-
-  if (number !== null && !Number.isSafeInteger(number)) {
-    throw new Error(`${label}는 정수로 입력해주세요.`);
-  }
-
-  return number;
 }
 
 function getScreenRows(state) {
@@ -132,6 +105,7 @@ function transactionSignature(rows, fromDatabase) {
     }
 
     seen.add(key);
+
     return transactionValue(row, fromDatabase);
   });
 
@@ -179,6 +153,7 @@ export function SummaryRail({ onCalculate }) {
       }
     } catch (cause) {
       setError(cause?.message ?? '입력 내용을 확인해주세요.');
+
       return;
     }
 
@@ -212,12 +187,12 @@ export function SummaryRail({ onCalculate }) {
       const savedInputs = [];
       const databaseRows = [];
 
-      // 기존 거래를 다시 저장하지 않고 DB 상태를 조회한다.
+      // 분석별 기본정보와 전체 거래를 한 번의 요청으로 확인한다.
       for (const taxInputId of inputIds) {
-        const [inputResponse, rowsResponse] = await Promise.all([getTaxInput(taxInputId), getTransactions(taxInputId)]);
+        const response = await getTaxData(taxInputId);
 
-        const savedInput = inputResponse?.data;
-        const savedRows = rowsResponse?.data;
+        const savedInput = response?.data?.input;
+        const savedRows = response?.data?.transactions;
 
         if (!savedInput || savedInput.taxInputId !== taxInputId || !Array.isArray(savedRows)) {
           throw new Error('저장된 분석 정보를 확인하지 못했습니다.');
@@ -228,6 +203,7 @@ export function SummaryRail({ onCalculate }) {
       }
 
       const screenSignature = transactionSignature(savedScreenRows, false);
+
       const databaseSignature = transactionSignature(databaseRows, true);
 
       if (screenSignature !== databaseSignature) {
@@ -284,7 +260,9 @@ export function SummaryRail({ onCalculate }) {
       <KeyValue label="합계 대상 거래">{transactionRows.length}건</KeyValue>
 
       <KeyValue label="수입 합계">{money(income)}</KeyValue>
+
       <KeyValue label="지출 합계">{money(expense)}</KeyValue>
+
       <KeyValue label="미분류 합계">{money(unclassified)}</KeyValue>
 
       <KeyValue label="수입·지출 차액" total>

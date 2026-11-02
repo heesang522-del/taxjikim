@@ -23,8 +23,12 @@ dependencies {
 	implementation 'software.amazon.awssdk:s3:2.20.0'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
-	implementation 'org.apache.pdfbox:pdfbox:3.0.6'
-	implementation 'net.sourceforge.tess4j:tess4j:5.16.0'
+	implementation 'org.apache.pdfbox:pdfbox:3.0.6' // pdf문서 파싱
+	implementation 'net.sourceforge.tess4j:tess4j:5.16.0' // ocr 파싱
+	implementation platform('org.springframework.ai:spring-ai-bom:2.0.2')   // Spring AI 버전을 한곳에서 정한다
+	implementation 'org.springframework.ai:spring-ai-starter-model-openai'  // 버전은 BOM 이 정한다
+
+
 
 
 	// 옮긴 인증·회원 코드에서 사용하는 보안, 세션 저장, 이메일, 임시 캐시 의존성이다.

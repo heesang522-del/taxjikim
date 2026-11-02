@@ -205,12 +205,6 @@
         ORDER BY TRANSACTION_ID
     </select>
 
-    <!-- 기존 XML의 전체 거래 삭제 구문은 유지한다. -->
-    <delete id="deleteTransactions">
-        DELETE FROM tax_transactions
-        WHERE TAX_INPUT_ID = #{taxInputId}
-    </delete>
-
     <update id="updateCategory">
         UPDATE tax_transactions
         SET CATEGORY = #{category}
