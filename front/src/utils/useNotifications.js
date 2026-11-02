@@ -6,7 +6,7 @@ import { ROUTES } from './routes';
 import { useAuth } from '../store/useAuthStore';
 import { getNotifications, getUnreadNotificationCount, markNotificationRead } from '../api/notifications';
 
-const PAGE_SIZE = 10; // 한 번에 불러오는 알림 개수. 서버 기본값(20)과 맞춘다
+const PAGE_SIZE = 10; // 한 번에 불러오는 알림 개수. 서버 기본값(10)과 맞춘다
 const SUBSCRIBE_URL = '/api/v1/notifications/subscribe'; // EventSource는 axios client를 거치지 않아 경로를 직접 적는다
 const RECONNECT_DELAY_MS = 5000; // 연결이 끊겼을 때 재연결을 시도하기 전 대기 시간
 const MAX_RECONNECT_ATTEMPTS = 5; // 계속 실패하면 재시도를 멈춘다. 로그인 상태가 바뀌면(재로그인 등) 다시 시도한다
