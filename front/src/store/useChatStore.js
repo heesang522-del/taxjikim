@@ -10,6 +10,7 @@ import {
   getMemberMessages,
   markMemberRead,
   getMemberUnreadCount,
+  closeMemberRoom,
   getAdminRooms,
   getAdminRoom,
   getAdminRoomUnreadCount,
@@ -24,6 +25,7 @@ import { useChatSocket } from '../utils/useChatSocket';
 
 const LIST_POLL_MS = 8000; // 관리자 상담 목록·대기 수: 실시간 알림 채널이 없어 주기적으로 다시 불러온다
 const BADGE_POLL_MS = 15000; // 회원 패널이 닫혀 있는 동안 배지용 안읽은 수 확인 주기
+const ROOM_PAGE_SIZE = 10; // 상담 목록을 한 번에 불러오는 개수. 서버 기본값(10)과 맞춘다
 
 /** 채팅 패널(ChatWidget) 열림 여부만 전역으로 둔다. 실제 상담 데이터는 서버가 가진다. */
 export const useChatPanelStore = create((set) => ({
@@ -38,7 +40,7 @@ export const useChat = () => useChatPanelStore();
  * active가 true인 동안만 연결하며(=실제로 그 화면을 보고 있는 동안), 연결돼 있으면 서버가 상대 메시지를 곧장 읽음 처리한다.
  * WebSocket은 보낸 사람 본인에게는 메시지를 되돌려주지 않으므로, 소켓으로 보낸 내 메시지는 화면에 직접 붙인다(낙관적 갱신).
  */
-function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, markRead }) {
+function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, markRead, onRoomClosed }) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -62,9 +64,28 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, roomId]);
 
+  // roomId 자체가 없어지면(방을 선택 해제했거나, 종료된 방을 보다가 패널을 다시 열어 완전히 새 상태가 된 경우)
+  // 이전 방의 메시지를 화면에 남기지 않고 바로 비운다.
+  useEffect(() => {
+    if (!roomId) setMessages([]);
+  }, [roomId]);
+
   const { connected, sendText } = useChatSocket(active ? roomId : null, {
-    onMessage: (message) => setMessages((prev) => [...prev, message]),
-    onError: (code, message) => setError(message),
+    // roomClosed가 true면 상대가 방금 종료하며 남긴 안내 메시지다. 메시지를 먼저 붙이고,
+    // 그 다음에 방 상태를 바꾼다(onRoomClosed) — 안내를 보기 전에 입력창이 사라지지 않게 순서를 맞춘다.
+    onMessage: (message, roomClosed) => {
+      setMessages((prev) => [...prev, message]);
+      if (roomClosed) onRoomClosed?.();
+    },
+    onError: (code, message) => {
+      setError(message);
+      // 상대가 먼저 상담을 종료해 내가 보낸 메시지가 거절된 경우. 서버가 남긴 종료 안내 메시지가 먼저
+      // 화면에 반영되게 하고(reload), 그 다음에 방 상태를 바꾼다(onRoomClosed) — 안내를 보기 전에
+      // 입력창이 먼저 사라지는 것처럼 보이지 않도록 순서를 맞춘다.
+      if (code === 'CHAT_ROOM_CLOSED') {
+        reload().then(() => onRoomClosed?.());
+      }
+    },
   });
 
   const send = async (content) => {
@@ -76,7 +97,15 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
       return;
     }
     // 연결되기 전이거나 끊긴 경우 REST로 보내고 목록을 다시 불러온다.
-    await sendRest(content);
+    try {
+      await sendRest(content);
+    } catch (cause) {
+      // 종료 안내 메시지를 먼저 반영한 뒤 방 상태를 바꾼다(위 onError와 동일한 이유).
+      if (cause.code === 'CHAT_ROOM_CLOSED') {
+        reload().then(() => onRoomClosed?.());
+      }
+      throw cause;
+    }
     await reload();
   };
 
@@ -110,6 +139,17 @@ export function useMemberChat(open, myUserId) {
 
   const activeRoomId = room && room.status !== 'CLOSED' ? room.roomId : null;
   const active = open && Boolean(activeRoomId);
+  // 소켓 연결·REST 재조회는 열린 방일 때만(activeRoomId) 하지만, 메시지 초기화 판단은 종료된 방도
+  // 구분해야 한다. 그래서 상태와 무관한 실제 방 ID(room?.roomId)를 useRoomMessages에 그대로 넘긴다.
+  // 종료된 방(roomId는 있지만 activeRoomId는 null)을 보다가 패널을 닫았다가 다시 열면 room이 null로
+  // 바뀌어 roomId도 null이 되고, 그 변화로 useRoomMessages가 이전 메시지를 비워 새 화면을 보여준다.
+  const roomIdForMessages = room?.roomId ?? null;
+
+  // 상대(관리자)가 먼저 종료해 내 전송이 거절된 경우. 서버가 남긴 종료 안내 메시지는 useRoomMessages가
+  // 알아서 다시 불러오므로, 여기서는 방 상태만 CLOSED로 맞춰 안내문·종료 버튼이 즉시 반영되게 한다.
+  const handleClosedByAdmin = useCallback(() => {
+    setRoom((prev) => (prev ? { ...prev, status: 'CLOSED' } : prev));
+  }, []);
 
   const {
     messages,
@@ -117,13 +157,15 @@ export function useMemberChat(open, myUserId) {
     error: messagesError,
     connected,
     send: sendInRoom,
+    reload: reloadMessages,
   } = useRoomMessages({
-    roomId: activeRoomId,
+    roomId: roomIdForMessages,
     active,
     myUserId,
     fetchMessages: getMemberMessages,
     sendRest: sendMemberMessage,
     markRead: markMemberRead,
+    onRoomClosed: handleClosedByAdmin,
   });
 
   // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 주기적으로 확인한다.
@@ -139,13 +181,33 @@ export function useMemberChat(open, myUserId) {
   }, [active, activeRoomId]);
 
   const send = async (content) => {
-    if (!room || room.status === 'CLOSED') {
-      // 방이 없거나 이미 종료됨: REST로 보내면 서버가 새 대기 방을 만든다.
+    // 종료된 방에서는 이어서 보낼 수 없다(입력창도 막혀 있다). 패널을 닫았다가 다시 열면
+    // loadRoom이 다시 조회되어 room이 null로 바뀌고, 그때 메시지를 보내야 새 대기 방이 생긴다.
+    if (room?.status === 'CLOSED') {
+      throw new Error('종료된 상담입니다. 패널을 닫았다가 다시 열어 새 상담을 시작해주세요.');
+    }
+    if (!room) {
+      // 방이 아직 없음(첫 문의): REST로 보내면 서버가 새 대기 방을 만든다.
       await sendMemberMessage(content);
       await loadRoom();
       return;
     }
     await sendInRoom(content);
+  };
+
+  // 상담 종료. 대기중(WAITING)이어도 가능하다 — 메시지를 보내자마자 생기는 대기 방을 바로 취소할 수 있어야 하므로.
+  // loadRoom()(= GET /chat/rooms/me)은 열린 방(WAITING/IN_PROGRESS)만 찾으므로 종료 직후 호출하면
+  // 방이 null로 보여 "종료되었습니다" 안내가 사라진다. 그래서 다시 조회하지 않고 상태만 직접 CLOSED로 바꾼다.
+  const close = async () => {
+    if (!activeRoomId) return;
+    try {
+      await closeMemberRoom(activeRoomId);
+    } catch (cause) {
+      // 이미 종료된 상담이면(상대가 먼저 종료했거나 중복 클릭) 원하는 상태이므로 에러로 취급하지 않는다.
+      if (cause.code !== 'ROOM_NOT_CLOSABLE') throw cause;
+    }
+    await reloadMessages(); // 서버가 종료 시 남긴 "상담이 종료되었습니다." 메시지를 가져온다.
+    setRoom((prev) => (prev ? { ...prev, status: 'CLOSED' } : prev));
   };
 
   return {
@@ -156,6 +218,7 @@ export function useMemberChat(open, myUserId) {
     connected,
     unreadCount: badgeCount,
     send,
+    close,
   };
 }
 
@@ -193,6 +256,10 @@ export function useAdminChat(myUserId) {
   const [listError, setListError] = useState('');
   const [selectedRoom, setSelectedRoomState] = useState(null); // { roomId, status, nickname, ... }
   const [notice, setNotice] = useState('');
+  // 무한스크롤용: 다음 페이지가 있는지, 그 다음 조회에 쓸 커서(마지막 방 ID)
+  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // 새로고침 직후 URL에 roomId가 있으면 현재 목록 탭과 무관하게 그 방을 바로 복원한다.
   useEffect(() => {
@@ -211,10 +278,15 @@ export function useAdminChat(myUserId) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 탭을 바꾸거나 주기적으로 다시 불러올 때는 항상 최신 1페이지로 목록을 통째로 새로 불러온다.
   const reloadList = useCallback(
     () =>
-      getAdminRooms(status)
-        .then((result) => setRooms(result.data))
+      getAdminRooms(status, { size: ROOM_PAGE_SIZE })
+        .then((result) => {
+          setRooms(result.data);
+          setHasMore(Boolean(result.meta?.hasMore));
+          setNextCursor(result.meta?.nextCursor ?? null);
+        })
         .catch((cause) => setListError(cause.message))
         .finally(() => setListLoading(false)),
     [status]
@@ -226,10 +298,25 @@ export function useAdminChat(myUserId) {
   }, [reloadList]);
 
   // 새 대기 상담이 들어와도 알림 채널이 없으므로, 목록은 짧은 주기로 다시 불러온다.
+  // 이때마다 1페이지로 돌아가므로, 스크롤로 더 불러온 뒷부분은 다음 polling에서 사라질 수 있다.
   useEffect(() => {
     const timer = setInterval(reloadList, LIST_POLL_MS);
     return () => clearInterval(timer);
   }, [reloadList]);
+
+  // 스크롤이 끝에 닿았을 때 다음 페이지를 이어붙인다. 이미 불러오는 중이거나 더 없으면 그대로 둔다.
+  const loadMore = useCallback(() => {
+    if (!hasMore || loadingMore || nextCursor == null) return Promise.resolve();
+    setLoadingMore(true);
+    return getAdminRooms(status, { cursorId: nextCursor, size: ROOM_PAGE_SIZE })
+      .then((result) => {
+        setRooms((prev) => [...prev, ...result.data]);
+        setHasMore(Boolean(result.meta?.hasMore));
+        setNextCursor(result.meta?.nextCursor ?? null);
+      })
+      .catch((cause) => setListError(cause.message))
+      .finally(() => setLoadingMore(false));
+  }, [status, hasMore, loadingMore, nextCursor]);
 
   // 진행 중 목록에서, 내가 담당 중인 방마다 안읽은 메시지 수를 확인해 새 메시지 배지로 보여준다.
   const [unreadByRoom, setUnreadByRoom] = useState({});
@@ -257,6 +344,15 @@ export function useAdminChat(myUserId) {
   const selectedRoomId = selectedRoom?.roomId ?? null;
   const active = Boolean(selectedRoomId) && selectedRoom.status === 'IN_PROGRESS';
 
+  // 회원이 먼저 상담을 종료했을 때(소켓 전송이 CHAT_ROOM_CLOSED로 거절됨): 화면 상태를 최신으로 맞추고 안내한다.
+  const handleRoomClosedByOther = useCallback(() => {
+    setNotice('회원이 상담을 종료했습니다.');
+    if (selectedRoomId) {
+      getAdminRoom(selectedRoomId).then((result) => setSelectedRoomState(result.data)).catch(() => {});
+    }
+    reloadList();
+  }, [selectedRoomId, reloadList]);
+
   const {
     messages,
     loading: messagesLoading,
@@ -271,6 +367,7 @@ export function useAdminChat(myUserId) {
     fetchMessages: getAdminMessages,
     sendRest: (content) => sendAdminMessage(selectedRoomId, content),
     markRead: markAdminRead,
+    onRoomClosed: handleRoomClosedByOther,
   });
 
   // 종료된 방을 선택했을 때는 실시간 연결 없이 지난 메시지만 한 번 불러온다.
@@ -300,6 +397,7 @@ export function useAdminChat(myUserId) {
     if (!selectedRoomId) return;
     try {
       await closeAdminRoom(selectedRoomId);
+      await reloadMessages(); // 종료 안내 메시지를 먼저 반영한 뒤 방 상태를 바꾼다(입력창이 먼저 사라지는 것처럼 보이지 않게).
       setSelectedRoomState((prev) => (prev ? { ...prev, status: 'CLOSED' } : prev));
       reloadList();
     } catch (cause) {
@@ -313,6 +411,9 @@ export function useAdminChat(myUserId) {
     rooms,
     listLoading,
     listError,
+    hasMore,
+    loadingMore,
+    loadMore,
     unreadByRoom,
     selectedRoom,
     messages,

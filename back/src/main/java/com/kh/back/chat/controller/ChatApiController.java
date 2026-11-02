@@ -63,6 +63,14 @@ public class ChatApiController {
         return ApiResponse.ok(chatService.getUnreadCount(roomId, userId));
     }
 
+    @PostMapping("/rooms/{roomId}/close")
+    public ApiResponse<Void> closeUserRoom(@PathVariable Long roomId,
+                                       @AuthenticationPrincipal CustomUserDetails principal) {
+        Long userId = requireUserId(principal);
+        chatService.closeUserRoom(roomId, userId);
+        return ApiResponse.ok(null);
+    }
+
     private Long requireUserId(CustomUserDetails principal) {
         if (principal == null || principal.getUserId() == null) {
             throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");

@@ -12,7 +12,8 @@ export const RECONNECT_MAX_ATTEMPTS = 5;
  * 연결이 예기치 않게 끊기면(서버 재시작, 네트워크 문제 등) 지수 백오프로 최대 RECONNECT_MAX_ATTEMPTS번까지 재연결을 시도한다.
  * roomId 변경·컴포넌트 해제처럼 의도적으로 끊을 때는 재연결을 시도하지 않는다.
  *
- * onMessage(messageDto): 서버가 저장에 성공해 전달한 상대방 메시지
+ * onMessage(messageDto, roomClosed): 서버가 저장에 성공해 전달한 상대방 메시지. roomClosed가 true면
+ *   상대가 방금 상담을 종료해서 남긴 안내 메시지라는 뜻이다 — 받는 쪽이 메시지를 붙인 뒤 방 상태도 반영해야 한다.
  * onError(code, message): 저장 실패 등 내가 보낸 메시지에 대한 오류 응답, 또는 재연결 실패 알림
  */
 export function useChatSocket(roomId, { onMessage, onError } = {}) {
@@ -65,7 +66,7 @@ export function useChatSocket(roomId, { onMessage, onError } = {}) {
         } catch {
           return; // 알 수 없는 형식은 무시
         }
-        if (payload.type === 'MESSAGE') handlersRef.current.onMessage?.(payload.message);
+        if (payload.type === 'MESSAGE') handlersRef.current.onMessage?.(payload.message, payload.roomClosed === true);
         else if (payload.type === 'ERROR') handlersRef.current.onError?.(payload.code, payload.message);
       };
     }
