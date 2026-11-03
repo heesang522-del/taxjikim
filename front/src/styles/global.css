@@ -42,6 +42,37 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 
 /* AI 챗봇 화면 */
+.ai-chat-layout button:not(.ai-chat-conversation) {
+  min-height: 36px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.ai-chat-layout button:not(.ai-chat-conversation):hover:not(:disabled) {
+  border-color: var(--primary);
+  background: var(--primary-bg);
+  color: var(--primary);
+}
+
+.ai-chat-layout .ai-chat-sidebar-header > button,
+.ai-chat-layout .ai-chat-composer > button {
+  border-color: var(--primary);
+  background: var(--primary);
+  color: #fff;
+}
+
+.ai-chat-layout button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .ai-chat-layout {
   display: grid;
   grid-template-columns: 260px minmax(0, 1fr);
@@ -316,9 +347,35 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
 }
 
 .ai-chat-composer textarea {
+  display: block;
+  width: 100%;
   min-height: 80px;
   max-height: 160px;
+  margin-top: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 14px;
   line-height: 1.6;
+  resize: vertical;
+}
+
+.ai-chat-composer textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.ai-chat-composer textarea:focus-visible {
+  border-color: var(--primary);
+}
+
+.ai-chat-composer textarea[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.ai-chat-composer > .field {
+  min-width: 0;
 }
 
 .ai-chat-composer textarea:disabled {
