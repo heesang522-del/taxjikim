@@ -29,5 +29,5 @@
   "training_mode": "all_labeled_rows",
   "evaluation": "not_evaluated_use_separate_manual_inputs",
   "selection_rule": "explicit_selection_not_test_score",
-  "selected_model": "logistic_regression"
+  "selected_model": "linear_svc"
 }

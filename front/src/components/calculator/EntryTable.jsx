@@ -137,7 +137,6 @@ export function EntryTable() {
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState({});
   const [checkedKeys, setCheckedKeys] = useState([]);
-  const [onlyUnclassified, setOnlyUnclassified] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -146,7 +145,8 @@ export function EntryTable() {
   const rows = collectRows(state);
   const checked = new Set(checkedKeys);
 
-  const visibleRows = onlyUnclassified ? rows.filter((row) => row.category === 'UNCLASSIFIED') : rows;
+  // 본문 거래 목록에서 미분류만 골라 팝업에 표시한다.
+  const visibleRows = rows.filter((row) => row.category === 'UNCLASSIFIED');
 
   const selectedRows = rows.filter((row) => checked.has(row.key));
 
@@ -215,7 +215,6 @@ export function EntryTable() {
     if (busy || workingRef.current) return;
 
     resetDrafts();
-    setOnlyUnclassified(false);
     clearStatus();
     setOpen(true);
   }
@@ -684,20 +683,7 @@ export function EntryTable() {
           )}
 
           <div className="tax-toolbar tax-editor-tools">
-            <label>
-              <input
-                type="checkbox"
-                checked={onlyUnclassified}
-                disabled={busy}
-                onChange={(event) => {
-                  setOnlyUnclassified(event.target.checked);
-                  setCheckedKeys([]);
-                  setBulkCategory('');
-                  clearStatus();
-                }}
-              />{' '}
-              미분류만 보기
-            </label>
+            <span>미분류 거래</span>
 
             <select
               className="tax-bulk-select"

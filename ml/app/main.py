@@ -6,7 +6,7 @@ import json
 import logging
 import math
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from threading import Event, Thread
@@ -25,7 +25,8 @@ from fastapi import (
 )
 
 from . import pdf_parser
-from .expense_classifier import classify_descriptions
+from .expense_classifier import classify_descriptions as classify_expense_descriptions
+from .income_classifier import classify_descriptions as classify_income_descriptions
 
 # 프로젝트 루트와 ml 폴더 중 어디서 서버를 실행해도 같은 스케줄러를 사용한다.
 if __package__ == "ml.app":
@@ -39,18 +40,15 @@ logger = logging.getLogger("uvicorn.error")
 MAX_FILE_BYTES = 6 * 1024 * 1024
 MAX_PAGES = 50
 
-MODEL_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "models"
-    / "expense_classifier"
-)
+MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 
-def load_expense_model() -> dict:
-    """기존 지출 모델 로딩 함수를 유지한다."""
 
+# 학습 보고서에서 선택된 거래 분류 모델을 읽는다.
+def load_transaction_model(kind: str, label: str) -> dict:
+    model_dir = MODEL_DIR / f"{kind}_classifier"
     try:
         report = json.loads(
-            (MODEL_DIR / "model_report.json").read_text(
+            (model_dir / "model_report.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -66,7 +64,7 @@ def load_expense_model() -> dict:
             )
 
         return joblib.load(
-            MODEL_DIR / f"{selected}_bundle.pkl"
+            model_dir / f"{selected}_bundle.pkl"
         )
 
     except (
@@ -75,8 +73,8 @@ def load_expense_model() -> dict:
         ValueError,
     ) as exc:
         raise RuntimeError(
-            "지출 모델을 먼저 준비해주세요: "
-            "python scripts/train_expense.py"
+            f"{label} 모델을 먼저 준비해주세요: "
+            f"python scripts/train_{kind}.py"
         ) from exc
 
 
@@ -87,8 +85,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "사용 중인 PDF 파서: %s",
         Path(pdf_parser.__file__).resolve(),
     )
-    app.state.expense_model = load_expense_model()
+    app.state.expense_model = load_transaction_model("expense", "지출")
     logger.info("지출 분류 모델: %s", app.state.expense_model["model_name"])
+
+    app.state.income_model = load_transaction_model("income", "수입")
+    logger.info("수입 분류 모델: %s", app.state.income_model["model_name"])
 
     # 요청을 처리하는 서버와 별도로 스케줄러를 실행한다.
     stop_event = Event()
@@ -325,12 +326,18 @@ def parse_ocr_pages(
     return result
 
 
-def classify_expense_transactions(transactions: list[dict]) -> None:
-    """거래 설명만 모델에 전달하고 같은 지출 거래에 예측 카테고리를 채운다."""
+# 같은 유형의 거래 설명을 모델에 전달하고 원래 거래에 카테고리를 채운다.
+def classify_transactions(
+    transactions: list[dict],
+    kind: str,
+    label: str,
+    classify_descriptions: Callable,
+) -> None:
+    transaction_type = kind.upper()
     targets = []
     descriptions = []
     for transaction in transactions:
-        if transaction.get("transactionType") != "EXPENSE":
+        if transaction.get("transactionType") != transaction_type:
             continue
         description = str(transaction.get("description") or "").strip()
         if not description:
@@ -341,11 +348,11 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
 
     if not targets:
         return
-    model = getattr(app.state, "expense_model", None)
+    model = getattr(app.state, f"{kind}_model", None)
     if model is None:
         raise HTTPException(status_code=503, detail={
-            "code": "EXPENSE_MODEL_UNAVAILABLE",
-            "message": "지출 분류 모델이 준비되지 않았습니다.",
+            "code": f"{transaction_type}_MODEL_UNAVAILABLE",
+            "message": f"{label} 분류 모델이 준비되지 않았습니다.",
         })
 
     try:
@@ -354,10 +361,10 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
         for transaction, prediction in zip(targets, predictions):
             transaction["category"] = prediction["category"]
     except Exception as exc:
-        logger.exception("지출 카테고리 예측 실패")
+        logger.exception("%s 카테고리 예측 실패", label)
         raise HTTPException(status_code=503, detail={
-            "code": "EXPENSE_CLASSIFICATION_FAILED",
-            "message": "지출 카테고리를 분류하지 못했습니다.",
+            "code": f"{transaction_type}_CLASSIFICATION_FAILED",
+            "message": f"{label} 카테고리를 분류하지 못했습니다.",
         }) from exc
 
 
@@ -391,6 +398,7 @@ def analyze_pdf(
                 },
             )
 
+        # 1. PDF 원본과 OCR 결과로 거래 목록을 만든다.
         pages = parse_ocr_pages(
             ocr_pages_json
         )
@@ -405,8 +413,10 @@ def analyze_pdf(
                 "OCR 페이지 번호가 PDF 페이지 수를 초과했습니다."
             )
 
-        # 추출한 거래의 날짜·금액은 유지하고 지출 카테고리만 분류한다.
-        classify_expense_transactions(result["transactions"])
+        # 2. 지출·수입을 각각 분류해 원래 거래에 카테고리를 붙인다.
+        transactions = result["transactions"]
+        classify_transactions(transactions, "expense", "지출", classify_expense_descriptions)
+        classify_transactions(transactions, "income", "수입", classify_income_descriptions)
 
         logger.info(
             "PDF 분석 완료: pages=%s, extracted=%s, parsed=%s, review=%s",
@@ -416,6 +426,7 @@ def analyze_pdf(
             result["needsReviewCount"],
         )
 
+        # 3. 카테고리가 붙은 거래 목록과 파일명을 Java에 돌려준다.
         return {
             "fileName": file.filename,
             **result,
