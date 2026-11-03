@@ -103,6 +103,11 @@ function normalizeTaxInput(input) {
   };
 }
 
+// 산출 근거와 월별 금액을 결과 페이지에서 한 번에 조회한다.
+export async function getTaxCalculationResult(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/calculation-result`, method: 'GET', signal });
+}
+
 function inputPath(taxInputId) {
   validateId(taxInputId, '분석번호');
 
@@ -147,42 +152,6 @@ function transactionKey(row) {
     row.preTaxIncome == null ? null : Number(row.preTaxIncome),
     row.deductedTaxRate == null ? null : Number(row.deductedTaxRate),
   ]);
-}
-
-// 분석번호에 해당하는 실제·예상 세전 총수입을 조회한다.
-export async function getTotalIncome(taxInputId, { signal } = {}) {
-  return request({
-    url: `${inputPath(taxInputId)}/total-income`,
-    method: 'GET',
-    signal,
-  });
-}
-
-// 분석번호에 해당하는 실제·예상 총지출을 조회한다.
-export async function getTotalExpense(taxInputId, { signal } = {}) {
-  return request({
-    url: `${inputPath(taxInputId)}/total-expense`,
-    method: 'GET',
-    signal,
-  });
-}
-
-// 분석번호에 해당하는 월별 실제·예상 수입을 조회한다.
-export async function getMonthlyIncomes(taxInputId, { signal } = {}) {
-  return request({
-    url: `${inputPath(taxInputId)}/monthly-incomes`,
-    method: 'GET',
-    signal,
-  });
-}
-
-// 분석번호에 해당하는 월별 실제·예상 지출을 조회한다.
-export async function getMonthlyExpenses(taxInputId, { signal } = {}) {
-  return request({
-    url: `${inputPath(taxInputId)}/monthly-expenses`,
-    method: 'GET',
-    signal,
-  });
 }
 
 export async function getTaxInput(taxInputId) {

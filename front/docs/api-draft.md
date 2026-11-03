@@ -1,5 +1,15 @@
 # 프론트 API 연결 안내
 
+- 2026-11-03 월별 조회 통합: `findMonthlyTransactions`가 월·거래 구분별 합계를 한 번 조회한다. 수입은 세전 금액, 지출은 실제 금액을 합산한다. 서비스에서 기존 수입·지출 응답 목록으로 나누므로 화면 형식은 유지한다. 전체 DB 조회는 기본정보·기간·월별 합계 총 3회이며 아래 4회 조회 기록을 대체한다.
+- 2026-11-03 정리: 기존 breakdown·월별 개별 API와 전용 서비스 메서드·TaxDto·프론트 월별 API 함수를 제거했다. 결과 조회는 calculation-result 하나만 사용한다. 아래 과거 개별 API 유지 기록은 더 이상 적용하지 않는다.
+## 총세금·산출 근거 연결 (2026-11-02)
+
+- `getTaxBreakdown(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/breakdown`.
+- `TaxBreakdownDto`를 공통 응답 `data`로 반환한다. 총수입·총지출, 기부금 인정액, 사업소득, 기본공제, 과세표준, 세율·누진공제, 산출세액·표준세액공제·소득세·지방소득세·총세금을 포함한다.
+- 결과 페이지가 한 번 조회해 `SummaryCards`와 `TaxChain`에 같은 결과·로딩·오류 상태를 전달한다. 요약 카드의 기존 개별 합계 요청은 제거했다.
+- 월별 그래프는 기존 월별 API를 유지한다. 분석번호는 여전히 테스트용 `21`이며 입력 화면에서의 실제 분석번호 전달 연결은 별도 후속 작업이다.
+- 오류는 서버 안내를 표시하며 예시 결과로 대체하지 않는다. 결과 저장은 기존 브라우저 저장 방식을 유지하되 화면에 표시한 서버 금액을 저장한다.
+
 ## 총수입·총지출 Spring 연결 (2026-10-29)
 
 - `getTotalIncome(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-income`.
@@ -179,3 +189,15 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 인증용 mock 계정·잠금·접속 기록도 메모리에서만 관리한다. 이전 인증 관련 웹 스토리지 키 6개는 앱 시작 시 양쪽 저장소에서 제거한다.
 - 다른 기능의 게시글·상담·계산 기록 웹 스토리지 사용은 유지한다.
+# 결과 데이터 통합 조회 (2026-11-03)
+
+- 정산 시안 응답: `settlementType: 'PAYMENT' | 'REFUND' | 'NONE' | null`, `settlementAmount: number | null`. 총세금에서 실제 차감액 전액을 뺀 부호로 구분하고 금액은 절댓값이다. 입금액 누락 또는 차감액 음수이면 null이다. 해외 세금 공제한도·미래 원천징수액을 반영한 확정 납부/환급액이 아니다.
+
+- 추가 응답 필드: `actualNetIncome: number | null`(실제 세후 수입 합계), `deductedAmount: number | null`(실제 세전 합계 − 실제 세후 합계). 수입 입금액 누락 시 둘 다 null이다. 추가 납부액이나 국내 기납부세액으로 확정한 값이 아니다. 최신 화면 합의에 따라 둘 다 카드에서 별도 표시하지 않으며, 추가 납부·환급 정산 연결은 후속 작업이다.
+
+- `GET /api/v1/tax/inputs/{taxInputId}/calculation-result`
+- 공통 응답 `data`: `{ breakdown: TaxBreakdownDto, monthlyIncomes: MonthlyAmountDto[], monthlyExpenses: MonthlyAmountDto[], businessRegistered: boolean | null, actualIncome: number, predictedIncome: number, actualExpense: number, predictedExpense: number }`
+- `actualIncome`·`actualExpense`는 실제 월별 금액 합계, `predictedIncome`·`predictedExpense`는 남은 달 예상 금액 합계다. 수입은 모두 세전 기준이다. 실제·예상 합계는 breakdown의 각 총액과 일치한다.
+- 월별 항목: `{ month: number, amount: number, predicted: boolean }`. 실제·예상 금액을 서버에서 계산한다.
+- 첫·마지막 거래 연도가 다르면 HTTP 400, `error.code: TAX_TRANSACTION_YEAR_MISMATCH`를 반환한다. 유효한 거래 날짜가 없으면 HTTP 400, `TAX_TRANSACTION_DATE_REQUIRED`를 반환한다.
+- 페이지에서 한 번 조회하고 자식 컴포넌트에 전달한다. 기존 월별 API와 breakdown API는 유지하지만 결과 페이지에서는 개별 호출하지 않는다.
