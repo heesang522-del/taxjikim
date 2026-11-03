@@ -56,20 +56,20 @@ public class TaxBreakdownDto {
                 .build();
     }
 
-    // ① 사업소득은 적자도 유지하되 기부금 한도용 금액은 최소 0원으로 만든다.
+    // ① 사업소득은 적자도 유지하되 기부금 한도용 금액은 최소 0원으로 만든다. (총수입 - 총지출)
     public TaxBreakdownDto calculateIncomeBeforeDonation() {
         incomeBeforeDonation = totalIncome.subtract(totalExpense);
         donationBaseAmount = incomeBeforeDonation.max(BigDecimal.ZERO);
         return this;
     }
 
-    // ② 특례기부금(국가·지자체 기부 등)의 입력액을 기준금액 안에서 인정한다.
+    // ② 특례기부금(국가·지자체 기부 등)의 입력액을 기준금액 안에서 인정한다. (입력액과 기준금액 중 작은 값)
     public TaxBreakdownDto calculateSpecialDonation() {
         specialDonationAllowed = specialDonationAmount.min(donationBaseAmount);
         return this;
     }
 
-    // ③ 일반기부금(복지·문화단체 등, 종교 제외)의 한도와 인정액을 계산한다.
+    // ③ 일반기부금(복지·문화단체 등, 종교 제외)의 한도와 인정액을 계산한다. (한도: (기준금액 - 특례 인정액) × 30%, 인정액: 입력액과 한도 중 작은 값)
     public TaxBreakdownDto calculateGeneralDonation() {
         generalDonationLimit = donationBaseAmount.subtract(specialDonationAllowed)
                 .max(BigDecimal.ZERO).multiply(GENERAL_DONATION_RATE);
@@ -77,28 +77,28 @@ public class TaxBreakdownDto {
         return this;
     }
 
-    // ④ 두 기부금의 인정액만 한 번씩 차감해 사업소득을 계산한다.
+    // ④ 두 기부금의 인정액만 한 번씩 차감해 사업소득을 계산한다. (기부금 반영 전 사업소득 - 특례 인정액 - 일반 인정액)
     public TaxBreakdownDto calculateIncomeAfterDonation() {
         incomeAfterDonation = incomeBeforeDonation
                 .subtract(specialDonationAllowed).subtract(generalDonationAllowed);
         return this;
     }
 
-    // ⑤ 본인 1명과 입력받은 공제 대상 가족 수에 기본공제를 적용한다.
+    // ⑤ 본인 1명과 입력받은 공제 대상 가족 수에 기본공제를 적용한다. ((가족 수 + 본인 1명) × 150만원)
     public TaxBreakdownDto calculateBasicDeduction() {
         basicDeductionAmount = BigDecimal.valueOf((long) dependentCount + 1)
                 .multiply(BASIC_DEDUCTION_PER_PERSON);
         return this;
     }
 
-    // ⑥ 기본공제를 차감한 과세표준은 최소 0원으로 하고 1원 미만은 버린다.
+    // ⑥ 기본공제를 차감한 과세표준은 최소 0원으로 하고 1원 미만은 버린다. (기부금 반영 후 사업소득 - 기본공제)
     public TaxBreakdownDto calculateTaxBase() {
         taxBase = incomeAfterDonation.subtract(basicDeductionAmount)
                 .max(BigDecimal.ZERO).setScale(0, RoundingMode.DOWN);
         return this;
     }
 
-    // ⑦ 2026년 기본세율 구간과 누진공제를 적용해 산출세액을 계산한다.
+    // ⑦ 2026년 기본세율 구간과 누진공제를 적용해 산출세액을 계산한다. (과세표준 × 세율 - 누진공제액)
     public TaxBreakdownDto calculateAssessedTax() {
         if (taxBase.compareTo(BigDecimal.valueOf(14000000)) <= 0) {
             applyTaxBracket("0.06", "0");
@@ -128,20 +128,20 @@ public class TaxBreakdownDto {
         progressiveDeduction = new BigDecimal(deduction);
     }
 
-    // ⑧ 일반 기준 표준세액공제 7만원을 세금 한도 내 적용하고 소득세 끝수를 처리한다.
+    // ⑧ 일반 기준 표준세액공제 7만원을 세금 한도 내 적용하고 소득세 끝수를 처리한다. (산출세액 - 표준세액공제, 공제액은 산출세액과 7만원 중 작은 값)
     public TaxBreakdownDto calculateIncomeTax() {
         standardTaxCredit = assessedTax.min(STANDARD_TAX_CREDIT);
         incomeTax = truncateToTenWon(assessedTax.subtract(standardTaxCredit));
         return this;
     }
 
-    // ⑨ 합의한 예상 계산 방식으로 소득세의 10%를 지방소득세로 반영한다.
+    // ⑨ 합의한 예상 계산 방식으로 소득세의 10%를 지방소득세로 반영한다. (소득세 × 10%)
     public TaxBreakdownDto calculateLocalIncomeTax() {
         localIncomeTax = truncateToTenWon(incomeTax.multiply(LOCAL_TAX_RATE));
         return this;
     }
 
-    // ⑩ 원천징수액을 차감하지 않은 두 세금의 합계를 구한다.
+    // ⑩ 원천징수액을 차감하지 않은 두 세금의 합계를 구한다. (소득세 + 지방소득세)
     public TaxBreakdownDto calculateTotalTax() {
         totalTax = incomeTax.add(localIncomeTax);
         return this;

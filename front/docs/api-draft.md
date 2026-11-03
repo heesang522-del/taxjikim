@@ -1,5 +1,7 @@
 # 프론트 API 연결 안내
 
+- 2026-11-03 월별 조회 통합: `findMonthlyTransactions`가 월·거래 구분별 합계를 한 번 조회한다. 수입은 세전 금액, 지출은 실제 금액을 합산한다. 서비스에서 기존 수입·지출 응답 목록으로 나누므로 화면 형식은 유지한다. 전체 DB 조회는 기본정보·기간·월별 합계 총 3회이며 아래 4회 조회 기록을 대체한다.
+- 2026-11-03 정리: 기존 breakdown·월별 개별 API와 전용 서비스 메서드·TaxDto·프론트 월별 API 함수를 제거했다. 결과 조회는 calculation-result 하나만 사용한다. 아래 과거 개별 API 유지 기록은 더 이상 적용하지 않는다.
 ## 총세금·산출 근거 연결 (2026-11-02)
 
 - `getTaxBreakdown(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/breakdown`.
@@ -175,3 +177,10 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 인증용 mock 계정·잠금·접속 기록도 메모리에서만 관리한다. 이전 인증 관련 웹 스토리지 키 6개는 앱 시작 시 양쪽 저장소에서 제거한다.
 - 다른 기능의 게시글·상담·계산 기록 웹 스토리지 사용은 유지한다.
+# 결과 데이터 통합 조회 (2026-11-03)
+
+- `GET /api/v1/tax/inputs/{taxInputId}/calculation-result`
+- 공통 응답 `data`: `{ breakdown: TaxBreakdownDto, monthlyIncomes: MonthlyAmountDto[], monthlyExpenses: MonthlyAmountDto[], businessRegistered: boolean | null }`
+- 월별 항목: `{ month: number, amount: number, predicted: boolean }`. 실제·예상 금액을 서버에서 계산한다.
+- 첫·마지막 거래 연도가 다르면 HTTP 400, `error.code: TAX_TRANSACTION_YEAR_MISMATCH`를 반환한다. 유효한 거래 날짜가 없으면 HTTP 400, `TAX_TRANSACTION_DATE_REQUIRED`를 반환한다.
+- 페이지에서 한 번 조회하고 자식 컴포넌트에 전달한다. 기존 월별 API와 breakdown API는 유지하지만 결과 페이지에서는 개별 호출하지 않는다.

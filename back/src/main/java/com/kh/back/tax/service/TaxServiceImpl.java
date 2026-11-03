@@ -1,11 +1,12 @@
 package com.kh.back.tax.service;
 
-import com.kh.back.tax.dto.TaxDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
+import com.kh.back.tax.dto.TaxCalculationResultDto;
 import com.kh.back.tax.exception.TaxCalculationException;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.tax.dto.MonthlyAmountDto;
+import com.kh.back.tax.dto.MonthlyTransactionDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
 import com.kh.back.tax.mapper.TaxMapper;
 import lombok.RequiredArgsConstructor;
@@ -29,12 +30,50 @@ public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
 
-    // 같은 산출 근거 객체에서 입력 조회 후 ①~⑩ 계산을 순서대로 진행한다.
+    // 거래 기간과 월별 목록을 한 번씩 조회해 계산과 그래프에서 함께 사용한다.
     @Override
     @Transactional(readOnly = true)
-    public TaxBreakdownDto getTaxBreakdown(Long taxInputId) {
-        // 조회 실패는 내부 계산 오류로 바꾸지 않도록 계산 예외 처리와 분리한다.
-        TaxCalculationInputDto input = getCalculationInput(taxInputId);
+    public TaxCalculationResultDto getCalculationResult(Long taxInputId) {
+        // 1. 분석 기본정보와 공제 조건을 조회한다.
+        TaxCalculationInputDto input = taxMapper.findCalculationInput(taxInputId);
+        if (input == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "분석 정보를 찾을 수 없습니다.");
+        }
+
+        // 2. 첫·마지막 거래 날짜가 있고, 두 날짜의 연도가 같은지 확인한다.
+        TransactionPeriodDto period = taxMapper.findTransactionPeriod(taxInputId);
+        validateTransactionPeriod(period);
+
+        // 3. 월별 거래를 한 번 조회하고 수입·지출 목록으로 나눈다.
+        List<MonthlyTransactionDto> monthlyTransactions = taxMapper.findMonthlyTransactions(taxInputId);
+        List<MonthlyAmountDto> incomes = new ArrayList<>();
+        List<MonthlyAmountDto> expenses = new ArrayList<>();
+        for (MonthlyTransactionDto transaction : monthlyTransactions) {
+            MonthlyAmountDto amount = new MonthlyAmountDto();
+            amount.setMonth(transaction.getMonth());
+            amount.setAmount(transaction.getAmount());
+            if ("INCOME".equals(transaction.getTransactionType())) {
+                incomes.add(amount);
+            } else if ("EXPENSE".equals(transaction.getTransactionType())) {
+                expenses.add(amount);
+            }
+        }
+
+        // 4. 올해 자료라면 남은 달에 월평균 예상 금액을 추가한다.
+        incomes = addPredictedMonths(incomes, period);
+        expenses = addPredictedMonths(expenses, period);
+
+        // 5. 실제·예상 목록을 합산해 세금 계산에 사용할 총수입·총지출을 채운다.
+        input.setTotalIncome(sumMonthlyAmounts(incomes));
+        input.setTotalExpense(sumMonthlyAmounts(expenses));
+
+        // 6. 세금을 계산하고 산출 근거·월별 목록·등록 여부를 함께 반환한다.
+        return new TaxCalculationResultDto(calculateBreakdown(input), incomes, expenses,
+                input.getBusinessRegistered());
+    }
+
+    // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.
+    private TaxBreakdownDto calculateBreakdown(TaxCalculationInputDto input) {
         try {
             return TaxBreakdownDto.from(input)
                     .calculateIncomeBeforeDonation()
@@ -54,44 +93,10 @@ public class TaxServiceImpl implements TaxService {
         }
     }
 
-    // 같은 분석의 DB 조건과 기존 총수입·총지출 조회 결과를 모은다.
-    @Override
-    @Transactional(readOnly = true)
-    public TaxCalculationInputDto getCalculationInput(Long taxInputId) {
-        TaxCalculationInputDto input = taxMapper.findCalculationInput(taxInputId);
-        if (input == null) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "분석 정보를 찾을 수 없습니다.");
-        }
-
-        // 월평균 예상 금액을 포함하는 기존 서비스를 사용하고 세금 계산은 아직 하지 않는다.
-        TaxDto income = getTotalIncome(taxInputId);
-        TaxDto expense = getTotalExpense(taxInputId);
-        input.setTotalIncome(income.getTotalAmount());
-        input.setTotalExpense(expense.getTotalAmount());
-        return input;
-    }
-
-    // 월별 세전 수입을 조회한 뒤 공통 예상 계산을 적용한다.
-    @Override
-    @Transactional(readOnly = true)
-    public List<MonthlyAmountDto> getMonthlyIncomes(Long taxInputId) {
-        List<MonthlyAmountDto> incomes = taxMapper.findMonthlyIncomes(taxInputId);
-        TransactionPeriodDto period = taxMapper.findTransactionPeriod(taxInputId);
-        return addPredictedMonths(incomes, period);
-    }
-
-    // 월별 지출을 조회한 뒤 공통 예상 계산을 적용한다.
-    @Override
-    @Transactional(readOnly = true)
-    public List<MonthlyAmountDto> getMonthlyExpenses(Long taxInputId) {
-        List<MonthlyAmountDto> expenses = taxMapper.findMonthlyExpenses(taxInputId);
-        TransactionPeriodDto period = taxMapper.findTransactionPeriod(taxInputId);
-        return addPredictedMonths(expenses, period);
-    }
-
     // 올해 자료의 남은 달에 월평균 예상 금액을 추가한다.
     private List<MonthlyAmountDto> addPredictedMonths(
             List<MonthlyAmountDto> monthlyAmounts, TransactionPeriodDto period) {
+        // 통합 조회에서 확인한 기간을 수입·지출 예상 계산에 함께 사용한다.
         // 조회한 원래 목록은 유지하고, 응답할 목록에만 예상 월을 추가한다.
         List<MonthlyAmountDto> amounts = new ArrayList<>(monthlyAmounts);
         LocalDate lastDate = period.getLastDate();
@@ -122,6 +127,18 @@ public class TaxServiceImpl implements TaxService {
         return amounts;
     }
 
+    // 월별 집계에서 서로 다른 연도가 같은 월로 섞이지 않도록 자료 기간을 확인한다.
+    private void validateTransactionPeriod(TransactionPeriodDto period) {
+        if (period == null || period.getFirstDate() == null || period.getLastDate() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "TAX_TRANSACTION_DATE_REQUIRED",
+                    "계산할 거래 날짜가 없습니다.");
+        }
+        if (period.getFirstDate().getYear() != period.getLastDate().getYear()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "TAX_TRANSACTION_YEAR_MISMATCH",
+                    "여러 연도의 거래가 포함되어 있습니다. 같은 연도의 거래로 분석해주세요.");
+        }
+    }
+
     // 월별 목록의 금액을 모두 합산한다.
     private BigDecimal sumMonthlyAmounts(List<MonthlyAmountDto> monthlyAmounts) {
         BigDecimal totalAmount = BigDecimal.ZERO;
@@ -131,23 +148,4 @@ public class TaxServiceImpl implements TaxService {
         return totalAmount;
     }
 
-    // 월별 실제·예상 세전 수입 금액을 합산한다.
-    @Override
-    @Transactional(readOnly = true)
-    public TaxDto getTotalIncome(Long taxInputId) {
-        List<MonthlyAmountDto> incomes = getMonthlyIncomes(taxInputId);
-        BigDecimal totalIncome = sumMonthlyAmounts(incomes);
-
-        return new TaxDto(taxInputId, totalIncome);
-    }
-
-    // 월별 실제·예상 지출 금액을 합산한다.
-    @Override
-    @Transactional(readOnly = true)
-    public TaxDto getTotalExpense(Long taxInputId) {
-        List<MonthlyAmountDto> expenses = getMonthlyExpenses(taxInputId);
-        BigDecimal totalExpense = sumMonthlyAmounts(expenses);
-
-        return new TaxDto(taxInputId, totalExpense);
-    }
 }

@@ -3,7 +3,7 @@
 
 import { Navigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { getTaxBreakdown } from '../api/taxApi';
+import { getTaxCalculationResult } from '../api/taxApi';
 import { Button, Icon, Note } from '../components/common/index';
 import { SummaryCards } from '../components/calculator/result/SummaryCards';
 import { TaxChain } from '../components/calculator/result/TaxChain';
@@ -22,31 +22,32 @@ export default function CalcResultPage() {
   // TODO: 입력창의 분석번호 전달을 연결할 때 이 테스트 번호를 교체한다.
   const taxInputId = 21;
   const { calculated } = useTax();
-  const [breakdown, setBreakdown] = useState(null);
+  const [result, setResult] = useState(null);
+  const breakdown = result?.breakdown;
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // 같은 분석의 결과를 한 번 조회하고 요약 카드와 산출 근거에 같은 값을 전달한다.
+  // 결과를 한 번 조회하고 산출 근거와 월별 목록을 각 컴포넌트에 나눠 전달한다.
   useEffect(() => {
     if (!calculated) return;
     let cancelled = false;
     const controller = new AbortController();
 
     // 서버의 계산 결과를 받아 표시하며 기존 예시 계산값으로 대체하지 않는다.
-    async function loadBreakdown() {
+    async function loadResult() {
       setIsLoading(true);
       setErrorMessage('');
-      setBreakdown(null);
+      setResult(null);
       try {
-        const response = await getTaxBreakdown(taxInputId, { signal: controller.signal });
-        if (!cancelled) setBreakdown(response.data);
+        const response = await getTaxCalculationResult(taxInputId, { signal: controller.signal });
+        if (!cancelled) setResult(response.data);
       } catch (error) {
         if (!cancelled) setErrorMessage(error.message || '계산 결과를 불러오지 못했습니다.');
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     }
-    loadBreakdown();
+    loadResult();
     // 화면 이탈·분석번호 변경 후 도착한 이전 응답은 반영하지 않는다.
     return () => {
       cancelled = true;
@@ -108,7 +109,12 @@ export default function CalcResultPage() {
       </div>
       <div className="grid g2">
         <TaxChain result={breakdown} isLoading={isLoading} errorMessage={errorMessage} />
-        <MonthlyChart taxInputId={taxInputId} />
+        <MonthlyChart
+          incomes={result?.monthlyIncomes}
+          expenses={result?.monthlyExpenses}
+          isLoading={isLoading}
+          errorMessage={errorMessage}
+        />
       </div>
       <div>
         <p className="hint">아래 사업자등록 비교는 예시입니다.</p>

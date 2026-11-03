@@ -13,6 +13,7 @@ import java.math.BigDecimal;
 public class TaxCalculationInputDto {
 
     private Integer taxYear;                    // 소득의 귀속연도
+    private Boolean businessRegistered;          // 사업자등록 여부 (안내 구분용)
     private Integer dependentCount;             // 본인 제외 기본공제 대상 가족 수
     private BigDecimal specialDonationAmount;   // 특례기부금: 국가·지자체 기부 등 영수증상 특례 유형의 입력액
     private BigDecimal generalDonationAmount;   // 일반기부금: 인정된 복지·문화단체 등 후원 입력액 (종교단체 제외)
