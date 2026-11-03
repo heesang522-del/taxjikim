@@ -22,7 +22,7 @@ Python 코드를 추가·수정하거나 설명하기 전에는 `python-writing-
 | `app/main.py` | PDF 거래 설명을 선택한 모델로 분류 |
 | `app/pdf_parser.py` | PDF·OCR에서 거래 정보를 추출 |
 | `app/__init__.py` | Python 패키지 표시 |
-| `requirements.txt` | 실행에 필요한 라이브러리 목록 |
+| `ml/requirements.txt` (프로젝트 루트 기준) | 실행에 필요한 라이브러리 목록 |
 | `models/expense_classifier/*_bundle.pkl` | 설명 전처리와 모델 두 개 |
 | `models/expense_classifier/model_report.json` | 학습 건수·원본 식별값·서버 선택 모델. 현재 시험 정확도는 담지 않음 |
 | `models/expense_classifier/previous_test_report.json` | 이전 292/73 분할 실험의 점수. 현재 전체 학습 모델의 점수가 아님 |

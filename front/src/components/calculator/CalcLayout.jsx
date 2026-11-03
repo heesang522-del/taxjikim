@@ -20,10 +20,14 @@ export default function CalcLayout() {
         <div className="subtabs">
           {TABS.map((t) => {
             const active = pathname === t.to || (t.to === ROUTES.calcResult && pathname === ROUTES.calcLoading);
-            return <NavLink key={t.to} to={t.to} className={active ? 'active' : ''}>{t.label}</NavLink>;
+            return (
+              <NavLink key={t.to} to={t.to} className={active ? 'active' : ''}>
+                {t.label}
+              </NavLink>
+            );
           })}
         </div>
-        <Pill>예시 데이터</Pill>
+        <Pill>{pathname === ROUTES.calcResult ? '예상세액' : '예시 데이터'}</Pill>
       </div>
       <Outlet />
     </>
