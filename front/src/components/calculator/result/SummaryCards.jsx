@@ -3,7 +3,7 @@
 
 import { Card } from '../../common/index';
 import { YEAR } from '../../../data/taxConstants';
-import { man } from '../../../utils/format';
+import { man, won } from '../../../utils/format';
 
 // 페이지가 한 번 조회한 계산 결과를 세 요약 카드에 표시한다.
 export function SummaryCards({
@@ -12,6 +12,8 @@ export function SummaryCards({
   predictedIncome,
   actualExpense,
   predictedExpense,
+  settlementType,
+  settlementAmount,
   isLoading = false,
   errorMessage = '',
 }) {
@@ -20,6 +22,13 @@ export function SummaryCards({
 
   return (
     <>
+      <div className="hint">
+        <p style={{ margin: 0 }}>입력한 지출 전액을 필요경비로 가정합니다.</p>
+        <p style={{ margin: 0 }}>
+          납부·환급액은 현재까지의 차감액 전액을 반영한 단순 예상이며, 해외 세금 공제한도와 미래 원천징수액은 반영하지
+          않았습니다.
+        </p>
+      </div>
       <div className="grid g3">
         <Card className="stat dark">
           <p className="lbl">총 세금 ({result?.taxYear ?? YEAR}년 귀속, 지방소득세 포함)</p>
@@ -32,12 +41,25 @@ export function SummaryCards({
               <p className="sub">
                 소득세 {man(result.incomeTax)} + 지방소득세 {man(result.localIncomeTax)}
               </p>
-              <p className="sub">수입·지출 차액 {man(result.totalIncome - result.totalExpense)}</p>
             </>
           )}
-          {/* 배치 확인용 시안이며, 정산 전에는 임의의 납부 금액을 표시하지 않는다. */}
-          <p className="sub" title="이미 낸 세금을 반영하는 정산 기능은 아직 준비 중입니다.">
-            추가 납부 예상액 <strong>—</strong> · 준비 중
+          {/* 납부·환급 구분과 금액은 백엔드 계산 결과를 그대로 표시한다. */}
+          <p className="sub" title="차감액 전액을 반영한 단순 예상입니다. 해외 세금 공제한도는 반영하지 않았습니다.">
+            {hasResult && settlementAmount != null && settlementType === 'PAYMENT' ? (
+              <>
+                추가 납부 예상액 <strong>{won(settlementAmount)}</strong>
+              </>
+            ) : hasResult && settlementAmount != null && settlementType === 'REFUND' ? (
+              <>
+                환급 예상액 <strong>{won(settlementAmount)}</strong>
+              </>
+            ) : hasResult && settlementType === 'NONE' ? (
+              <>
+                정산 차액 없음 <strong>0원</strong>
+              </>
+            ) : (
+              '정산 예상액 —'
+            )}
           </p>
         </Card>
         <Card className="stat">
@@ -62,7 +84,6 @@ export function SummaryCards({
         </p>
       )}
       {!statusMessage && !result && <p className="hint">표시할 계산 결과가 없습니다.</p>}
-      <p className="hint">입력한 지출 전액을 필요경비로 가정합니다.</p>
     </>
   );
 }

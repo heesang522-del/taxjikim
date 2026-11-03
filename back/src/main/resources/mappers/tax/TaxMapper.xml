@@ -29,7 +29,11 @@
                ROUND(COALESCE(SUM(
                    CASE WHEN TRANSACTION_TYPE = 'INCOME'
                         THEN PRE_TAX_INCOME ELSE AMOUNT END
-               ), 0), 0) AS amount
+               ), 0), 0) AS amount,
+               CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                         AND COUNT(AMOUNT) = COUNT(*)
+                    THEN SUM(AMOUNT)
+                    ELSE NULL END AS netIncome
         FROM tax_transactions
         WHERE TAX_INPUT_ID = #{taxInputId}
           AND TRANSACTION_TYPE IN ('INCOME', 'EXPENSE')

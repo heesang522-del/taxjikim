@@ -18,4 +18,8 @@ public class TaxCalculationResultDto {
     private final BigDecimal predictedIncome;            // 남은 달 예상 수입 합계
     private final BigDecimal actualExpense;              // 실제 지출 합계
     private final BigDecimal predictedExpense;           // 남은 달 예상 지출 합계
+    private final BigDecimal actualNetIncome;            // 실제 세후 수입 합계 (누락 시 null)
+    private final BigDecimal deductedAmount;             // 실제 세전 - 세후 차액, 국내 기납부세액으로 단정하지 않음
+    private final String settlementType;                 // PAYMENT / REFUND / NONE, 계산 불가 시 null
+    private final BigDecimal settlementAmount;           // 차감액 전액 반영 가정의 정산 예상액 (양수로 표시)
 }

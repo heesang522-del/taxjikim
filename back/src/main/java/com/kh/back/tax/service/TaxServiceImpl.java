@@ -48,12 +48,20 @@ public class TaxServiceImpl implements TaxService {
         List<MonthlyTransactionDto> monthlyTransactions = taxMapper.findMonthlyTransactions(taxInputId);
         List<MonthlyAmountDto> incomes = new ArrayList<>();
         List<MonthlyAmountDto> expenses = new ArrayList<>();
+        BigDecimal actualNetIncome = BigDecimal.ZERO;
+        boolean hasMissingNetIncome = false;
         for (MonthlyTransactionDto transaction : monthlyTransactions) {
             MonthlyAmountDto amount = new MonthlyAmountDto();
             amount.setMonth(transaction.getMonth());
             amount.setAmount(transaction.getAmount());
             if ("INCOME".equals(transaction.getTransactionType())) {
                 incomes.add(amount);
+                // 실제 입금액만 합산하며, 금액 누락을 세금 차감으로 오인하지 않는다.
+                if (transaction.getNetIncome() == null) {
+                    hasMissingNetIncome = true;
+                } else {
+                    actualNetIncome = actualNetIncome.add(transaction.getNetIncome());
+                }
             } else if ("EXPENSE".equals(transaction.getTransactionType())) {
                 expenses.add(amount);
             }
@@ -62,6 +70,13 @@ public class TaxServiceImpl implements TaxService {
         // 4. 실제 합계를 보관하고, 올해 자료라면 남은 달에 월평균 예상 금액을 추가한다.
         BigDecimal actualIncome = sumMonthlyAmounts(incomes);
         BigDecimal actualExpense = sumMonthlyAmounts(expenses);
+        // 국내·해외 구분 전의 차액이다. 미래 예상 수입은 포함하지 않는다.
+        BigDecimal deductedAmount = null;
+        if (hasMissingNetIncome) {
+            actualNetIncome = null;
+        } else {
+            deductedAmount = actualIncome.subtract(actualNetIncome);
+        }
         incomes = addPredictedMonths(incomes, period);
         expenses = addPredictedMonths(expenses, period);
 
@@ -69,11 +84,28 @@ public class TaxServiceImpl implements TaxService {
         input.setTotalIncome(sumMonthlyAmounts(incomes));
         input.setTotalExpense(sumMonthlyAmounts(expenses));
 
-        // 6. 세금을 계산하고 산출 근거·월별 목록·등록 여부를 함께 반환한다.
-        return new TaxCalculationResultDto(calculateBreakdown(input), incomes, expenses,
+        // 6. 차감액 전액을 반영하는 단순 정산 예상이다. 외국납부세액 공제한도는 반영하지 않는다.
+        TaxBreakdownDto breakdown = calculateBreakdown(input);
+        String settlementType = null;
+        BigDecimal settlementAmount = null;
+        if (deductedAmount != null && deductedAmount.signum() >= 0) {
+            BigDecimal balance = breakdown.getTotalTax().subtract(deductedAmount);
+            if (balance.signum() > 0) {
+                settlementType = "PAYMENT";
+            } else if (balance.signum() < 0) {
+                settlementType = "REFUND";
+            } else {
+                settlementType = "NONE";
+            }
+            settlementAmount = balance.abs();
+        }
+
+        // 7. 산출 근거·월별 목록·정산 예상액을 함께 반환한다.
+        return new TaxCalculationResultDto(breakdown, incomes, expenses,
                 input.getBusinessRegistered(), actualIncome,
                 input.getTotalIncome().subtract(actualIncome), actualExpense,
-                input.getTotalExpense().subtract(actualExpense));
+                input.getTotalExpense().subtract(actualExpense), actualNetIncome, deductedAmount,
+                settlementType, settlementAmount);
     }
 
     // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.

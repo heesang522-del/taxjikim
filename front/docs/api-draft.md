@@ -179,6 +179,10 @@ ALTER TABLE TAX_TRANSACTIONS
 - 다른 기능의 게시글·상담·계산 기록 웹 스토리지 사용은 유지한다.
 # 결과 데이터 통합 조회 (2026-11-03)
 
+- 정산 시안 응답: `settlementType: 'PAYMENT' | 'REFUND' | 'NONE' | null`, `settlementAmount: number | null`. 총세금에서 실제 차감액 전액을 뺀 부호로 구분하고 금액은 절댓값이다. 입금액 누락 또는 차감액 음수이면 null이다. 해외 세금 공제한도·미래 원천징수액을 반영한 확정 납부/환급액이 아니다.
+
+- 추가 응답 필드: `actualNetIncome: number | null`(실제 세후 수입 합계), `deductedAmount: number | null`(실제 세전 합계 − 실제 세후 합계). 수입 입금액 누락 시 둘 다 null이다. 추가 납부액이나 국내 기납부세액으로 확정한 값이 아니다. 최신 화면 합의에 따라 둘 다 카드에서 별도 표시하지 않으며, 추가 납부·환급 정산 연결은 후속 작업이다.
+
 - `GET /api/v1/tax/inputs/{taxInputId}/calculation-result`
 - 공통 응답 `data`: `{ breakdown: TaxBreakdownDto, monthlyIncomes: MonthlyAmountDto[], monthlyExpenses: MonthlyAmountDto[], businessRegistered: boolean | null, actualIncome: number, predictedIncome: number, actualExpense: number, predictedExpense: number }`
 - `actualIncome`·`actualExpense`는 실제 월별 금액 합계, `predictedIncome`·`predictedExpense`는 남은 달 예상 금액 합계다. 수입은 모두 세전 기준이다. 실제·예상 합계는 breakdown의 각 총액과 일치한다.

@@ -96,6 +96,8 @@ export default function CalcResultPage() {
         predictedIncome={result?.predictedIncome}
         actualExpense={result?.actualExpense}
         predictedExpense={result?.predictedExpense}
+        settlementType={result?.settlementType}
+        settlementAmount={result?.settlementAmount}
         isLoading={isLoading}
         errorMessage={errorMessage}
       />
