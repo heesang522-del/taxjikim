@@ -12,7 +12,8 @@ import { Button, Icon, Modal, Pill } from '../common/index';
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
-  const { items, unreadCount, hasMore, loadingMore, openList, loadMore, markRead } = useNotifications();
+  const { items, unreadCount, hasMore, loadingMore, openList, closeList, loadMore, markRead, markAllRead } =
+    useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -29,6 +30,14 @@ export function Header() {
       toast(error.message || '로그아웃하지 못했습니다. 다시 시도해주세요.');
     } finally {
       setLoggingOut(false);
+    }
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      await markAllRead();
+    } catch (error) {
+      toast(error.message || '전체 읽음 처리하지 못했습니다. 다시 시도해주세요.');
     }
   }
 
@@ -103,7 +112,21 @@ export function Header() {
         )}
       </div>
       {notifOpen && (
-        <Modal title="알림" onClose={() => setNotifOpen(false)}>
+        <Modal
+          title="알림"
+          onClose={() => {
+            setNotifOpen(false);
+            closeList(); // 알림창을 닫으면 더 이상 SSE 신호로 목록을 자동 갱신하지 않게 한다.
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <strong>알림</strong>
+            {unreadCount > 0 && (
+              <Button variant="link" size="sm" onClick={handleMarkAllRead}>
+                모두 읽음
+              </Button>
+            )}
+          </div>
           <div
             className="grid"
             style={{ gap: 8, minWidth: 280, maxWidth: 360, maxHeight: 360, overflowY: 'auto' }}
@@ -121,12 +144,14 @@ export function Header() {
                   className="notif-item"
                   onClick={() => {
                     setNotifOpen(false);
+                    closeList();
                     markRead(n.id); // 알림을 열어본 시점에 읽음 처리(서버에서 바로 삭제됨)
                   }}
                 >
                   <p style={{ fontWeight: 600 }}>{n.title}</p>
-                  <p className="small muted">
-                    {n.desc} · {n.createdAt}
+                  <p className="small muted" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span>{n.desc}</span>
+                    <span>{n.createdAt}</span>
                   </p>
                 </Link>
               ))
