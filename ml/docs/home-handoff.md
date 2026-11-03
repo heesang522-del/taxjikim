@@ -20,7 +20,7 @@
 python ml/scripts/train_expense.py --overwrite
 ```
 
-`--overwrite`는 기존 모델을 다시 만들 때만 사용한다. 새로운 PC는 `requirements.txt` 설치가 필요하다.
+`--overwrite`는 기존 모델을 다시 만들 때만 사용한다. 새로운 PC는 `ml/requirements.txt`의 패키지 설치가 필요하다.
 같은 명령이 재학습도 담당한다. `data/expense/user_approved/`에 추가 CSV가 있으면 합치고, 없으면 기본 학습 CSV만 사용한다.
 기본 데이터·모델은 Git으로 공유하므로 이미 파일이 있으면 재학습 없이 서버 실행이 가능하다.
 
@@ -100,7 +100,7 @@ PDF·OCR에서 추출한 거래 중 지출의 설명만 모델에 전달하고 �
 
 기존 TF-IDF 모델 두 개와 FastAPI 서비스는 유지한다. 선택 옵션으로 SetFit을 따로 학습·시험한다.
 한국어를 포함한 다국어 Sentence Transformer `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`를 사용한다.
-첫 학습에는 공개 사전학습 모델 다운로드가 필요하다. 패키지는 갱신된 requirements.txt로 설치한다.
+첫 학습에는 공개 사전학습 모델 다운로드가 필요하다. 패키지는 갱신된 `ml/requirements.txt`로 설치한다.
 
 ```powershell
 python ml/scripts/train_expense.py --setfit
