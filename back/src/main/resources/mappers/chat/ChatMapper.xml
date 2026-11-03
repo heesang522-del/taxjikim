@@ -21,6 +21,23 @@
         LIMIT 1
     </select>
 
+    <!--
+        findOpenRoomByUserId와 같은 조회지만 FOR UPDATE로 "지금 커밋된 최신 데이터"를 읽는다.
+        openOrCreateRoom이 INSERT 중 OPEN_USER_ID 유니크 제약 위반(동시에 다른 요청이 먼저 만듦)을 잡은 뒤
+        이 메서드로 재조회한다 — 일반 SELECT(findOpenRoomByUserId)를 그대로 다시 쓰면 REPEATABLE READ
+        기본 격리수준에서 이 트랜잭션이 맨 처음 읽었던 스냅샷을 그대로 보게 돼, 방금 상대가 커밋한 방이
+        안 보여 null이 반환될 수 있다.
+    -->
+    <select id="findOpenRoomByUserIdForUpdate" resultType="com.kh.back.chat.dto.ChatRoomDto">
+        SELECT ROOM_ID, USER_ID, ADMIN_ID, STATUS, CREATED_AT, CLOSED_AT
+        FROM CHAT_ROOMS
+        WHERE USER_ID = #{userId}
+          AND STATUS IN ('WAITING', 'IN_PROGRESS')
+        ORDER BY CREATED_AT DESC
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
     <!-- 방 단건 조회 (상태 무관) -->
     <select id="findRoomById" resultType="com.kh.back.chat.dto.ChatRoomDto">
         SELECT ROOM_ID, USER_ID, ADMIN_ID, STATUS, CREATED_AT, CLOSED_AT
@@ -80,7 +97,11 @@
         WHERE ROOM_ID = #{roomId}
     </delete>
 
-    <!-- 관리자용 상태별 목록. 대기는 오래 기다린 순, 진행중/종료는 최신순으로 보여준다. -->
+    <!--
+        관리자용 상태별 목록 커서 페이징 조회. 대기는 오래 기다린 순, 진행중/종료는 최신순으로 보여준다.
+        ROOM_ID는 자동 증가 PK라 생성 순서와 항상 같이 움직여서 정렬·커서 기준으로 그대로 쓸 수 있다.
+        대기(ASC)는 cursorId보다 큰(= 더 나중에 생성된) 방부터, 진행중/종료(DESC)는 cursorId보다 작은(= 더 오래된) 방부터 내려준다.
+    -->
     <select id="findRoomsByStatus" resultType="com.kh.back.chat.dto.ChatRoomSummaryDto">
         SELECT
             cr.ROOM_ID,
@@ -97,10 +118,17 @@
         FROM CHAT_ROOMS cr
         INNER JOIN USERS u ON u.USER_ID = cr.USER_ID
         WHERE cr.STATUS = #{status}
+        <if test="cursorId != null and status == 'WAITING'">
+          AND cr.ROOM_ID &gt; #{cursorId}
+        </if>
+        <if test="cursorId != null and status != 'WAITING'">
+          AND cr.ROOM_ID &lt; #{cursorId}
+        </if>
         <choose>
-            <when test="status == 'WAITING'">ORDER BY cr.CREATED_AT ASC</when>
-            <otherwise>ORDER BY cr.CREATED_AT DESC</otherwise>
+            <when test="status == 'WAITING'">ORDER BY cr.ROOM_ID ASC</when>
+            <otherwise>ORDER BY cr.ROOM_ID DESC</otherwise>
         </choose>
+        LIMIT #{limit}
     </select>
 
     <!-- 방 단건 요약 조회. 새로고침 후 관리자 화면에서 선택했던 방을 복원할 때 쓴다(상태 무관). -->
@@ -136,12 +164,21 @@
     </update>
 
     <!-- 담당 관리자 본인의 IN_PROGRESS 방만 종료할 수 있다. -->
-    <update id="closeRoom">
+    <update id="closeAdminRoom">
         UPDATE CHAT_ROOMS
         SET STATUS = 'CLOSED', CLOSED_AT = CURRENT_TIMESTAMP
         WHERE ROOM_ID = #{roomId}
           AND ADMIN_ID = #{adminId}
           AND STATUS = 'IN_PROGRESS'
+    </update>
+
+    <!-- 회원 본인의 방만 종료할 수 있다. 관리자 배정 여부(WAITING/IN_PROGRESS)와 무관하게 취소할 수 있다. -->
+    <update id="closeUserRoom">
+        UPDATE CHAT_ROOMS
+        SET STATUS = 'CLOSED', CLOSED_AT = CURRENT_TIMESTAMP
+        WHERE ROOM_ID = #{roomId}
+        AND USER_ID = #{userId}
+        AND STATUS IN ('WAITING', 'IN_PROGRESS')
     </update>
 
     <!-- 담당 관리자가 진행중으로 맡고 있는 모든 방의 안 읽은 메시지 수 합계 (대시보드) -->
