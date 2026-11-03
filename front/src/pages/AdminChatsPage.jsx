@@ -17,7 +17,7 @@ const TONE = { WAITING: 'warn', IN_PROGRESS: 'primary', CLOSED: 'neutral' };
 export default function AdminChatsPage() {
   const { user } = useAuth();
   const {
-    status, setStatus, rooms, listLoading, listError, unreadByRoom,
+    status, setStatus, rooms, listLoading, listError, hasMore, loadingMore, loadMore, unreadByRoom,
     selectedRoom, messages, messagesLoading, connected, send, open, close, notice,
   } = useAdminChat(user?.userId);
   const toast = useToast();
@@ -76,28 +76,39 @@ export default function AdminChatsPage() {
           {listLoading ? (
             <p className="state-msg">불러오는 중입니다.</p>
           ) : rooms.length ? (
-            rooms.map((r) => (
-              <div key={r.roomId} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
-                <div className="row between">
-                  <b>{r.nickname}</b>
-                  <span className="row" style={{ gap: 6 }}>
-                    {unreadByRoom[r.roomId] > 0 && <Pill tone="danger">새 메시지 {unreadByRoom[r.roomId]}</Pill>}
-                    <Pill tone={TONE[r.status]}>{LABEL[r.status]}</Pill>
-                  </span>
+            <div
+              style={{ maxHeight: 420, overflowY: 'auto' }}
+              onScroll={(e) => {
+                const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+                // 스크롤이 바닥에서 40px 이내로 가까워지면 다음 페이지를 미리 불러온다.
+                if (scrollHeight - scrollTop - clientHeight < 40) loadMore();
+              }}
+            >
+              {rooms.map((r) => (
+                <div key={r.roomId} style={{ padding: '10px 0', borderTop: '1px solid var(--border)' }}>
+                  <div className="row between">
+                    <b>{r.nickname}</b>
+                    <span className="row" style={{ gap: 6 }}>
+                      {unreadByRoom[r.roomId] > 0 && <Pill tone="danger">새 메시지 {unreadByRoom[r.roomId]}</Pill>}
+                      <Pill tone={TONE[r.status]}>{LABEL[r.status]}</Pill>
+                    </span>
+                  </div>
+                  <p className="small" style={{ margin: '4px 0' }}>
+                    {r.lastMessage?.length > 40 ? `${r.lastMessage.slice(0, 40)}…` : r.lastMessage}
+                  </p>
+                  <p className="small muted">
+                    {r.status === 'WAITING' ? `대기 ${formatWaiting(r.createdAt)}` : r.status === 'CLOSED' ? `종료 ${formatDateTime(r.closedAt)}` : `시작 ${formatDateTime(r.createdAt)}`}
+                  </p>
+                  <div style={{ marginTop: 6 }}>
+                    <Button size="sm" variant={r.status === 'WAITING' ? 'primary' : 'soft'} onClick={() => handleOpen(r)}>
+                      {r.status === 'WAITING' ? '입장' : '열기'}
+                    </Button>
+                  </div>
                 </div>
-                <p className="small" style={{ margin: '4px 0' }}>
-                  {r.lastMessage?.length > 40 ? `${r.lastMessage.slice(0, 40)}…` : r.lastMessage}
-                </p>
-                <p className="small muted">
-                  {r.status === 'WAITING' ? `대기 ${formatWaiting(r.createdAt)}` : r.status === 'CLOSED' ? `종료 ${formatDateTime(r.closedAt)}` : `시작 ${formatDateTime(r.createdAt)}`}
-                </p>
-                <div style={{ marginTop: 6 }}>
-                  <Button size="sm" variant={r.status === 'WAITING' ? 'primary' : 'soft'} onClick={() => handleOpen(r)}>
-                    {r.status === 'WAITING' ? '입장' : '열기'}
-                  </Button>
-                </div>
-              </div>
-            ))
+              ))}
+              {loadingMore && <p className="small muted" style={{ textAlign: 'center' }}>불러오는 중...</p>}
+              {!hasMore && <p className="small muted" style={{ textAlign: 'center' }}>마지막 상담입니다</p>}
+            </div>
           ) : (
             <p className="state-msg">{LABEL[status]} 상태의 상담이 없습니다</p>
           )}

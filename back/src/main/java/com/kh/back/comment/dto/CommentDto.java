@@ -2,10 +2,16 @@ package com.kh.back.comment.dto;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.kh.back.common.util.DateTimeUtil;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class CommentDto {
     private Long commentId;
     private Long postId;

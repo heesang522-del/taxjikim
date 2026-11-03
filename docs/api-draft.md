@@ -119,16 +119,17 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 | GET | `/api/v1/chat/rooms/{roomId}/messages` | 본인 방만 조회 가능 |
 | PATCH | `/api/v1/chat/rooms/{roomId}/messages/read` | 상대(관리자)가 보낸 메시지를 읽음 처리 |
 | GET | `/api/v1/chat/rooms/{roomId}/unread-count` | 상대가 보낸 안읽은 메시지 수 |
+| POST | `/api/v1/chat/rooms/{roomId}/close` | 상담 종료. 본인의 방만 가능(대기중이어도 취소 가능). 종료 시 "회원이 상담을 종료하였습니다." 메시지를 그 방에 남긴다 |
 
 ### 관리자 (`ADMIN` 권한, `/api/v1/admin/**`)
 
 | 메서드 | 경로 | 요청 |
 | --- | --- | --- |
-| GET | `/api/v1/admin/chat/rooms` | 쿼리 `status` (WAITING/IN_PROGRESS/CLOSED) |
+| GET | `/api/v1/admin/chat/rooms` | 쿼리 `status`(WAITING/IN_PROGRESS/CLOSED, 필수), `cursorId`·`size`(선택, 커서 페이징/무한스크롤). 응답 `meta`는 `hasMore`·`nextCursor` |
 | GET | `/api/v1/admin/chat/rooms/{roomId}` | 방 단건 요약 조회(상태 무관). 새로고침 후 화면에서 선택했던 방 복원용 |
 | GET | `/api/v1/admin/chat/rooms/waiting-count` | 대기 상담방 수 (대시보드) |
 | POST | `/api/v1/admin/chat/rooms/{roomId}/enter` | 대기 → 진행중, 담당 관리자로 기록. 이미 처리 중이면 409 `ROOM_ALREADY_CLAIMED` |
-| POST | `/api/v1/admin/chat/rooms/{roomId}/close` | 상담 종료. 담당 관리자 본인의 진행중 방만 가능 |
+| POST | `/api/v1/admin/chat/rooms/{roomId}/close` | 상담 종료. 담당 관리자 본인의 진행중 방만 가능. 종료 시 "관리자가 상담을 종료하였습니다." 메시지를 그 방에 남긴다 |
 | POST | `/api/v1/admin/chat/rooms/{roomId}/messages` | JSON `content` |
 | GET | `/api/v1/admin/chat/rooms/{roomId}/messages` | 담당 관리자만 조회 가능 |
 | PATCH | `/api/v1/admin/chat/rooms/{roomId}/messages/read` | 회원이 보낸 메시지를 읽음 처리 |
@@ -143,6 +144,7 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 - 경로 `/ws/chat/{roomId}`. 연결 시 REST와 같은 JWT(쿠키 또는 `Authorization` 헤더)로 인증하며, 그 방의 회원 본인이거나 담당 관리자가 아니면 핸드셰이크에서 거절된다(401/403/404).
 - 보낼 때: `{"content": "..."}` 문자열 메시지. 연결을 끊고 싶을 때는 문자열 `"quit"`을 보낸다.
 - 받을 때: 저장 성공 시 `{"type":"MESSAGE","message": ChatMessageDto}`, 실패 시 `{"type":"ERROR","code":"...","message":"..."}`. 보낸 사람 본인에게는 되돌려주지 않으므로 화면에서 낙관적으로 붙여야 한다.
+- 상담 종료(REST `POST .../close`)가 성공하면, 종료한 쪽이 아닌 상대방이 그 방에 연결돼 있을 때 `{"type":"MESSAGE","message": ChatMessageDto,"roomClosed":true}`를 받는다. `message`는 "회원이/관리자가 상담을 종료하였습니다." 안내이고, `roomClosed:true`는 메시지를 붙인 뒤 방 상태도 CLOSED로 반영해야 한다는 신호다. 종료한 사람 본인은 REST 응답으로 이미 반영했으므로 이 이벤트를 받지 않는다.
 - 연결이 끊긴 동안 쌓인 메시지는 다시 보내주지 않는다. 재연결 후 REST 목록 API로 다시 불러오는 것은 클라이언트 책임이다. HTTP 응답 규격(`ApiResponse`)은 WebSocket 문자열 메시지에 적용하지 않는다.
 
 ## 검증 범위
