@@ -4,7 +4,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ROUTES } from './routes';
 import { useAuth } from '../store/useAuthStore';
-import { getNotifications, getUnreadNotificationCount, markNotificationRead } from '../api/notifications';
+import {
+  getNotifications,
+  getUnreadNotificationCount,
+  markAllNotificationsRead,
+  markNotificationRead,
+} from '../api/notifications';
 
 const PAGE_SIZE = 10; // 한 번에 불러오는 알림 개수. 서버 기본값(10)과 맞춘다
 const SUBSCRIBE_URL = '/api/v1/notifications/subscribe'; // EventSource는 axios client를 거치지 않아 경로를 직접 적는다
@@ -157,5 +162,14 @@ export function useNotifications() {
       .catch(() => {}); // 실패하면 목록에 남겨두고, 다음 알림 이벤트·재연결 시 실제 서버 상태로 맞춰진다
   }, []);
 
-  return { items, unreadCount, hasMore, loadingMore, openList, closeList, loadMore, markRead };
+  // 미읽음 알림을 전부 읽음 처리한다. 서버에서 바로 삭제되므로 화면 목록도 전부 비운다.
+  // 단건 읽음(markRead)과 달리 실패를 삼키지 않고 그대로 던져서, 호출한 쪽(버튼)이 사용자에게 알릴 수 있게 한다.
+  const markAllRead = useCallback(() => {
+    return markAllNotificationsRead().then(() => {
+      setItems([]);
+      setUnreadCount(0);
+    });
+  }, []);
+
+  return { items, unreadCount, hasMore, loadingMore, openList, closeList, loadMore, markRead, markAllRead };
 }

@@ -81,6 +81,13 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
+    public void markAllAsRead(Long userId) {
+        // 단건 읽음 처리와 달리, 읽을 미읽음 알림이 하나도 없어도(처리 행 수 0) 오류가 아니다.
+        notificationMapper.markAllAsReadByUserId(userId);
+    }
+
+    @Override
+    @Transactional
     public void notifyPostComment(Long postId, Long postAuthorId, Long commenterId, String commenterNickname,
                                    String postTitle, String commentContent) {
         // 본인 글에 본인이 댓글을 달면 알림을 보내지 않는다. 탈퇴 여부는 체크하지 않는다.

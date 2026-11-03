@@ -79,5 +79,15 @@ public class NotificationApiController {
         return ApiResponse.ok(null);
     }
 
+    // 로그인한 회원의 미읽음 알림을 전부 읽음 처리. 읽은 알림은 곧바로 목록에서 빠진다(소프트 삭제).
+    @PatchMapping("/read-all")
+    public ApiResponse<Void> markAllAsRead(@AuthenticationPrincipal CustomUserDetails principal) {
+        if (principal == null || principal.getUserId() == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+
+        notificationService.markAllAsRead(principal.getUserId());
+        return ApiResponse.ok(null);
+    }
 
 }
