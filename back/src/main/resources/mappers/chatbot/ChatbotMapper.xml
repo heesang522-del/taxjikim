@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.chatbot.mapper.ChatbotMapper">
+
+    <!-- 소유자 조건은 항상 적용하고 대화방 조건만 선택적으로 적용한다. -->
+    <select id="findConversations"
+            resultType="com.kh.back.chatbot.dto.ChatbotConversationDto">
+        SELECT conversation_id,
+        user_id,
+        title,
+        revision,
+        created_at,
+        updated_at
+        FROM chatbot_conversations
+        WHERE user_id = #{userId}
+        AND deleted_at IS NULL
+
+        <if test="conversationId != null">
+            AND conversation_id = #{conversationId}
+        </if>
+
+        ORDER BY updated_at DESC, conversation_id DESC
+    </select>
+
+    <insert id="insertConversation"
+            parameterType="com.kh.back.chatbot.dto.ChatbotConversationDto"
+            useGeneratedKeys="true"
+            keyProperty="conversationId">
+        INSERT INTO chatbot_conversations (
+        user_id,
+        title,
+        revision,
+        created_at,
+        updated_at
+        )
+        VALUES (
+        #{userId},
+        #{title},
+        0,
+        UTC_TIMESTAMP(6) + INTERVAL 9 HOUR,
+        UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        )
+    </insert>
+
+    <!-- 메시지 조회에서도 사용자 소유권을 검사한다. -->
+    <select id="findMessages"
+            resultType="com.kh.back.chatbot.dto.ChatbotMessageDto">
+        SELECT m.message_id,
+        m.role,
+        m.content
+        FROM chatbot_messages m
+        JOIN chatbot_conversations c
+        ON c.conversation_id = m.conversation_id
+        WHERE c.conversation_id = #{conversationId}
+        AND c.user_id = #{userId}
+        AND c.deleted_at IS NULL
+        AND m.deleted_at IS NULL
+        ORDER BY m.message_id ASC
+    </select>
+
+    <!-- 같은 버전을 읽은 동시 요청 중 먼저 저장한 요청만 성공한다. -->
+    <update id="updateConversation">
+        UPDATE chatbot_conversations
+        SET title = CASE
+        WHEN revision = 0 THEN #{title}
+        ELSE title
+        END,
+        revision = revision + 1,
+        updated_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        WHERE conversation_id = #{conversationId}
+        AND user_id = #{userId}
+        AND revision = #{revision}
+        AND deleted_at IS NULL
+    </update>
+
+    <insert id="insertMessage">
+        INSERT INTO chatbot_messages (
+        conversation_id,
+        role,
+        content,
+        created_at
+        )
+        VALUES (
+        #{conversationId},
+        #{role},
+        #{content},
+        UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        )
+    </insert>
+
+
+    <!-- 소유자의 대화방만 논리 삭제하고 진행 중인 답변의 저장도 차단한다. -->
+    <update id="deleteConversation">
+        UPDATE chatbot_conversations
+        SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR,
+        updated_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR,
+        revision = revision + 1
+        WHERE conversation_id = #{conversationId}
+        AND user_id = #{userId}
+        AND deleted_at IS NULL
+    </update>
+
+    <!-- 대화방 삭제가 성공한 경우에만 같은 트랜잭션에서 호출한다. -->
+    <update id="deleteMessages">
+        UPDATE chatbot_messages
+        SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        WHERE conversation_id = #{conversationId}
+        AND deleted_at IS NULL
+    </update>
+</mapper>

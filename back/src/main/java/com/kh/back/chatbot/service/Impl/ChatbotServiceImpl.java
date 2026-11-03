@@ -1,15 +1,20 @@
 package com.kh.back.chatbot.service.Impl;
 
+import com.kh.back.auth.security.CustomUserDetails;
+import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
 import com.kh.back.chatbot.dto.ChatbotMessageDto;
 import com.kh.back.chatbot.dto.ChatbotReply;
+import com.kh.back.chatbot.dto.ChatbotUsageDto;
+import com.kh.back.chatbot.service.ChatbotHistoryService;
 import com.kh.back.chatbot.service.ChatbotService;
+import com.kh.back.chatbot.service.ChatbotUsageService;
 import com.kh.back.chatbot.service.UserContextProvider;
 import com.kh.back.chatbot.util.PiiMasker;
 import com.kh.back.common.exception.ApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
@@ -17,56 +22,42 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
 public class ChatbotServiceImpl implements ChatbotService {
 
-    // 금융 기준이 아닌 챗봇 운영 기준이다.
-    private static final int DAILY_LIMIT = 30;
     private static final int MAX_LENGTH = 500;
-
-    private static final ZoneId KOREA_ZONE =
-            ZoneId.of("Asia/Seoul");
+    private static final int CONTEXT_MESSAGES = 10;
 
     private final ChatClient chatClient;
-    private final ChatMemory chatMemory;
+    private final ChatbotHistoryService historyService;
+    private final ChatbotUsageService chatbotUsageService;
     private final UserContextProvider userContextProvider;
     private final boolean enabled;
 
-    // 사용자별 한국 날짜와 질문 시도 횟수를 보관한다.
-    // 서버 재시작 시 초기화되며 여러 서버 간에는 공유되지 않는다.
-    private final Map<Long, DailyUsage> usage =
-            new ConcurrentHashMap<>();
-
     public ChatbotServiceImpl(
             ChatClient.Builder builder,
-            ChatMemory chatMemory,
+            ChatbotHistoryService historyService,
+            ChatbotUsageService chatbotUsageService,
             UserContextProvider userContextProvider,
             @Value("classpath:prompts/Chatbot-System.st")
             Resource systemPrompt,
             @Value("${spring.ai.openai.api-key:no-key}")
             String apiKey
     ) {
-        this.chatMemory = chatMemory;
+        this.historyService = historyService;
+        this.chatbotUsageService = chatbotUsageService;
         this.userContextProvider = userContextProvider;
 
+        // 이전 대화는 DB에서 조회해 직접 전달한다.
         this.chatClient = builder
-                // Windows에서도 시스템 지침의 한글이 깨지지 않게 읽는다.
                 .defaultSystem(
                         systemPrompt,
                         StandardCharsets.UTF_8
-                )
-                // 사용자별 대화를 다음 질문에 연결하고 저장한다.
-                .defaultAdvisors(
-                        MessageChatMemoryAdvisor.builder(chatMemory)
-                                .build()
                 )
                 .build();
 
@@ -75,17 +66,62 @@ public class ChatbotServiceImpl implements ChatbotService {
                 && !"no-key".equals(apiKey.trim());
 
         if (!enabled) {
-            log.warn(
-                    "OPENAI_API_KEY가 없어 챗봇 호출을 비활성화합니다."
-            );
+            log.warn("API 키가 없어 챗봇 호출을 비활성화합니다.");
         }
     }
 
     @Override
-    public ChatbotReply ask(Long userId, String message) {
-        validateUserId(userId);
+    public List<ConversationResponse> getConversations(
+            CustomUserDetails principal
+    ) {
+        Long userId = requireUserId(principal);
 
-        // 키가 없는 PC에서는 외부 AI 호출을 시작하지 않는다.
+        return historyService.getConversations(userId);
+    }
+
+    @Override
+    public ConversationResponse createConversation(
+            CustomUserDetails principal
+    ) {
+        Long userId = requireUserId(principal);
+
+        return historyService.createConversation(userId);
+    }
+
+    @Override
+    public List<ChatbotMessageDto> getMessages(
+            CustomUserDetails principal,
+            Long conversationId
+    ) {
+        Long userId = requireUserId(principal);
+
+        return historyService.getSnapshot(
+                userId,
+                conversationId
+        ).messages();
+    }
+
+    @Override
+    public void deleteConversation(
+            CustomUserDetails principal,
+            Long conversationId
+    ) {
+        Long userId = requireUserId(principal);
+
+        historyService.deleteConversation(
+                userId,
+                conversationId
+        );
+    }
+
+    @Override
+    public ChatbotReply ask(
+            CustomUserDetails principal,
+            Long conversationId,
+            String message
+    ) {
+        Long userId = requireUserId(principal);
+
         if (!enabled) {
             throw new ApiException(
                     HttpStatus.SERVICE_UNAVAILABLE,
@@ -98,27 +134,55 @@ public class ChatbotServiceImpl implements ChatbotService {
                 ? ""
                 : message.strip();
 
-        if (question.isEmpty()
-                || question.length() > MAX_LENGTH) {
+        if (question.isEmpty() || question.length() > MAX_LENGTH) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_ERROR",
-                    "질문은 1~" + MAX_LENGTH + "자로 입력해주세요.",
+                    "질문은 1~500자로 입력해주세요.",
                     Map.of(
                             "message",
-                            "질문은 1~" + MAX_LENGTH + "자로 입력해주세요."
+                            "질문은 1~500자로 입력해주세요."
                     )
             );
         }
 
-        // 설정·입력 검사가 끝난 요청에 대해 질문 시도 횟수를 계산한다.
-        // 외부 호출이 실패해도 시도 횟수에 포함한다.
-        int used = reserveUsage(userId);
+        // 사용량 예약 전에 대화방의 존재 여부와 소유권을 확인한다.
+        var snapshot = historyService.getSnapshot(
+                userId,
+                conversationId
+        );
+
+        // 별도 DB 트랜잭션으로 사용량을 예약한 뒤 AI를 호출한다.
+        ChatbotUsageDto reservedUsage =
+                chatbotUsageService.reserveUsage(principal);
+
+        String maskedQuestion = PiiMasker.mask(question);
+
+        List<Message> context = new ArrayList<>();
+        List<ChatbotMessageDto> history = snapshot.messages();
+
+        // 전체 기록은 DB에 유지하고 AI에는 최근 10개만 전달한다.
+        int start = Math.max(
+                0,
+                history.size() - CONTEXT_MESSAGES
+        );
+
+        for (int index = start; index < history.size(); index++) {
+            ChatbotMessageDto item = history.get(index);
+            String content = PiiMasker.mask(item.getContent());
+
+            if ("USER".equals(item.getRole())) {
+                context.add(new UserMessage(content));
+            } else if ("ASSISTANT".equals(item.getRole())) {
+                context.add(new AssistantMessage(content));
+            }
+        }
+
+        context.add(new UserMessage(maskedQuestion));
 
         String reply;
 
         try {
-            // 사용자 관련 안내에도 기존 마스킹 함수를 적용한다.
             String userContext = PiiMasker.mask(
                     userContextProvider.build(userId)
             );
@@ -128,19 +192,11 @@ public class ChatbotServiceImpl implements ChatbotService {
                             "userContext",
                             userContext
                     ))
-                    // 질문을 템플릿이 아닌 메시지로 전달한다.
-                    .messages(
-                            new UserMessage(PiiMasker.mask(question))
-                    )
-                    .advisors(advisor -> advisor.param(
-                            ChatMemory.CONVERSATION_ID,
-                            conversationId(userId)
-                    ))
+                    .messages(context)
                     .call()
                     .content();
-
         } catch (RuntimeException exception) {
-            // 키·질문·외부 오류 본문이 로그에 노출되지 않게 한다.
+            // 외부 호출 실패도 기존 정책대로 질문 시도 횟수에 포함한다.
             log.warn(
                     "챗봇 호출 실패. 예외유형={}",
                     exception.getClass().getSimpleName()
@@ -161,91 +217,35 @@ public class ChatbotServiceImpl implements ChatbotService {
             );
         }
 
-        return new ChatbotReply(
-                reply,
-                DAILY_LIMIT - used
-        );
-    }
+        String maskedReply = PiiMasker.mask(reply);
 
-    @Override
-    public List<ChatbotMessageDto> getHistory(Long userId) {
-        validateUserId(userId);
-
-        // 로그인한 사용자의 대화만 가져온다.
-        return chatMemory.get(conversationId(userId))
-                .stream()
-                .map(message -> new ChatbotMessageDto(
-                        message.getMessageType().name(),
-                        message.getText()
-                ))
-                .toList();
-    }
-
-    @Override
-    public void clearHistory(Long userId) {
-        validateUserId(userId);
-
-        // 대화 삭제로 하루 사용 횟수까지 초기화하지는 않는다.
-        chatMemory.clear(conversationId(userId));
-    }
-
-    private String conversationId(Long userId) {
-        return "user-" + userId;
-    }
-
-    private int reserveUsage(Long userId) {
-        LocalDate today = LocalDate.now(KOREA_ZONE);
-
-        // 날짜가 바뀌면 해당 사용자의 하루 사용량을 초기화한다.
-        DailyUsage dailyUsage = usage.compute(
+        // 질문과 답변을 함께 저장하고 대화 버전 충돌을 검사한다.
+        historyService.saveExchange(
                 userId,
-                (key, previous) -> {
-                    if (previous == null
-                            || !previous.date().equals(today)) {
-                        return new DailyUsage(
-                                today,
-                                new AtomicInteger()
-                        );
-                    }
-
-                    return previous;
-                }
+                conversationId,
+                snapshot.revision(),
+                maskedQuestion,
+                maskedReply
         );
 
-        // 동시 요청에서도 한도를 초과해 호출하지 않도록 원자적으로 예약한다.
-        while (true) {
-            int current = dailyUsage.count().get();
-
-            if (current >= DAILY_LIMIT) {
-                throw new ApiException(
-                        HttpStatus.TOO_MANY_REQUESTS,
-                        "CHATBOT_LIMIT",
-                        "오늘 질문 횟수(" + DAILY_LIMIT + "회)를 모두 사용했습니다."
-                );
-            }
-
-            if (dailyUsage.count().compareAndSet(
-                    current,
-                    current + 1
-            )) {
-                return current + 1;
-            }
-        }
+        return ChatbotReply.builder()
+                .reply(maskedReply)
+                .remaining(reservedUsage.remaining())
+                .build();
     }
 
-    private void validateUserId(Long userId) {
-        if (userId == null || userId <= 0) {
+    private Long requireUserId(CustomUserDetails principal) {
+        // 인증 객체에서 확인한 사용자 ID만 DB 처리에 사용한다.
+        if (principal == null
+                || principal.getUserId() == null
+                || principal.getUserId() <= 0) {
             throw new ApiException(
                     HttpStatus.UNAUTHORIZED,
                     "AUTHENTICATION_REQUIRED",
                     "로그인이 필요합니다."
             );
         }
-    }
 
-    private record DailyUsage(
-            LocalDate date,
-            AtomicInteger count
-    ) {
+        return principal.getUserId();
     }
 }

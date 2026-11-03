@@ -1,15 +1,15 @@
 package com.kh.back.chatbot.dto;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 @Getter
 @Setter
-@NoArgsConstructor
+@Builder
 @AllArgsConstructor
+@NoArgsConstructor
 public class ChatbotMessageDto {
+
+    private Long messageId;
 
     // user: 사용자 질문, assistant: AI 답변
     private String role;

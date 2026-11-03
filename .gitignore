@@ -156,3 +156,11 @@ workers
 /uploads/profile/*
 !/uploads/profile/default-profile.svg
 /docs/mypage-consultation-history-design.md
+
+# 로컬 DB 복원용 백업
+/restore-before-reset.sql
+
+# 로컬 DB 덤프와 복구 데이터
+/current-*.sql
+/mysql-recovery-data/
+

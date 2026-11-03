@@ -8,7 +8,6 @@ import { man } from '../utils/format';
 import { useTaxResult } from '../utils/useTaxResult';
 import { useToast } from '../store/useToastStore';
 import { useNavigate } from 'react-router-dom';
-import { Link } from 'react-router-dom';
 const STEPS = [
   ['1. 입력', '직접 입력하거나 PDF를 올립니다. 입금액만 넣으면 3.3% 원천징수는 자동으로 역산합니다.', 'uploadCloud'],
   ['2. 결과와 근거', '총수입에서 환급액까지 단계별 계산 과정을 보여주고, 월별 추이와 사업자 등록 전·후 비교를 함께 냅니다.', 'barChart'],
@@ -42,7 +41,6 @@ export default function HomePage() {
             >
               가입 없이 샘플로 체험
             </Button>
-            <Link to="/chatbot">AI 챗봇 시작하기</Link>
           </div>
 
           <p className="small muted">세율·공제 한도는 예시값입니다. 신고 전 국세청 자료로 확인하세요.</p>

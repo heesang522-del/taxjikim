@@ -1,5 +1,7 @@
 package com.kh.back.chatbot.service;
 
+import com.kh.back.auth.security.CustomUserDetails;
+import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
 import com.kh.back.chatbot.dto.ChatbotMessageDto;
 import com.kh.back.chatbot.dto.ChatbotReply;
 
@@ -7,12 +9,27 @@ import java.util.List;
 
 public interface ChatbotService {
 
-    // 사용자의 질문에 답변한다.
-    ChatbotReply ask(Long userId, String message);
+    List<ConversationResponse> getConversations(
+            CustomUserDetails principal
+    );
 
-    // 해당 사용자의 대화 기록을 조회한다.
-    List<ChatbotMessageDto> getHistory(Long userId);
+    ConversationResponse createConversation(
+            CustomUserDetails principal
+    );
 
-    // 해당 사용자의 대화 기록을 삭제한다.
-    void clearHistory(Long userId);
+    List<ChatbotMessageDto> getMessages(
+            CustomUserDetails principal,
+            Long conversationId
+    );
+
+    ChatbotReply ask(
+            CustomUserDetails principal,
+            Long conversationId,
+            String message
+    );
+
+    void deleteConversation(
+            CustomUserDetails principal,
+            Long conversationId
+    );
 }
