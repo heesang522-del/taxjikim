@@ -132,8 +132,9 @@ export function Header() {
                   }}
                 >
                   <p style={{ fontWeight: 600 }}>{n.title}</p>
-                  <p className="small muted">
-                    {n.desc} · {n.createdAt}
+                  <p className="small muted" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span>{n.desc}</span>
+                    <span>{n.createdAt}</span>
                   </p>
                 </Link>
               ))

@@ -11,6 +11,19 @@ const SUBSCRIBE_URL = '/api/v1/notifications/subscribe'; // EventSource는 axios
 const RECONNECT_DELAY_MS = 5000; // 연결이 끊겼을 때 재연결을 시도하기 전 대기 시간
 const MAX_RECONNECT_ATTEMPTS = 5; // 계속 실패하면 재시도를 멈춘다. 로그인 상태가 바뀌면(재로그인 등) 다시 시도한다
 
+// 알림 시각은 분 단위까지만 "00:00" 형식(한국 시간)으로 표시한다. CommentSection의 formatCommentTime과 동일한 규칙.
+function formatNotificationTime(value) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleTimeString('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+}
+
 // 서버 알림을 화면이 쓰는 모양으로 바꾼다.
 // type(NOTICE/COMMENT)과 무관하게 targetType은 항상 POST·targetId는 게시글 ID라서 상세 경로를 하나로 통일한다.
 // 목록에는 항상 미읽음 알림만 내려오므로 읽음 여부는 따로 담지 않는다.
@@ -19,7 +32,7 @@ function toNotificationItem(n) {
     id: n.notificationId,
     title: n.title,
     desc: n.type === 'NOTICE' ? '새 공지가 올라왔습니다' : n.message,
-    createdAt: n.createdAt,
+    createdAt: formatNotificationTime(n.createdAt),
     to: ROUTES.postDetail(n.targetId),
   };
 }
