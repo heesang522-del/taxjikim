@@ -40,7 +40,8 @@ export function checkEmail(email) {
 }
 
 export function sendEmailVerification(email) {
-  return requestUser({ url: '/email-verifications', method: 'POST', data: { email } });
+  // 외부 메일 서버의 발송 완료 응답을 기다릴 수 있도록 이 요청만 30초까지 대기한다.
+  return requestUser({ url: '/email-verifications', method: 'POST', data: { email }, timeout: 30000 });
 }
 
 export function verifyEmail(email, code) {
