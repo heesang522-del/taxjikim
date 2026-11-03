@@ -59,7 +59,9 @@ public class TaxServiceImpl implements TaxService {
             }
         }
 
-        // 4. 올해 자료라면 남은 달에 월평균 예상 금액을 추가한다.
+        // 4. 실제 합계를 보관하고, 올해 자료라면 남은 달에 월평균 예상 금액을 추가한다.
+        BigDecimal actualIncome = sumMonthlyAmounts(incomes);
+        BigDecimal actualExpense = sumMonthlyAmounts(expenses);
         incomes = addPredictedMonths(incomes, period);
         expenses = addPredictedMonths(expenses, period);
 
@@ -69,7 +71,9 @@ public class TaxServiceImpl implements TaxService {
 
         // 6. 세금을 계산하고 산출 근거·월별 목록·등록 여부를 함께 반환한다.
         return new TaxCalculationResultDto(calculateBreakdown(input), incomes, expenses,
-                input.getBusinessRegistered());
+                input.getBusinessRegistered(), actualIncome,
+                input.getTotalIncome().subtract(actualIncome), actualExpense,
+                input.getTotalExpense().subtract(actualExpense));
     }
 
     // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.

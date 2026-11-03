@@ -90,7 +90,15 @@ export default function CalcResultPage() {
         총 세금은 기납부세액을 차감하기 전 소득세와 지방소득세의 합계이며, 추가 납부액이나 환급액이 아닙니다. 입력
         조건과 단순화 가정을 적용한 예상 결과이며 실제 신고 세액과 다를 수 있습니다.
       </p>
-      <SummaryCards result={breakdown} isLoading={isLoading} errorMessage={errorMessage} />
+      <SummaryCards
+        result={breakdown}
+        actualIncome={result?.actualIncome}
+        predictedIncome={result?.predictedIncome}
+        actualExpense={result?.actualExpense}
+        predictedExpense={result?.predictedExpense}
+        isLoading={isLoading}
+        errorMessage={errorMessage}
+      />
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         {!loggedIn && (
           <span className="small muted" style={{ alignSelf: 'center' }}>
