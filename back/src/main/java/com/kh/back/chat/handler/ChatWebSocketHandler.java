@@ -2,11 +2,14 @@ package com.kh.back.chat.handler;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.event.ChatRoomClosedEvent;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
@@ -48,11 +51,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 session.getAttributes().get("userId"));
     }
 
-    // 클라이언트가 메시지를 보낼 때마다 호출된다. (연결을 끊고 싶을 때 보내는 "quit"만 예외로 처리)
+    // 클라이언트가 메시지를 보낼 때마다 호출된다. (연결을 끊고 싶을 때 보내는 "quit", 하트비트용 "ping"만 예외로 처리)
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) {
         if ("quit".equals(message.getPayload())) {
             closeQuietly(session);
+            return;
+        }
+        if ("ping".equals(message.getPayload())) {
+            sendPong(session);
             return;
         }
 
@@ -107,6 +114,31 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    // 상담 종료는 REST로 처리되고, 종료한 쪽 본인은 그 응답으로 바로 화면이 갱신된다. 상대방이 그 방에
+    // 연결돼 있으면(패널을 보고만 있어도) 종료 안내를 실시간으로 전달한다. ChatServiceImpl과 서로 직접
+    // 참조하면 순환 의존이 생겨서, 트랜잭션 이벤트로 느슨하게 연결했다. 방을 실제로 CLOSED로 바꾸고 안내
+    // 메시지를 저장한 트랜잭션이 커밋된 뒤에만 받도록 AFTER_COMMIT으로 구독한다.
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onRoomClosed(ChatRoomClosedEvent event) {
+        Set<WebSocketSession> roomSessions = rooms.get(String.valueOf(event.roomId()));
+        if (roomSessions == null) {
+            return;
+        }
+        for (WebSocketSession recipient : roomSessions) {
+            Long recipientId = (Long) recipient.getAttributes().get("userId");
+            // 종료한 사람 본인(다른 탭 포함)은 REST 응답으로 이미 반영했으니 건너뛴다.
+            if (recipientId == null || recipientId.equals(event.closerId())) {
+                continue;
+            }
+            // roomClosed:true를 더해, 받는 쪽이 메시지를 붙인 뒤 방 상태도 CLOSED로 바꿀 수 있게 한다.
+            boolean delivered = send(recipient,
+                    Map.of("type", "MESSAGE", "message", event.notice(), "roomClosed", true));
+            if (delivered) {
+                markAsReadQuietly(event.roomId(), recipientId, (String) recipient.getAttributes().get("role"));
+            }
+        }
+    }
+
     // 회원용/관리자용 읽음 처리 메서드가 따로 있어서 role로 분기한다. 실시간 알림용 부가 처리라 실패해도 메시지 전달 자체는 막지 않는다.
     private void markAsReadQuietly(Long roomId, Long recipientId, String recipientRole) {
         try {
@@ -129,6 +161,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     // 저장이 실패했을 때(종료된 방 등). 상대방에게는 보내지 않고, 보낸 사람 본인에게만 알려준다.
     private void sendError(WebSocketSession session, String code, String errorMessage) {
         send(session, Map.of("type", "ERROR", "code", code, "message", errorMessage));
+    }
+
+    // 하트비트 응답. 클라이언트가 보낸 "ping"과 형식을 맞추기 위해 다른 메시지처럼 JSON으로 감싸지 않고 그대로 보낸다.
+    private void sendPong(WebSocketSession session) {
+        try {
+            session.sendMessage(new TextMessage("pong"));
+        } catch (IOException e) {
+            log.warn("pong 전송 실패: sessionId={}", session.getId(), e);
+        }
     }
 
     // 상대가 연결을 끊었거나 네트워크가 잠깐 끊긴 경우 전송이 실패할 수 있다. 실패하면 로그만 남기고
@@ -186,6 +227,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (roomSessions == null) {
             return;
         }
+
         roomSessions.remove(session);
         if (roomSessions.isEmpty()) {
             rooms.remove(roomId); // 그 방에 아무도 없으면 Map에서도 통째로 지워 메모리를 늘리지 않는다.

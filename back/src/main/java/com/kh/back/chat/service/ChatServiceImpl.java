@@ -2,10 +2,14 @@ package com.kh.back.chat.service;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatRoomPageDto;
 import com.kh.back.chat.dto.ChatRoomSummaryDto;
+import com.kh.back.chat.event.ChatRoomClosedEvent;
 import com.kh.back.chat.mapper.ChatMapper;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +22,14 @@ import java.util.Set;
 public class ChatServiceImpl implements ChatService {
 
     private final ChatMapper chatMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     private static final Set<String> VALID_ROOM_STATUSES = Set.of("WAITING", "IN_PROGRESS", "CLOSED");
     private static final int MAX_MESSAGE_LENGTH = 1000;
+    private static final int DEFAULT_ROOM_PAGE_SIZE = 10; // size 파라미터가 없을 때 기본 페이지 크기
+    private static final int MAX_ROOM_PAGE_SIZE = 50; // 클라이언트가 요청할 수 있는 최대 페이지 크기
+    private static final String ADMIN_CLOSE_NOTICE_CONTENT = "관리자가 상담을 종료하였습니다.";
+    private static final String MEMBER_CLOSE_NOTICE_CONTENT = "회원이 상담을 종료하였습니다.";
 
     @Override
     @Transactional
@@ -31,7 +40,15 @@ public class ChatServiceImpl implements ChatService {
         }
         // 종료된 방만 있거나 방이 없는 경우. 상담 시간과 무관하게 대기 방을 새로 만든다.
         ChatRoomDto newRoom = ChatRoomDto.builder().userId(userId).status("WAITING").build();
-        chatMapper.insertRoom(newRoom);
+        try {
+            chatMapper.insertRoom(newRoom);
+        } catch (DuplicateKeyException e) {
+            // 위의 조회와 이 INSERT 사이에 동시에 들어온 다른 요청이 먼저 방을 만든 경우.
+            // CHAT_ROOMS.OPEN_USER_ID 유니크 제약(유저당 열린 방 1개)이 막아준 것이므로, 그 방을 그대로 반환한다.
+            // 일반 조회(findOpenRoomByUserId)로는 REPEATABLE READ 스냅샷 때문에 상대가 방금 커밋한 방이
+            // 안 보일 수 있어, FOR UPDATE로 최신 커밋 데이터를 다시 읽는다.
+            return chatMapper.findOpenRoomByUserIdForUpdate(userId);
+        }
         return newRoom;
     }
 
@@ -98,12 +115,26 @@ public class ChatServiceImpl implements ChatService {
     }
 
     @Override
-    public List<ChatRoomSummaryDto> getRoomsByStatus(String status) {
+    public ChatRoomPageDto getRoomsByStatus(String status, Long cursorId, Integer size) {
         if (!VALID_ROOM_STATUSES.contains(status)) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
                     "status는 WAITING/IN_PROGRESS/CLOSED 중 하나여야 합니다.");
         }
-        return chatMapper.findRoomsByStatus(status);
+        int pageSize = resolveRoomPageSize(size);
+        // 다음 페이지가 있는지 알아보려고 한 건 더 가져온 뒤, 넘치면 마지막 한 건을 떼어내고 hasMore로 알린다.
+        List<ChatRoomSummaryDto> fetched = chatMapper.findRoomsByStatus(status, cursorId, pageSize + 1);
+        boolean hasMore = fetched.size() > pageSize;
+        List<ChatRoomSummaryDto> items = hasMore ? fetched.subList(0, pageSize) : fetched;
+        Long nextCursor = hasMore ? items.get(items.size() - 1).getRoomId() : null;
+        return new ChatRoomPageDto(items, hasMore, nextCursor);
+    }
+
+    // size가 비어있으면 기본값을, 범위를 벗어나면 1~MAX_ROOM_PAGE_SIZE로 잘라낸다.
+    private int resolveRoomPageSize(Integer size) {
+        if (size == null) {
+            return DEFAULT_ROOM_PAGE_SIZE;
+        }
+        return Math.min(Math.max(size, 1), MAX_ROOM_PAGE_SIZE);
     }
 
     @Override
@@ -134,13 +165,42 @@ public class ChatServiceImpl implements ChatService {
 
     @Override
     @Transactional
-    public void closeRoom(Long roomId, Long adminId) {
+    public void closeAdminRoom(Long roomId, Long adminId) {
         requireRoom(roomId);
-        int updated = chatMapper.closeRoom(roomId, adminId);
+        int updated = chatMapper.closeAdminRoom(roomId, adminId);
         if (updated == 0) {
             throw new ApiException(HttpStatus.CONFLICT, "ROOM_NOT_CLOSABLE",
                     "담당 중인 진행중 상담만 종료할 수 있습니다.");
         }
+        insertCloseNotice(roomId, adminId, ADMIN_CLOSE_NOTICE_CONTENT);
+    }
+
+    @Override
+    @Transactional
+    public void closeUserRoom(Long roomId, Long userId) {
+        requireRoom(roomId);
+        int updated = chatMapper.closeUserRoom(roomId, userId);
+        if (updated == 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "ROOM_NOT_CLOSABLE",
+                    "본인의 상담만 종료할 수 있습니다.");
+        }
+        insertCloseNotice(roomId, userId, MEMBER_CLOSE_NOTICE_CONTENT);
+    }
+
+    // 종료 직후 "(회원/관리자)가 상담을 종료하였습니다." 안내를 채팅방 메시지로 남겨 누가 종료했는지 알 수 있게 한다.
+    // 발신자는 종료한 쪽으로 기록해, 화면에서 상대 쪽 메시지와 같은 방식(정렬·"상담사 ·" 표시)으로도 구분된다.
+    // 종료한 사람 본인은 REST 응답으로 바로 반영하지만, 상대방은 다음 전송 시도나 목록 폴링 전까지 모르는 문제가
+    // 있었다. ChatWebSocketHandler가 이 이벤트를 받아 상대방에게 실시간으로 전달한다(둘이 서로 직접 참조하면
+    // 순환 의존이 생기므로 이벤트로 느슨하게 연결). 커밋 전에 전달되면 상대가 받고 다시 조회해도 아직 안 보일 수
+    // 있어, 이 트랜잭션이 실제로 커밋된 뒤에만 전달되도록 ChatRoomClosedEvent 리스너 쪽에서 AFTER_COMMIT으로 받는다.
+    private void insertCloseNotice(Long roomId, Long closerId, String content) {
+        ChatMessageDto notice = new ChatMessageDto();
+        notice.setRoomId(roomId);
+        notice.setSenderId(closerId);
+        notice.setContent(content);
+        chatMapper.insertMessage(notice);
+        ChatMessageDto savedNotice = chatMapper.findMessageById(notice.getMessageId());
+        eventPublisher.publishEvent(new ChatRoomClosedEvent(roomId, closerId, savedNotice));
     }
 
     @Override

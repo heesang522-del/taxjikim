@@ -3,9 +3,11 @@ package com.kh.back.chat.controller;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatRoomPageDto;
 import com.kh.back.chat.dto.ChatRoomSummaryDto;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.common.dto.CursorMeta;
 import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,12 +26,16 @@ public class AdminChatApiController {
 
     public record SendAdminMessageRequest(String content) {}
 
-    // 상태별 상담방 목록 (WAITING/IN_PROGRESS/CLOSED)
+    // 상태별 상담방 목록 커서 페이징 조회 (WAITING/IN_PROGRESS/CLOSED, 무한스크롤)
+    // cursorId: 이전 응답 meta.nextCursor 값. 없으면 처음부터 조회한다.
     @GetMapping("/rooms")
     public ApiResponse<List<ChatRoomSummaryDto>> getRooms(@RequestParam String status,
+                                                            @RequestParam(required = false) Long cursorId,
+                                                            @RequestParam(required = false) Integer size,
                                                             @AuthenticationPrincipal CustomUserDetails principal) {
         requireAdminId(principal);
-        return ApiResponse.ok(chatService.getRoomsByStatus(status));
+        ChatRoomPageDto page = chatService.getRoomsByStatus(status, cursorId, size);
+        return ApiResponse.ok(page.getItems(), new CursorMeta(page.isHasMore(), page.getNextCursor()));
     }
 
     // 대기 상담방 수 (대시보드)
@@ -57,10 +63,10 @@ public class AdminChatApiController {
 
     // 상담 종료
     @PostMapping("/rooms/{roomId}/close")
-    public ApiResponse<Void> closeRoom(@PathVariable Long roomId,
+    public ApiResponse<Void> closeAdminRoom(@PathVariable Long roomId,
                                         @AuthenticationPrincipal CustomUserDetails principal) {
         Long adminId = requireAdminId(principal);
-        chatService.closeRoom(roomId, adminId);
+        chatService.closeAdminRoom(roomId, adminId);
         return ApiResponse.ok(null);
     }
 
