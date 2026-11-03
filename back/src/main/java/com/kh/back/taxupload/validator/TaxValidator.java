@@ -36,12 +36,6 @@ public class TaxValidator {
     private static final Pattern CATEGORY_PATTERN =
             Pattern.compile("[A-Z][A-Z0-9_]{0,49}"); // 영문 대문자,숫자 , 전체길이 1~50 자
 
-    private static final Set<String> BUSINESS_REGIONS = Set.of(
-            "CAPITAL_CONGESTION",
-            "CAPITAL_OTHER",       // 카테고리의 실제 의미나 목록까지 검사는 하지 않고 형식만 맞으면 통과
-            "NON_CAPITAL"
-    );
-
     private static final Set<String> TRANSACTION_TYPES = Set.of(
             "INCOME",
             "EXPENSE",
@@ -138,40 +132,24 @@ public class TaxValidator {
         validateTaxYear(request.getTaxYear());
 
         validateUnsignedSmallInt(
-                request.getAge(),
-                "age",
-                true
-        );
-
-        validateUnsignedSmallInt(
                 request.getDependentCount(),
-                "dependentCount",
-                false
+                "dependentCount"
         );
 
-        if (request.getDonationAmount() == null) {
+        if (request.getGeneralDonationAmount() == null || request.getSpecialDonationAmount() == null) {
             throw invalid(
-                    "donationAmount",
+                    request.getGeneralDonationAmount() == null ? "generalDonationAmount" : "specialDonationAmount",
                     "기부금은 누락할 수 없습니다. 없으면 0을 입력해주세요."
             );
         }
 
         validateDecimal(
-                request.getDonationAmount(),
+                request.getGeneralDonationAmount(),
                 MAX_AMOUNT,
                 2,
-                "donationAmount"
+                "generalDonationAmount"
         );
-
-        String region = request.getBusinessRegion();
-
-        if (region != null
-                && !BUSINESS_REGIONS.contains(region)) {
-            throw invalid(
-                    "businessRegion",
-                    "지원하지 않는 사업장 지역 코드입니다."
-            );
-        }
+        validateDecimal(request.getSpecialDonationAmount(), MAX_AMOUNT, 2, "specialDonationAmount");
 
         String saveStatus = request.getSaveStatus();
 
@@ -451,21 +429,16 @@ public class TaxValidator {
 
     private void validateUnsignedSmallInt(
             Integer value,
-            String field,
-            boolean nullable
+            String field
     ) {
         if (value == null) {
-            if (nullable) {
-                return;
-            }
-
             throw invalid(
                     field,
                     "필수 입력값입니다."
             );
         }
 
-        // 실제 나이 제한 등이 아니라 DB 타입의 저장 범위다.
+        // 공제 자격 판정이 아니라 가족 수를 저장할 DB 타입의 범위다.
         if (value < 0 || value > MAX_UNSIGNED_SMALL_INT) {
             throw invalid(
                     field,

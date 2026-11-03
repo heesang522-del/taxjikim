@@ -60,11 +60,9 @@ function validId(value) {
 function profileValues(profile) {
   return {
     businessRegistered: profile.businessRegistered ?? null,
-    age: optionalInteger(profile.age, '만 나이'),
-    startupReliefApplied: profile.startupReliefApplied ?? null,
-    businessRegion: String(profile.businessRegion ?? '').trim() || null,
-    dependentCount: optionalInteger(profile.dependentCount, '부양가족 수', 0),
-    donationAmount: optionalNumber(profile.donationAmount, '기부금', 0),
+    dependentCount: optionalInteger(profile.dependentCount, '공제 대상 가족 수', 0),
+    generalDonationAmount: optionalNumber(profile.generalDonationAmount, '일반기부금', 0),
+    specialDonationAmount: optionalNumber(profile.specialDonationAmount, '특례기부금', 0),
   };
 }
 
@@ -73,25 +71,7 @@ function validateProfile(profile) {
     throw new Error('사업자등록 여부를 선택해주세요.');
   }
 
-  const values = profileValues(profile);
-
-  if (profile.businessRegistered === false && values.age === null) {
-    throw new Error('현재 만 나이를 입력해주세요.');
-  }
-
-  if (profile.businessRegistered === true && typeof profile.startupReliefApplied !== 'boolean') {
-    throw new Error('창업 세액감면 적용 여부를 선택해주세요.');
-  }
-
-  if (
-    profile.businessRegistered === true &&
-    profile.startupReliefApplied === true &&
-    !['CAPITAL_CONGESTION', 'CAPITAL_OTHER', 'NON_CAPITAL'].includes(values.businessRegion)
-  ) {
-    throw new Error('창업 당시 사업장 지역을 선택해주세요.');
-  }
-
-  return values;
+  return profileValues(profile);
 }
 
 // 화면 거래와 DB 거래를 같은 형식으로 변환해 비교한다.

@@ -201,3 +201,23 @@ ALTER TABLE TAX_TRANSACTIONS
 - 월별 항목: `{ month: number, amount: number, predicted: boolean }`. 실제·예상 금액을 서버에서 계산한다.
 - 첫·마지막 거래 연도가 다르면 HTTP 400, `error.code: TAX_TRANSACTION_YEAR_MISMATCH`를 반환한다. 유효한 거래 날짜가 없으면 HTTP 400, `TAX_TRANSACTION_DATE_REQUIRED`를 반환한다.
 - 페이지에서 한 번 조회하고 자식 컴포넌트에 전달한다. 기존 월별 API와 breakdown API는 유지하지만 결과 페이지에서는 개별 호출하지 않는다.
+# 분석 기본정보 입력 계약 변경 (2026-11-03)
+
+저장 `POST /api/v1/tax/save`의 `input`과 수정 `POST /api/v1/tax/inputs/{taxInputId}/update`의 `input`은 같은 필드를 사용한다.
+
+```json
+{
+  "input": {
+    "taxYear": 2026,
+    "businessRegistered": false,
+    "dependentCount": 0,
+    "generalDonationAmount": 0,
+    "specialDonationAmount": 0,
+    "saveStatus": "TEMP"
+  }
+}
+```
+
+- 금액 0은 기부금이 없는 입력 예시다. 두 기부금은 각각 음수가 아닌 DECIMAL(15,2) 저장 범위이며, 미입력은 저장 정규화에서 0으로 처리한다.
+- 나이·감면·지역·기존 단일 기부금 필드는 저장 계약에서 제거한다. 요청의 분석번호·소유자는 기존 서버 결정 규칙을 유지한다.
+- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다. 기존 DB 변경 방법은 `docs/tax-input-migration.md`를 따른다.

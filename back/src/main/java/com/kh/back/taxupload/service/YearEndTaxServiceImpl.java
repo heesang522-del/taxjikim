@@ -69,7 +69,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
         // 기존 분석의 기본정보 변경은 update에서 처리한다.
         if (!createAnalysis && request.getInput() != null) { // 신규생성이 아니라 기존 분석번호를 사용하는 경우
-            throw invalid( // 요청에 사업자등록 여부,나이, 기부금 등의 기본정보가 포함되어 있다는 뜻
+            throw invalid( // 요청에 사업자등록 여부, 가족 수, 기부금 등의 기본정보가 포함되어 있다는 뜻
                     "input",
                     "기존 분석의 기본정보는 수정 API를 이용해주세요."
             );
@@ -727,18 +727,20 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 .userId(ownerId)
                 .taxYear(source.getTaxYear())
                 .businessRegistered(source.getBusinessRegistered())
-                .age(source.getAge())
-                .startupReliefApplied(source.getStartupReliefApplied())
-                .businessRegion(source.getBusinessRegion())
                 .dependentCount(
                         source.getDependentCount() == null
                                 ? 0
                                 : source.getDependentCount()
                 )
-                .donationAmount(
-                        source.getDonationAmount() == null
+                .generalDonationAmount(
+                        source.getGeneralDonationAmount() == null
                                 ? BigDecimal.ZERO
-                                : source.getDonationAmount()
+                                : source.getGeneralDonationAmount()
+                )
+                .specialDonationAmount(
+                        source.getSpecialDonationAmount() == null
+                                ? BigDecimal.ZERO
+                                : source.getSpecialDonationAmount()
                 )
                 .saveStatus(
                         source.getSaveStatus() == null

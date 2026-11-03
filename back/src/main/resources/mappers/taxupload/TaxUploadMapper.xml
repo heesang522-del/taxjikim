@@ -12,11 +12,9 @@
         <result property="userId" column="USER_ID"/>
         <result property="taxYear" column="TAX_YEAR"/>
         <result property="businessRegistered" column="BUSINESS_REGISTERED"/>
-        <result property="age" column="AGE"/>
-        <result property="startupReliefApplied" column="STARTUP_RELIEF_APPLIED"/>
-        <result property="businessRegion" column="BUSINESS_REGION"/>
         <result property="dependentCount" column="DEPENDENT_COUNT"/>
-        <result property="donationAmount" column="DONATION_AMOUNT"/>
+        <result property="generalDonationAmount" column="GENERAL_DONATION_AMOUNT"/>
+        <result property="specialDonationAmount" column="SPECIAL_DONATION_AMOUNT"/>
         <result property="saveStatus" column="SAVE_STATUS"/>
     </resultMap>
 
@@ -53,22 +51,18 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         )
         VALUES (
         #{userId},
         #{taxYear},
         #{businessRegistered},
-        #{age},
-        #{startupReliefApplied},
-        #{businessRegion},
         #{dependentCount},
-        #{donationAmount},
+        #{generalDonationAmount},
+        #{specialDonationAmount},
         #{saveStatus}
         )
     </insert>
@@ -79,11 +73,9 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
@@ -96,11 +88,9 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
@@ -113,11 +103,9 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         FROM tax_inputs
         WHERE USER_ID = #{userId}
@@ -135,11 +123,9 @@
         SET USER_ID = #{userId},
         TAX_YEAR = #{taxYear},
         BUSINESS_REGISTERED = #{businessRegistered},
-        AGE = #{age},
-        STARTUP_RELIEF_APPLIED = #{startupReliefApplied},
-        BUSINESS_REGION = #{businessRegion},
         DEPENDENT_COUNT = #{dependentCount},
-        DONATION_AMOUNT = #{donationAmount},
+        GENERAL_DONATION_AMOUNT = #{generalDonationAmount},
+        SPECIAL_DONATION_AMOUNT = #{specialDonationAmount},
         SAVE_STATUS = #{saveStatus},
         UPDATED_AT = CURRENT_TIMESTAMP
         WHERE TAX_INPUT_ID = #{taxInputId}

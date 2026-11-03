@@ -91,15 +91,14 @@ function normalizeTaxInput(input) {
     throw new Error('분석 기본정보가 필요합니다.');
   }
 
-  const region = String(input.businessRegion ?? '').trim();
-
+  // 제거한 필드는 요청에 다시 섞이지 않도록 저장 가능한 기본정보만 전달한다.
   return {
-    ...input,
     taxYear: validateYear(input.taxYear),
-    businessRegion: region || null,
-    age: optionalInteger(input.age, '만 나이'),
-    dependentCount: optionalInteger(input.dependentCount, '부양가족 수', 0),
-    donationAmount: optionalNumber(input.donationAmount, '기부금', 0),
+    businessRegistered: input.businessRegistered ?? null,
+    dependentCount: optionalInteger(input.dependentCount, '공제 대상 가족 수', 0),
+    generalDonationAmount: optionalNumber(input.generalDonationAmount, '일반기부금', 0),
+    specialDonationAmount: optionalNumber(input.specialDonationAmount, '특례기부금', 0),
+    saveStatus: input.saveStatus ?? 'TEMP',
   };
 }
 

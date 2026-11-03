@@ -63,12 +63,10 @@ public class TaxTransactionDto {
         private Integer taxYear;
 
         private Boolean businessRegistered;
-        private Integer age;
-        private Boolean startupReliefApplied;
-        private String businessRegion;
 
         private Integer dependentCount;
-        private BigDecimal donationAmount;
+        private BigDecimal generalDonationAmount; // 종교단체 외 일반기부금 입력액
+        private BigDecimal specialDonationAmount; // 영수증상 특례기부금 입력액
         private String saveStatus;
     }
 
