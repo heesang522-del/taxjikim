@@ -12,7 +12,7 @@ import { Button, Icon, Modal, Pill } from '../common/index';
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
-  const { items, unreadCount, hasMore, loadingMore, openList, loadMore, markRead } = useNotifications();
+  const { items, unreadCount, hasMore, loadingMore, openList, closeList, loadMore, markRead } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -103,7 +103,13 @@ export function Header() {
         )}
       </div>
       {notifOpen && (
-        <Modal title="알림" onClose={() => setNotifOpen(false)}>
+        <Modal
+          title="알림"
+          onClose={() => {
+            setNotifOpen(false);
+            closeList(); // 알림창을 닫으면 더 이상 SSE 신호로 목록을 자동 갱신하지 않게 한다.
+          }}
+        >
           <div
             className="grid"
             style={{ gap: 8, minWidth: 280, maxWidth: 360, maxHeight: 360, overflowY: 'auto' }}
@@ -121,6 +127,7 @@ export function Header() {
                   className="notif-item"
                   onClick={() => {
                     setNotifOpen(false);
+                    closeList();
                     markRead(n.id); // 알림을 열어본 시점에 읽음 처리(서버에서 바로 삭제됨)
                   }}
                 >
