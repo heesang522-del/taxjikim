@@ -180,11 +180,9 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
                 taxValidator.validateNewTransactionIds(rows);
 
-                for (TaxTransactionDto row : requested) {
-                    taxMapper.insertTransaction(row);
-                }
-
                 if (!requested.isEmpty()) {
+                    // 같은 분석의 거래 목록을 한 INSERT로 저장한다.
+                    taxMapper.insertTransactions(requested);
                     invalidateAfterTransactionChange(
                             taxInputId
                     );
@@ -417,6 +415,16 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             );
         }
 
+        List<Long> requestedIds = request.getTransactionIds();
+        if (requestedIds != null) {
+            if (deleteAll || transactionId != null || requestedIds.isEmpty()) {
+                throw invalid("transactionIds", "삭제할 거래번호 목록만 전달해주세요.");
+            }
+            for (Long id : requestedIds) {
+                taxValidator.validateId(id, "transactionIds");
+            }
+        }
+
         // 전체 삭제와 개별 거래 삭제를 동시에 요청하지 못하도록 한다.
         if (deleteAll && transactionId != null) {
             throw invalid(
@@ -426,7 +434,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
 
         // 전체 삭제를 명시하지 않았다면 거래번호가 반드시 필요하다.
-        if (!deleteAll) {
+        if (!deleteAll && requestedIds == null) {
             taxValidator.validateId(
                     transactionId,
                     "transactionId"
@@ -456,6 +464,15 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 );
             }
 
+            return;
+        }
+
+        // 목록 삭제는 이미 삭제된 번호가 있어도 재시도할 수 있다.
+        if (requestedIds != null) {
+            int deleted = taxMapper.deleteTransactionBatch(taxInputId, Set.copyOf(requestedIds));
+            if (deleted > 0) {
+                invalidateAfterTransactionChange(taxInputId);
+            }
             return;
         }
 

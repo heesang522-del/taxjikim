@@ -7,6 +7,7 @@ import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Set;
 
 @Mapper
 public interface TaxMapper {
@@ -36,7 +37,7 @@ public interface TaxMapper {
             @Param("taxInputId") Long taxInputId
     );
 
-    int insertTransaction(TaxTransactionDto transaction);
+    int insertTransactions(@Param("rows") List<TaxTransactionDto> rows);
 
     // 거래번호가 없으면 분석의 전체 거래, 있으면 특정 거래를 조회한다.
     List<TaxTransactionDto> findTransactions(
@@ -49,6 +50,9 @@ public interface TaxMapper {
             @Param("transactionId") Long transactionId,
             @Param("category") String category
     );
+
+    int deleteTransactionBatch(@Param("taxInputId") Long taxInputId,
+                               @Param("transactionIds") Set<Long> transactionIds);
 
     int deleteTransaction(
             @Param("taxInputId") Long taxInputId,

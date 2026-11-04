@@ -1,7 +1,7 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { getTaxCalculationResult } from '../api/taxApi';
 import { Button, Icon, Note } from '../components/common/index';
@@ -19,8 +19,10 @@ import { useHistory } from '../utils/useHistory';
 const TOTAL_TAX_OPTIONS = { excludeWithholding: true };
 
 export default function CalcResultPage() {
-  // TODO: 입력창의 분석번호 전달을 연결할 때 이 테스트 번호를 교체한다.
-  const taxInputId = 21;
+  const [searchParams] = useSearchParams();
+  const { search } = useLocation();
+  const taxInputId = Number(searchParams.get('taxInputId'));
+  const validTaxInputId = Number.isSafeInteger(taxInputId) && taxInputId > 0;
   const { calculated } = useTax();
   const [result, setResult] = useState(null);
   const breakdown = result?.breakdown;
@@ -29,7 +31,7 @@ export default function CalcResultPage() {
 
   // 결과를 한 번 조회하고 산출 근거와 월별 목록을 각 컴포넌트에 나눠 전달한다.
   useEffect(() => {
-    if (!calculated) return;
+    if (!calculated || !validTaxInputId) return;
     let cancelled = false;
     const controller = new AbortController();
 
@@ -53,7 +55,7 @@ export default function CalcResultPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [calculated, taxInputId]);
+  }, [calculated, taxInputId, validTaxInputId]);
   const { loggedIn } = useAuth();
   const toast = useToast();
   // 사업자등록 비교는 기존 예시 계산을 유지하며 서버 계산 결과와 구분한다.
@@ -82,7 +84,11 @@ export default function CalcResultPage() {
     );
   };
 
-  if (!calculated) return <Navigate to={ROUTES.calcLoading} replace />;
+  if (!validTaxInputId) {
+    return <p role="alert">분석번호가 없습니다. 입력 화면에서 분석 결과 보기를 눌러주세요.</p>;
+  }
+
+  if (!calculated) return <Navigate to={`${ROUTES.calcLoading}${search}`} replace />;
 
   return (
     <div className="grid">

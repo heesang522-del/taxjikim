@@ -142,10 +142,7 @@
         WHERE TAX_INPUT_ID = #{taxInputId}
     </update>
 
-    <insert id="insertTransaction"
-            useGeneratedKeys="true"
-            keyProperty="transactionId"
-            keyColumn="TRANSACTION_ID">
+    <insert id="insertTransactions">
 
         INSERT INTO tax_transactions (
         TAX_INPUT_ID,
@@ -157,16 +154,19 @@
         DEDUCTED_TAX_RATE,
         AMOUNT
         )
-        VALUES (
-        #{taxInputId},
-        #{transactionType},
-        #{transactionDate},
-        #{description},
-        #{category},
-        #{preTaxIncome},
-        #{deductedTaxRate},
-        #{amount}
+        VALUES
+        <foreach collection="rows" item="row" separator=",">
+        (
+        #{row.taxInputId},
+        #{row.transactionType},
+        #{row.transactionDate},
+        #{row.description},
+        #{row.category},
+        #{row.preTaxIncome},
+        #{row.deductedTaxRate},
+        #{row.amount}
         )
+        </foreach>
     </insert>
 
     <!-- 거래번호가 있으면 특정 거래, 없으면 분석의 전체 거래를 조회한다. -->
@@ -203,6 +203,15 @@
         WHERE TAX_INPUT_ID = #{taxInputId}
         AND TRANSACTION_ID = #{transactionId}
     </update>
+
+    <delete id="deleteTransactionBatch">
+        DELETE FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_ID IN
+        <foreach collection="transactionIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
 
     <delete id="deleteTransaction">
         DELETE FROM tax_transactions

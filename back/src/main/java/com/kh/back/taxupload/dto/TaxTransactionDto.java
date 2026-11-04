@@ -112,6 +112,7 @@ public class TaxTransactionDto {
 
         private Long taxInputId;
         private Long transactionId;
+        private java.util.List<Long> transactionIds;
         private Integer taxYear;
 
         private TaxInputRequest input;

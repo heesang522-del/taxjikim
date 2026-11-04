@@ -181,6 +181,13 @@ export function SummaryRail({ onCalculate }) {
       return;
     }
 
+    // 결과 화면은 한 번에 분석 한 건을 조회한다.
+    if (inputIds.size !== 1) {
+      setError('거래가 분석 한 건에 속할 때 결과를 볼 수 있습니다.');
+      return;
+    }
+    const [taxInputId] = inputIds;
+
     // 요청 도중 화면 입력이 변경되는지 확인한다.
     const initialSignature = getTaxReviewSignature(initial);
 
@@ -249,7 +256,7 @@ export function SummaryRail({ onCalculate }) {
       // 후속 화면에서 거래 처리 중으로 판단하지 않도록 해제한다.
       useTaxStore.setState({ taxSaveBusy: false });
 
-      await onCalculate();
+      await onCalculate(taxInputId);
     } catch (cause) {
       setError(cause?.message ?? '저장 상태를 확인하지 못했습니다.');
     } finally {

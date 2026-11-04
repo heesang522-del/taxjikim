@@ -573,21 +573,36 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
     });
   }
 
+  // 저장된 삭제 대상은 분석번호별로 묶어 한 번에 전송한다.
+  const deletionsByInput = new Map();
+  for (const operation of operations) {
+    if (operation.persisted && operation.type === 'delete') {
+      const group = deletionsByInput.get(operation.taxInputId) ?? [];
+      group.push(operation);
+      deletionsByInput.set(operation.taxInputId, group);
+    }
+  }
+
   const completedOperations = [];
 
   try {
     for (const operation of operations) {
       if (operation.persisted) {
         if (operation.type === 'delete') {
-          try {
-            await deleteTransaction(operation.taxInputId, operation.transactionId);
-          } catch (error) {
-            const alreadyDeleted = error.status === 404 && error.code === 'TRANSACTION_NOT_FOUND';
+          const group = deletionsByInput.get(operation.taxInputId);
+          if (!group) continue;
 
-            if (!alreadyDeleted) {
-              throw error;
-            }
+          await request({
+            url: `${inputPath(operation.taxInputId)}/delete`,
+            method: 'POST',
+            data: { transactionIds: group.map((item) => item.transactionId) },
+          });
+          deletionsByInput.delete(operation.taxInputId);
+          completedOperations.push(...group);
+          for (const item of group) {
+            await onOperationSuccess?.(item);
           }
+          continue;
         } else {
           await updateTransaction(operation.taxInputId, operation.transactionId, operation.category);
         }
