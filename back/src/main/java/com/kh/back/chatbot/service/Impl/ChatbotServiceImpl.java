@@ -115,6 +115,22 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     @Override
+    public void deleteLatestExchange(
+            CustomUserDetails principal,
+            Long conversationId,
+            Long messageId
+    ) {
+        // 인증된 사용자 ID를 추출하고 삭제 처리를 기록 서비스에 위임한다.
+        Long userId = requireUserId(principal);
+
+        historyService.deleteLatestExchange(
+                userId,
+                conversationId,
+                messageId
+        );
+    }
+
+    @Override
     public ChatbotReply ask(
             CustomUserDetails principal,
             Long conversationId,
@@ -152,6 +168,7 @@ public class ChatbotServiceImpl implements ChatbotService {
                 conversationId
         );
 
+        // 사용량 서비스에도 동일한 인증 정보를 전달한다.
         // 별도 DB 트랜잭션으로 사용량을 예약한 뒤 AI를 호출한다.
         ChatbotUsageDto reservedUsage =
                 chatbotUsageService.reserveUsage(principal);

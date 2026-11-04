@@ -84,4 +84,20 @@ public class ChatbotApiController {
 
         return ApiResponse.ok(null);
     }
+
+    @DeleteMapping("/{conversationId}/messages/{messageId}")
+    public ApiResponse<Void> deleteLatestExchange(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @PathVariable("conversationId") Long conversationId,
+            @PathVariable("messageId") Long messageId
+    ) {
+        // 메시지 삭제도 다른 기능과 동일하게 인증 정보를 서비스에 전달한다.
+        chatbotService.deleteLatestExchange(
+                principal,
+                conversationId,
+                messageId
+        );
+
+        return ApiResponse.ok(null);
+    }
 }

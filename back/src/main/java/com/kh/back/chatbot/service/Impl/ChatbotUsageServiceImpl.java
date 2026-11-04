@@ -55,7 +55,7 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
                 today
         );
 
-        // DB에서 한도 검사와 증가를 하나의 SQL로 수행한다.
+        // 한도 검사와 증가를 하나의 SQL로 수행해 동시 요청을 보호한다.
         int updated = chatbotUsageMapper.increaseUsage(
                 userId,
                 today,
@@ -93,7 +93,7 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
             LocalDate usageDate,
             int used
     ) {
-        // 사용 한도보다 큰 값이 있더라도 남은 횟수는 음수로 표시하지 않는다.
+        // 사용 한도보다 큰 값이 있어도 남은 횟수는 음수로 표시하지 않는다.
         return ChatbotUsageDto.builder()
                 .usageDate(usageDate)
                 .dailyLimit(DAILY_LIMIT)
@@ -103,7 +103,7 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
     }
 
     private Long requireUserId(CustomUserDetails principal) {
-        // 사용자 식별자는 요청 본문 대신 인증 정보에서 가져온다.
+        // 사용량 API가 직접 호출되는 경우에도 인증 정보를 검증한다.
         if (principal == null
                 || principal.getUserId() == null
                 || principal.getUserId() <= 0) {

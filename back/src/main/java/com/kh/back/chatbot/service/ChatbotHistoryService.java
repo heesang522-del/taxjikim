@@ -30,6 +30,12 @@ public interface ChatbotHistoryService {
             Long conversationId
     );
 
+    void deleteLatestExchange(
+            Long userId,
+            Long conversationId,
+            Long messageId
+    );
+
     @Builder
     record ConversationSnapshot(
             Long revision,

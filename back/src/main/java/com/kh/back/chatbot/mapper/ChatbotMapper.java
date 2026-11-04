@@ -43,4 +43,17 @@ public interface ChatbotMapper {
     int deleteMessages(
             @Param("conversationId") Long conversationId
     );
+
+    int advanceConversationRevision(
+            @Param("userId") Long userId,
+            @Param("conversationId") Long conversationId,
+            @Param("revision") Long revision,
+            @Param("resetTitle") boolean resetTitle
+    );
+
+    int deleteExchangeMessages(
+            @Param("conversationId") Long conversationId,
+            @Param("questionId") Long questionId,
+            @Param("answerId") Long answerId
+    );
 }

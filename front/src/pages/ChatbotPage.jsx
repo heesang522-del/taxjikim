@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   createConversation,
   deleteConversation,
+  deleteLatestExchange,
   getChatbotUsage,
   getConversations,
   getMessages,
@@ -35,6 +36,14 @@ export function ChatbotPage() {
 
   const busy = action !== '';
   const selectedConversation = conversations.find((conversation) => conversation.conversationId === conversationId);
+
+  // 마지막 두 메시지가 질문·답변일 때만 해당 질문에 삭제 버튼을 표시한다.
+  const latestQuestion = messages[messages.length - 2];
+  const latestAnswer = messages[messages.length - 1];
+  const latestQuestionId =
+    latestQuestion?.role?.toUpperCase() === 'USER' && latestAnswer?.role?.toUpperCase() === 'ASSISTANT'
+      ? latestQuestion.messageId
+      : null;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -216,6 +225,87 @@ export function ChatbotPage() {
     }
   }
 
+  async function handleDeleteLatestExchange(messageId) {
+    if (busyRef.current || !conversationId || messagesLoading || messageId !== latestQuestionId) {
+      return;
+    }
+
+    const targetId = conversationId;
+
+    if (!beginAction('deletingExchange')) return;
+
+    // 기존 조회 응답이 삭제 후 메시지 목록을 덮어쓰지 않게 한다.
+    const requestId = ++messageRequestRef.current;
+
+    try {
+      await deleteLatestExchange(targetId, messageId);
+
+      if (!mountedRef.current) return;
+
+      if (selectedIdRef.current === targetId) {
+        // 삭제가 성공한 질문·답변은 재조회 실패 시에도 화면에서 제거한다.
+        setMessages((previous) => {
+          const questionIndex = previous.findIndex((message) => message.messageId === messageId);
+
+          if (questionIndex < 0) return previous;
+
+          const answer = previous[questionIndex + 1];
+
+          return previous.filter(
+            (message) => message.messageId !== messageId && message.messageId !== answer?.messageId
+          );
+        });
+
+        setMessagesLoading(true);
+      }
+    } catch (cause) {
+      if (!mountedRef.current) return;
+
+      setErrorMessage(cause.message);
+
+      if (selectedIdRef.current === targetId) {
+        setMessagesLoading(true);
+      }
+    } finally {
+      try {
+        if (mountedRef.current) {
+          // 다른 창의 변경이나 응답 유실도 반영하도록 서버 기록을 다시 조회한다.
+          const results = await Promise.allSettled([getMessages(targetId), getConversations()]);
+
+          if (mountedRef.current) {
+            const [messageResult, conversationResult] = results;
+
+            if (
+              messageResult.status === 'fulfilled' &&
+              selectedIdRef.current === targetId &&
+              requestId === messageRequestRef.current
+            ) {
+              setMessages(messageResult.value.data);
+            }
+
+            if (conversationResult.status === 'fulfilled') {
+              setConversations(conversationResult.value.data);
+            }
+
+            const errors = results
+              .filter((result) => result.status === 'rejected')
+              .map((result) => result.reason.message);
+
+            if (errors.length > 0) {
+              setErrorMessage((previous) => [...new Set([previous, ...errors].filter(Boolean))].join(' '));
+            }
+          }
+        }
+      } finally {
+        if (mountedRef.current && selectedIdRef.current === targetId && requestId === messageRequestRef.current) {
+          setMessagesLoading(false);
+        }
+
+        finishAction();
+      }
+    }
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
 
@@ -308,7 +398,6 @@ export function ChatbotPage() {
     // 키를 길게 누른 경우 반복 전송하지 않는다.
     if (event.repeat || busyRef.current) return;
 
-    // 버튼과 동일하게 폼의 전송 처리와 입력 검증을 실행한다.
     event.currentTarget.form?.requestSubmit();
   }
 
@@ -409,7 +498,10 @@ export function ChatbotPage() {
           </button>
         </header>
 
-        <div className="ai-chat-messages" aria-busy={messagesLoading || action === 'sending'}>
+        <div
+          className="ai-chat-messages"
+          aria-busy={messagesLoading || action === 'sending' || action === 'deletingExchange'}
+        >
           {errorMessage && (
             <div className="ai-chat-error" role="alert">
               <p>{errorMessage}</p>
@@ -438,11 +530,24 @@ export function ChatbotPage() {
           ) : (
             messages.map((message) => {
               const isUser = message.role?.toUpperCase() === 'USER';
+              const canDelete = isUser && message.messageId === latestQuestionId;
 
               return (
                 <article key={message.messageId} className={`ai-chat-message${isUser ? ' is-user' : ''}`}>
                   <strong>{isUser ? '나' : 'AI 챗봇'}</strong>
                   <p>{message.content}</p>
+
+                  {canDelete && (
+                    <button
+                      type="button"
+                      className="ai-chat-delete"
+                      disabled={busy || loading || messagesLoading}
+                      aria-label="가장 최근 질문과 AI 답변 함께 삭제"
+                      onClick={() => handleDeleteLatestExchange(message.messageId)}
+                    >
+                      {action === 'deletingExchange' ? '삭제 중...' : '질문·답변 삭제'}
+                    </button>
+                  )}
                 </article>
               );
             })
@@ -452,6 +557,12 @@ export function ChatbotPage() {
             <div className="ai-chat-waiting" role="status">
               <span className="ai-chat-waiting-dot" aria-hidden="true" />
               답변을 기다리는 중입니다.
+            </div>
+          )}
+
+          {action === 'deletingExchange' && (
+            <div className="ai-chat-waiting" role="status">
+              질문과 답변을 삭제하고 대화를 다시 확인하는 중입니다.
             </div>
           )}
 

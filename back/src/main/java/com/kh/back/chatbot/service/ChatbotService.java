@@ -32,4 +32,10 @@ public interface ChatbotService {
             CustomUserDetails principal,
             Long conversationId
     );
+
+    void deleteLatestExchange(
+            CustomUserDetails principal,
+            Long conversationId,
+            Long messageId
+    );
 }

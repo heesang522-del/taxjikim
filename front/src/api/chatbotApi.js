@@ -1,6 +1,6 @@
 import { client } from './client';
 
-// 공통 응답 형식을 확인하고 서버의 오류 메시지와 필드 오류를 전달한다.
+// 공통 응답 형식을 확인하고 서버 오류 메시지를 전달한다.
 async function requestChatbot(config) {
   try {
     const response = await client.request(config);
@@ -8,6 +8,7 @@ async function requestChatbot(config) {
 
     if (!result?.success) {
       const error = new Error(result?.error?.message ?? '챗봇 요청을 처리하지 못했습니다.');
+
       error.fields = result?.error?.fields;
       throw error;
     }
@@ -15,6 +16,7 @@ async function requestChatbot(config) {
     return result;
   } catch (cause) {
     const detail = cause.response?.data?.error;
+
     const error = new Error(
       detail?.message ??
         (cause.isAxiosError ? '서버 응답을 확인하지 못했습니다. 대화 기록을 확인해주세요.' : cause.message)
@@ -26,7 +28,9 @@ async function requestChatbot(config) {
 }
 
 export function getConversations() {
-  return requestChatbot({ url: '/chatbot/conversations' });
+  return requestChatbot({
+    url: '/chatbot/conversations',
+  });
 }
 
 export function createConversation() {
@@ -47,7 +51,7 @@ export function sendMessage(conversationId, message) {
     url: `/chatbot/conversations/${conversationId}/messages`,
     method: 'POST',
     data: { message },
-    // AI 응답을 기다릴 수 있도록 공통 client의 10초보다 길게 설정한다.
+    // AI 응답을 기다릴 수 있도록 요청 제한 시간을 늘린다.
     timeout: 60000,
   });
 }
@@ -59,6 +63,16 @@ export function deleteConversation(conversationId) {
   });
 }
 
+// 가장 최근 사용자 질문의 ID를 보내면 질문과 답변이 함께 삭제된다.
+export function deleteLatestExchange(conversationId, messageId) {
+  return requestChatbot({
+    url: `/chatbot/conversations/${conversationId}/messages/${messageId}`,
+    method: 'DELETE',
+  });
+}
+
 export function getChatbotUsage() {
-  return requestChatbot({ url: '/chatbot/usage' });
+  return requestChatbot({
+    url: '/chatbot/usage',
+  });
 }
