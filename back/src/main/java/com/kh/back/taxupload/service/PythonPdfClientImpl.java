@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.ResourceAccessException;
+import com.kh.back.taxupload.dto.TaxCategoryChange;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -40,6 +41,17 @@ import java.util.Objects;
 @Slf4j
 @Service
 public class PythonPdfClientImpl implements PythonPdfClient {
+
+    // 확정된 거래만 재학습용 CSV에 전달한다.
+    @Override
+    public void sendTrainingFeedback(List<TaxCategoryChange.Feedback> feedback) {
+        client.post()
+                .uri("/api/training-feedback")
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(feedback)
+                .retrieve()
+                .toBodilessEntity();
+    }
 
     private final RestClient client;
     private final ObjectMapper objectMapper;

@@ -3,6 +3,7 @@ package com.kh.back.taxupload.service;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.taxupload.dto.PageOcrResultDto;
+import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
@@ -16,11 +17,13 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -222,9 +225,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
         boolean updateProfile = request.getInput() != null;
 
-        boolean updateCategory =
-                request.getTransactionId() != null
-                        || request.getCategory() != null;
+        List<TaxCategoryChange> changes = request.getChanges();
+        boolean updateCategory = changes != null && !changes.isEmpty();
 
         if (!updateProfile && !updateCategory) {
             throw invalid(
@@ -242,18 +244,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             throw invalid(
                     "taxInputId",
                     "경로와 요청 본문의 분석번호가 다릅니다."
-            );
-        }
-
-        // 카테고리 수정에는 거래번호와 카테고리가 모두 필요하다.
-        if (updateCategory) {
-            taxValidator.validateId(
-                    request.getTransactionId(),
-                    "transactionId"
-            );
-
-            taxValidator.validateCategory(
-                    request.getCategory()
             );
         }
 
@@ -299,82 +289,13 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             }
         }
 
-        TaxTransactionDto existingTransaction = null;
-        boolean categoryChanged = false;
-
-        if (updateCategory) {
-            // 다른 분석의 거래를 수정하지 못하도록 분석번호와 함께 조회한다.
-            existingTransaction = requireTransaction(
-                    taxInputId,
-                    request.getTransactionId()
-            );
-
-            categoryChanged = !Objects.equals(
-                    existingTransaction.getCategory(),
-                    request.getCategory()
-            );
-        }
-
-        // 필요한 검증이 모두 끝난 뒤 DB 변경을 시작한다.
         if (updateProfile) {
             taxMapper.updateInput(updatedInput);
         }
 
-        if (categoryChanged) {
-            Long transactionId = request.getTransactionId();
-            String category = request.getCategory();
-
-            log.debug(
-                    "카테고리 수정 요청: 분석번호={}, 거래번호={}, 기존값={}, 요청값={}",
-                    taxInputId,
-                    transactionId,
-                    existingTransaction.getCategory(),
-                    category
-            );
-
-            int updated = taxMapper.updateCategory(
-                    taxInputId,
-                    transactionId,
-                    category
-            );
-
-            log.debug(
-                    "카테고리 UPDATE 결과: 분석번호={}, 거래번호={}, 반영행수={}",
-                    taxInputId,
-                    transactionId,
-                    updated
-            );
-
-            if (updated != 1) {
-                throw new ApiException(
-                        HttpStatus.CONFLICT,
-                        "TRANSACTION_UPDATE_FAILED",
-                        "거래 수정 결과를 확인하지 못했습니다."
-                );
-            }
-
-            TaxTransactionDto after = requireTransaction(
-                    taxInputId,
-                    transactionId
-            );
-
-            log.debug(
-                    "카테고리 DB 재조회: 거래번호={}, 변경전={}, 요청값={}, DB조회값={}, 일치여부={}",
-                    transactionId,
-                    existingTransaction.getCategory(),
-                    category,
-                    after.getCategory(),
-                    Objects.equals(
-                            category,
-                            after.getCategory()
-                    )
-            );
-        }
-
-        // 기본정보와 카테고리를 함께 바꿔도 결과 무효화는 한 번만 수행한다.
-        if (categoryChanged) {
-            invalidateAfterTransactionChange(taxInputId);
-
+        // 같은 트랜잭션에서 카테고리를 수정하고 학습 후보를 전달한다.
+        if (updateCategory) {
+            applyCategoryChanges(taxInputId, changes);
         } else if (updateProfile) {
             taxMapper.deleteResult(taxInputId);
         }
@@ -787,6 +708,43 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         );
 
         return input;
+    }
+
+    // 학습 후보 전달까지 성공해야 카테고리 변경을 커밋한다.
+    private void applyCategoryChanges(Long taxInputId, List<TaxCategoryChange> changes) {
+        Set<Long> seen = new HashSet<>();
+        List<TaxCategoryChange.Feedback> feedback = new ArrayList<>();
+        for (TaxCategoryChange change : changes) {
+            if (change == null || !seen.add(change.transactionId())) {
+                throw invalid("changes", "변경할 거래는 한 번씩 전달해주세요.");
+            }
+            TaxTransactionDto row = requireTransaction(taxInputId, change.transactionId());
+            taxValidator.validateCategory(change.category(), row);
+            feedback.add(new TaxCategoryChange.Feedback(
+                    row.getTransactionId(), row.getTransactionType(), row.getDescription(), change.category()
+            ));
+        }
+        // 검증을 마친 카테고리 목록을 한 UPDATE로 반영한다.
+        if (taxMapper.updateCategories(taxInputId, changes) != changes.size()) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "TRANSACTION_UPDATE_FAILED",
+                    "거래 수정 결과를 확인하지 못했습니다."
+            );
+        }
+        invalidateAfterTransactionChange(taxInputId);
+        if (!feedback.isEmpty()) {
+            try {
+                pythonPdfClient.sendTrainingFeedback(feedback);
+            } catch (RestClientException exception) {
+                log.warn("재학습 후보 전달 실패: 분석번호={}", taxInputId, exception);
+                throw new ApiException(
+                        HttpStatus.BAD_GATEWAY,
+                        "TRAINING_FEEDBACK_FAILED",
+                        "재학습 데이터 전달에 실패해 카테고리 수정을 취소했습니다."
+                );
+            }
+        }
     }
 
     private TaxTransactionDto requireTransaction(

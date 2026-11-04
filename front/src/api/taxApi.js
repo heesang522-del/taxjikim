@@ -252,11 +252,11 @@ export async function saveTransactions(taxInputId, rows) {
 
 // 기본정보와 카테고리를 하나의 수정 API로 전달한다.
 // input에는 수정 후 기본정보 전체를 전달한다.
-export async function updateTaxData(taxInputId, { input, transactionId, category } = {}) {
+export async function updateTaxData(taxInputId, { input, changes } = {}) {
   const url = `${inputPath(taxInputId)}/update`;
 
   const hasInput = input != null;
-  const hasCategoryChange = transactionId != null || category != null;
+  const hasCategoryChange = Array.isArray(changes) && changes.length > 0;
 
   if (!hasInput && !hasCategoryChange) {
     throw new Error('수정할 기본정보 또는 카테고리를 전달해주세요.');
@@ -268,11 +268,11 @@ export async function updateTaxData(taxInputId, { input, transactionId, category
     data.input = normalizeTaxInput(input);
   }
 
-  // 카테고리를 수정할 때는 거래번호와 카테고리가 모두 필요하다.
   if (hasCategoryChange) {
-    data.transactionId = validateId(transactionId, '거래번호');
-
-    data.category = validateCategory(category);
+    data.changes = changes.map(({ transactionId, category }) => ({
+      transactionId: validateId(transactionId, '거래번호'),
+      category: validateCategory(category),
+    }));
   }
 
   return request({
@@ -286,14 +286,6 @@ export async function updateTaxData(taxInputId, { input, transactionId, category
 export async function updateTaxInput(taxInputId, input) {
   return updateTaxData(taxInputId, {
     input,
-  });
-}
-
-// 기존 화면의 카테고리 수정 호출을 통합 API로 연결한다.
-export async function updateTransaction(taxInputId, transactionId, category) {
-  return updateTaxData(taxInputId, {
-    transactionId,
-    category,
   });
 }
 
@@ -583,6 +575,15 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
     }
   }
 
+  const updatesByInput = new Map();
+  for (const operation of operations) {
+    if (operation.persisted && operation.type === 'update') {
+      const group = updatesByInput.get(operation.taxInputId) ?? [];
+      group.push(operation);
+      updatesByInput.set(operation.taxInputId, group);
+    }
+  }
+
   const completedOperations = [];
 
   try {
@@ -604,7 +605,14 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
           }
           continue;
         } else {
-          await updateTransaction(operation.taxInputId, operation.transactionId, operation.category);
+          const group = updatesByInput.get(operation.taxInputId);
+          if (!group) continue;
+
+          await updateTaxData(operation.taxInputId, { changes: group });
+          updatesByInput.delete(operation.taxInputId);
+          completedOperations.push(...group);
+          for (const item of group) await onOperationSuccess?.(item);
+          continue;
         }
       }
 

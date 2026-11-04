@@ -1,8 +1,8 @@
 package com.kh.back.taxupload.mapper;
 
+import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
-import com.kh.back.taxupload.dto.TaxTransactionDto.TaxResultRow;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -20,11 +20,6 @@ public interface TaxMapper {
 
     TaxInputRequest lockInput(
             @Param("taxInputId") Long taxInputId
-    );
-
-    List<TaxInputRequest> findSavedInputs(
-            @Param("userId") Long userId,
-            @Param("taxYear") Integer taxYear
     );
 
     int updateInput(TaxInputRequest input);
@@ -45,10 +40,9 @@ public interface TaxMapper {
             @Param("transactionId") Long transactionId
     );
 
-    int updateCategory(
+    int updateCategories(
             @Param("taxInputId") Long taxInputId,
-            @Param("transactionId") Long transactionId,
-            @Param("category") String category
+            @Param("changes") List<TaxCategoryChange> changes
     );
 
     int deleteTransactionBatch(@Param("taxInputId") Long taxInputId,
@@ -59,19 +53,8 @@ public interface TaxMapper {
             @Param("transactionId") Long transactionId
     );
 
-    TaxResultRow findResult(
-            @Param("taxInputId") Long taxInputId
-    );
-
     int deleteResult(
             @Param("taxInputId") Long taxInputId
     );
 
-    int insertProcessLog(
-            @Param("taxInputId") Long taxInputId,
-            @Param("userId") Long userId,
-            @Param("processType") String processType,
-            @Param("status") String status,
-            @Param("failReason") String failReason
-    );
 }

@@ -33,15 +33,6 @@
         <result property="amount" column="AMOUNT"/>
     </resultMap>
 
-    <resultMap id="resultMap"
-               type="com.kh.back.taxupload.dto.TaxTransactionDto$TaxResultRow">
-
-        <id property="taxInputId" column="TAX_INPUT_ID"/>
-
-        <result property="resultDetail" column="RESULT_DETAIL"/>
-        <result property="calculatedAt" column="CALCULATED_AT"/>
-    </resultMap>
-
     <insert id="insertInput"
             useGeneratedKeys="true"
             keyProperty="taxInputId"
@@ -95,27 +86,6 @@
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
         FOR UPDATE
-    </select>
-
-    <select id="findSavedInputs" resultMap="inputMap">
-        SELECT
-        TAX_INPUT_ID,
-        USER_ID,
-        TAX_YEAR,
-        BUSINESS_REGISTERED,
-        DEPENDENT_COUNT,
-        GENERAL_DONATION_AMOUNT,
-        SPECIAL_DONATION_AMOUNT,
-        SAVE_STATUS
-        FROM tax_inputs
-        WHERE USER_ID = #{userId}
-        AND SAVE_STATUS = 'SAVED'
-
-        <if test="taxYear != null">
-            AND TAX_YEAR = #{taxYear}
-        </if>
-
-        ORDER BY UPDATED_AT DESC, TAX_INPUT_ID DESC
     </select>
 
     <update id="updateInput">
@@ -191,17 +161,18 @@
         ORDER BY TRANSACTION_ID
     </select>
 
-    <!-- 기존 XML의 전체 거래 삭제 구문은 유지한다. -->
-    <delete id="deleteTransactions">
-        DELETE FROM tax_transactions
-        WHERE TAX_INPUT_ID = #{taxInputId}
-    </delete>
-
-    <update id="updateCategory">
+    <update id="updateCategories">
         UPDATE tax_transactions
-        SET CATEGORY = #{category}
+        SET CATEGORY = CASE TRANSACTION_ID
+        <foreach collection="changes" item="change">
+            WHEN #{change.transactionId} THEN #{change.category}
+        </foreach>
+        ELSE CATEGORY END
         WHERE TAX_INPUT_ID = #{taxInputId}
-        AND TRANSACTION_ID = #{transactionId}
+          AND TRANSACTION_ID IN
+        <foreach collection="changes" item="change" open="(" separator="," close=")">
+            #{change.transactionId}
+        </foreach>
     </update>
 
     <delete id="deleteTransactionBatch">
@@ -219,35 +190,9 @@
         AND TRANSACTION_ID = #{transactionId}
     </delete>
 
-    <select id="findResult" resultMap="resultMap">
-        SELECT
-        TAX_INPUT_ID,
-        RESULT_DETAIL,
-        CALCULATED_AT
-        FROM tax_results
-        WHERE TAX_INPUT_ID = #{taxInputId}
-    </select>
-
     <delete id="deleteResult">
         DELETE FROM tax_results
         WHERE TAX_INPUT_ID = #{taxInputId}
     </delete>
-
-    <insert id="insertProcessLog">
-        INSERT INTO tax_process_logs (
-        TAX_INPUT_ID,
-        USER_ID,
-        PROCESS_TYPE,
-        STATUS,
-        FAIL_REASON
-        )
-        VALUES (
-        #{taxInputId},
-        #{userId},
-        #{processType},
-        #{status},
-        #{failReason}
-        )
-    </insert>
 
 </mapper>

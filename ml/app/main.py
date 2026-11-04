@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import math
@@ -9,7 +10,10 @@ import math
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
+from typing import Literal
+
+from pydantic import BaseModel, Field
 from typing import Annotated, Any
 
 import joblib
@@ -366,6 +370,58 @@ def classify_transactions(
             "code": f"{transaction_type}_CLASSIFICATION_FAILED",
             "message": f"{label} 카테고리를 분류하지 못했습니다.",
         }) from exc
+
+
+class TrainingFeedback(BaseModel):
+    transactionId: int = Field(gt=0)
+    transactionType: Literal["INCOME", "EXPENSE"]
+    description: str = Field(min_length=1, max_length=255)
+    category: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,49}$")
+
+
+FEEDBACK_LOCK = Lock()
+FEEDBACK_FIELDS = ("sample_id", "description", "category_code", "group_id", "review_status")
+
+
+# 같은 거래의 최종 카테고리를 추가 학습 CSV에 반영한다.
+@app.post("/api/training-feedback", status_code=204)
+def save_training_feedback(feedback: list[TrainingFeedback]) -> None:
+    data_dir = MODEL_DIR.parent / "data"
+    with FEEDBACK_LOCK:
+        for kind in ("income", "expense"):
+            items = [item for item in feedback if item.transactionType.lower() == kind]
+            if not items:
+                continue
+            target = data_dir / kind / "user_approved" / "category_feedback.csv"
+            base = data_dir / kind / "training" / "training_data.csv"
+            with base.open(encoding="utf-8-sig", newline="") as file:
+                labels = {row["category_code"] for row in csv.DictReader(file)}
+            rows = {}
+            if target.exists():
+                with target.open(encoding="utf-8-sig", newline="") as file:
+                    rows = {row["sample_id"]: row for row in csv.DictReader(file)}
+            for item in items:
+                sample_id = f"user-category-{item.transactionId}"
+                description = item.description.strip()
+                if not description or item.category not in labels or item.category == "UNCLASSIFIED":
+                    rows.pop(sample_id, None)
+                    continue
+                rows[sample_id] = dict(zip(
+                    FEEDBACK_FIELDS, (sample_id, description, item.category, sample_id, "APPROVED")
+                ))
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_suffix(".tmp")
+            with temporary.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FEEDBACK_FIELDS)
+                writer.writeheader()
+                writer.writerows(rows.values())
+            temporary.replace(target)
+            saved_items = [
+                (item.transactionId, item.description.strip(), item.category)
+                for item in items
+                if f"user-category-{item.transactionId}" in rows
+            ]
+            logger.info("재학습 CSV 저장 완료: 유형=%s, 저장 내역(거래번호, 설명, 카테고리)=%r", kind, saved_items)
 
 
 @app.post("/api/pdf/analyze")
