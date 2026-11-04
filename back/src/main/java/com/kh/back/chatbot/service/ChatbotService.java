@@ -2,7 +2,7 @@ package com.kh.back.chatbot.service;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
-import com.kh.back.chatbot.dto.ChatbotMessageDto;
+import com.kh.back.chatbot.dto.ChatbotMessageDto.MessageResponse;
 import com.kh.back.chatbot.dto.ChatbotReply;
 
 import java.util.List;
@@ -17,7 +17,7 @@ public interface ChatbotService {
             CustomUserDetails principal
     );
 
-    List<ChatbotMessageDto> getMessages(
+    List<MessageResponse> getMessages(
             CustomUserDetails principal,
             Long conversationId
     );
@@ -31,11 +31,5 @@ public interface ChatbotService {
     void deleteConversation(
             CustomUserDetails principal,
             Long conversationId
-    );
-
-    void deleteLatestExchange(
-            CustomUserDetails principal,
-            Long conversationId,
-            Long messageId
     );
 }

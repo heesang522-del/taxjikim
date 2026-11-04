@@ -18,11 +18,9 @@ public class ChatbotUsageApiController {
     private final ChatbotUsageService chatbotUsageService;
 
     @GetMapping
-    public ApiResponse<ChatbotUsageDto> usage(
-            @AuthenticationPrincipal CustomUserDetails principal
-    ) {
+    public ApiResponse<ChatbotUsageDto> usage( @AuthenticationPrincipal CustomUserDetails principal) {
         return ApiResponse.ok(
                 chatbotUsageService.getUsage(principal)
         );
     }
-}
+} // 로그인한 사용자의 오늘 챗봇 사용량과 남은 질문 횟수를 조회하는 api

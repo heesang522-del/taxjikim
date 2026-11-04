@@ -3,13 +3,13 @@ package com.kh.back.chatbot.service.Impl;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
 import com.kh.back.chatbot.dto.ChatbotMessageDto;
+import com.kh.back.chatbot.dto.ChatbotMessageDto.MessageResponse;
 import com.kh.back.chatbot.dto.ChatbotReply;
-import com.kh.back.chatbot.dto.ChatbotUsageDto;
 import com.kh.back.chatbot.service.ChatbotHistoryService;
 import com.kh.back.chatbot.service.ChatbotService;
-import com.kh.back.chatbot.service.ChatbotUsageService;
 import com.kh.back.chatbot.service.UserContextProvider;
 import com.kh.back.chatbot.util.PiiMasker;
+import com.kh.back.chatbot.validator.ChatbotValidator;
 import com.kh.back.common.exception.ApiException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -24,36 +24,33 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Service
 public class ChatbotServiceImpl implements ChatbotService {
 
-    private static final int MAX_LENGTH = 500;
     private static final int CONTEXT_MESSAGES = 10;
 
     private final ChatClient chatClient;
     private final ChatbotHistoryService historyService;
-    private final ChatbotUsageService chatbotUsageService;
     private final UserContextProvider userContextProvider;
+    private final ChatbotValidator chatbotValidator;
     private final boolean enabled;
 
     public ChatbotServiceImpl(
             ChatClient.Builder builder,
             ChatbotHistoryService historyService,
-            ChatbotUsageService chatbotUsageService,
             UserContextProvider userContextProvider,
+            ChatbotValidator chatbotValidator,
             @Value("classpath:prompts/Chatbot-System.st")
             Resource systemPrompt,
             @Value("${spring.ai.openai.api-key:no-key}")
             String apiKey
     ) {
         this.historyService = historyService;
-        this.chatbotUsageService = chatbotUsageService;
         this.userContextProvider = userContextProvider;
+        this.chatbotValidator = chatbotValidator;
 
-        // 이전 대화는 DB에서 조회해 직접 전달한다.
         this.chatClient = builder
                 .defaultSystem(
                         systemPrompt,
@@ -74,31 +71,33 @@ public class ChatbotServiceImpl implements ChatbotService {
     public List<ConversationResponse> getConversations(
             CustomUserDetails principal
     ) {
-        Long userId = requireUserId(principal);
-
-        return historyService.getConversations(userId);
+        return historyService.getConversations(
+                principal.getUserId()
+        );
     }
 
     @Override
     public ConversationResponse createConversation(
             CustomUserDetails principal
     ) {
-        Long userId = requireUserId(principal);
-
-        return historyService.createConversation(userId);
+        return historyService.createConversation(
+                principal.getUserId()
+        );
     }
 
     @Override
-    public List<ChatbotMessageDto> getMessages(
+    public List<MessageResponse> getMessages(
             CustomUserDetails principal,
             Long conversationId
     ) {
-        Long userId = requireUserId(principal);
-
         return historyService.getSnapshot(
-                userId,
-                conversationId
-        ).messages();
+                        principal.getUserId(),
+                        conversationId
+                )
+                .messages()
+                .stream()
+                .map(ChatbotMessageDto::toResponse)
+                .toList();
     }
 
     @Override
@@ -106,27 +105,9 @@ public class ChatbotServiceImpl implements ChatbotService {
             CustomUserDetails principal,
             Long conversationId
     ) {
-        Long userId = requireUserId(principal);
-
         historyService.deleteConversation(
-                userId,
+                principal.getUserId(),
                 conversationId
-        );
-    }
-
-    @Override
-    public void deleteLatestExchange(
-            CustomUserDetails principal,
-            Long conversationId,
-            Long messageId
-    ) {
-        // 인증된 사용자 ID를 추출하고 삭제 처리를 기록 서비스에 위임한다.
-        Long userId = requireUserId(principal);
-
-        historyService.deleteLatestExchange(
-                userId,
-                conversationId,
-                messageId
         );
     }
 
@@ -136,8 +117,9 @@ public class ChatbotServiceImpl implements ChatbotService {
             Long conversationId,
             String message
     ) {
-        Long userId = requireUserId(principal);
+        Long userId = principal.getUserId();
 
+        // 서버 설정에 따른 사용 가능 여부는 서비스에서 확인한다.
         if (!enabled) {
             throw new ApiException(
                     HttpStatus.SERVICE_UNAVAILABLE,
@@ -146,60 +128,47 @@ public class ChatbotServiceImpl implements ChatbotService {
             );
         }
 
+        // 공백 정리는 서비스에서 하고 입력 조건 검사는 Validator에 위임한다.
         String question = message == null
                 ? ""
                 : message.strip();
 
-        if (question.isEmpty() || question.length() > MAX_LENGTH) {
-            throw new ApiException(
-                    HttpStatus.BAD_REQUEST,
-                    "VALIDATION_ERROR",
-                    "질문은 1~500자로 입력해주세요.",
-                    Map.of(
-                            "message",
-                            "질문은 1~500자로 입력해주세요."
-                    )
-            );
-        }
-
-        // 사용량 예약 전에 대화방의 존재 여부와 소유권을 확인한다.
-        var snapshot = historyService.getSnapshot(
-                userId,
-                conversationId
-        );
-
-        // 사용량 서비스에도 동일한 인증 정보를 전달한다.
-        // 별도 DB 트랜잭션으로 사용량을 예약한 뒤 AI를 호출한다.
-        ChatbotUsageDto reservedUsage =
-                chatbotUsageService.reserveUsage(principal);
+        chatbotValidator.validateQuestion(question);
 
         String maskedQuestion = PiiMasker.mask(question);
 
-        List<Message> context = new ArrayList<>();
-        List<ChatbotMessageDto> history = snapshot.messages();
-
-        // 전체 기록은 DB에 유지하고 AI에는 최근 10개만 전달한다.
-        int start = Math.max(
-                0,
-                history.size() - CONTEXT_MESSAGES
+        // 별도 트랜잭션으로 질문과 사용량을 먼저 저장한다.
+        var reservation = historyService.beginQuestion(
+                principal,
+                conversationId,
+                maskedQuestion
         );
-
-        for (int index = start; index < history.size(); index++) {
-            ChatbotMessageDto item = history.get(index);
-            String content = PiiMasker.mask(item.getContent());
-
-            if ("USER".equals(item.getRole())) {
-                context.add(new UserMessage(content));
-            } else if ("ASSISTANT".equals(item.getRole())) {
-                context.add(new AssistantMessage(content));
-            }
-        }
-
-        context.add(new UserMessage(maskedQuestion));
 
         String reply;
 
         try {
+            List<Message> context = new ArrayList<>();
+            List<ChatbotMessageDto> history = reservation.history();
+
+            // 완료된 이전 대화 중 최근 10개 메시지만 AI에 전달한다.
+            int start = Math.max(
+                    0,
+                    history.size() - CONTEXT_MESSAGES
+            );
+
+            for (int index = start; index < history.size(); index++) {
+                ChatbotMessageDto item = history.get(index);
+                String content = PiiMasker.mask(item.getContent());
+
+                if ("USER".equals(item.getRole())) {
+                    context.add(new UserMessage(content));
+                } else if ("ASSISTANT".equals(item.getRole())) {
+                    context.add(new AssistantMessage(content));
+                }
+            }
+
+            context.add(new UserMessage(maskedQuestion));
+
             String userContext = PiiMasker.mask(
                     userContextProvider.build(userId)
             );
@@ -213,56 +182,87 @@ public class ChatbotServiceImpl implements ChatbotService {
                     .call()
                     .content();
         } catch (RuntimeException exception) {
-            // 외부 호출 실패도 기존 정책대로 질문 시도 횟수에 포함한다.
+            markFailed(
+                    userId,
+                    conversationId,
+                    reservation.questionId()
+            );
+
             log.warn(
-                    "챗봇 호출 실패. 예외유형={}",
+                    "챗봇 호출 실패. 질문ID={}, 예외유형={}",
+                    reservation.questionId(),
                     exception.getClass().getSimpleName()
             );
 
             throw new ApiException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "CHATBOT_UNAVAILABLE",
-                    "챗봇을 잠시 사용할 수 없습니다. 다시 시도해주세요."
+                    "답변 생성에 실패했습니다. 질문 기록은 저장되었습니다."
             );
         }
 
+        // 외부 AI 응답 확인과 실패 상태 저장은 서비스 흐름에 유지한다.
         if (reply == null || reply.isBlank()) {
+            markFailed(
+                    userId,
+                    conversationId,
+                    reservation.questionId()
+            );
+
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     "CHATBOT_EMPTY_RESPONSE",
-                    "AI 답변이 비어 있습니다. 다시 시도해주세요."
+                    "AI 답변이 비어 있습니다. 질문 기록은 저장되었습니다."
             );
         }
 
-        String maskedReply = PiiMasker.mask(reply);
+        String maskedReply;
 
-        // 질문과 답변을 함께 저장하고 대화 버전 충돌을 검사한다.
-        historyService.saveExchange(
-                userId,
-                conversationId,
-                snapshot.revision(),
-                maskedQuestion,
-                maskedReply
-        );
+        try {
+            maskedReply = PiiMasker.mask(reply);
+
+            // 답변 저장과 질문 완료 처리를 같은 트랜잭션에서 수행한다.
+            historyService.completeQuestion(
+                    userId,
+                    conversationId,
+                    reservation.questionId(),
+                    maskedReply
+            );
+        } catch (RuntimeException exception) {
+            markFailed(
+                    userId,
+                    conversationId,
+                    reservation.questionId()
+            );
+
+            throw exception;
+        }
 
         return ChatbotReply.builder()
                 .reply(maskedReply)
-                .remaining(reservedUsage.remaining())
+                .remaining(reservation.usage().remaining())
                 .build();
     }
 
-    private Long requireUserId(CustomUserDetails principal) {
-        // 인증 객체에서 확인한 사용자 ID만 DB 처리에 사용한다.
-        if (principal == null
-                || principal.getUserId() == null
-                || principal.getUserId() <= 0) {
-            throw new ApiException(
-                    HttpStatus.UNAUTHORIZED,
-                    "AUTHENTICATION_REQUIRED",
-                    "로그인이 필요합니다."
+    private void markFailed(
+            Long userId,
+            Long conversationId,
+            Long questionId
+    ) {
+        try {
+            // 기존 작업과 별도 트랜잭션으로 실패 상태를 저장한다.
+            historyService.failQuestion(
+                    userId,
+                    conversationId,
+                    questionId
+            );
+        } catch (RuntimeException exception) {
+            // 상태 저장 실패가 원래 오류를 덮어쓰지 않도록 한다.
+            log.error(
+                    "챗봇 실패 상태 저장 실패. 질문ID={}, 예외유형={}",
+                    questionId,
+                    exception.getClass().getSimpleName()
             );
         }
-
-        return principal.getUserId();
     }
 }

@@ -17,12 +17,12 @@ import java.time.ZoneId;
 @AllArgsConstructor
 public class ChatbotConversationDto {
 
-    private Long conversationId;
-    private Long userId;
-    private String title;
-    private Long revision;
-    private LocalDateTime createdAt;
-    private LocalDateTime updatedAt;
+    private Long conversationId; // 채팅방 고유 번호
+    private Long userId; // 채팅방을 만든 사용자 번호
+    private String title; // 채팅방 제목
+    private Long revision; // 채팅방이 변경될때 증가하는 버전 번호
+    private LocalDateTime createdAt; // 채팅방 생성 시각
+    private LocalDateTime updatedAt; // 채팅방 마지막 변경 시각
 
     public ConversationResponse toResponse() {
         ZoneId zone = ZoneId.of("Asia/Seoul");

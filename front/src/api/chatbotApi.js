@@ -7,7 +7,9 @@ async function requestChatbot(config) {
     const result = response.data;
 
     if (!result?.success) {
-      const error = new Error(result?.error?.message ?? '챗봇 요청을 처리하지 못했습니다.');
+      const error = new Error(
+          result?.error?.message ?? '챗봇 요청을 처리하지 못했습니다.'
+      );
 
       error.fields = result?.error?.fields;
       throw error;
@@ -18,8 +20,10 @@ async function requestChatbot(config) {
     const detail = cause.response?.data?.error;
 
     const error = new Error(
-      detail?.message ??
-        (cause.isAxiosError ? '서버 응답을 확인하지 못했습니다. 대화 기록을 확인해주세요.' : cause.message)
+        detail?.message ??
+        (cause.isAxiosError
+            ? '서버 응답을 확인하지 못했습니다. 대화 기록을 확인해주세요.'
+            : cause.message)
     );
 
     error.fields = detail?.fields ?? cause.fields;
@@ -59,14 +63,6 @@ export function sendMessage(conversationId, message) {
 export function deleteConversation(conversationId) {
   return requestChatbot({
     url: `/chatbot/conversations/${conversationId}`,
-    method: 'DELETE',
-  });
-}
-
-// 가장 최근 사용자 질문의 ID를 보내면 질문과 답변이 함께 삭제된다.
-export function deleteLatestExchange(conversationId, messageId) {
-  return requestChatbot({
-    url: `/chatbot/conversations/${conversationId}/messages/${messageId}`,
     method: 'DELETE',
   });
 }

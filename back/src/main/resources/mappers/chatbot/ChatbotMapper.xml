@@ -4,7 +4,6 @@
 
 <mapper namespace="com.kh.back.chatbot.mapper.ChatbotMapper">
 
-    <!-- 소유자 조건은 항상 적용한다. -->
     <select id="findConversations"
             resultType="com.kh.back.chatbot.dto.ChatbotConversationDto">
         SELECT conversation_id,
@@ -44,12 +43,30 @@
         )
     </insert>
 
-    <!-- 메시지 조회에서도 사용자 소유권을 확인한다. -->
+    <!-- 짧은 DB 처리 동안만 대화방을 잠가 동시 상태 변경을 직렬화한다. -->
+    <select id="lockConversation"
+            resultType="com.kh.back.chatbot.dto.ChatbotConversationDto">
+        SELECT conversation_id,
+        user_id,
+        title,
+        revision,
+        created_at,
+        updated_at
+        FROM chatbot_conversations
+        WHERE conversation_id = #{conversationId}
+        AND user_id = #{userId}
+        AND deleted_at IS NULL
+        FOR UPDATE
+    </select>
+
     <select id="findMessages"
             resultType="com.kh.back.chatbot.dto.ChatbotMessageDto">
         SELECT m.message_id,
+        m.conversation_id,
         m.role,
-        m.content
+        m.content,
+        m.processing_status AS status,
+        m.created_at
         FROM chatbot_messages m
         JOIN chatbot_conversations c
         ON c.conversation_id = m.conversation_id
@@ -60,7 +77,6 @@
         ORDER BY m.message_id ASC
     </select>
 
-    <!-- 같은 버전의 동시 요청 중 먼저 저장한 요청만 성공한다. -->
     <update id="updateConversation">
         UPDATE chatbot_conversations
         SET title = CASE
@@ -75,22 +91,65 @@
         AND deleted_at IS NULL
     </update>
 
-    <insert id="insertMessage">
+    <!-- 생성된 메시지 ID를 DTO에 채워 이후 상태 변경에 사용한다. -->
+    <insert id="insertMessage"
+            parameterType="com.kh.back.chatbot.dto.ChatbotMessageDto"
+            useGeneratedKeys="true"
+            keyProperty="messageId">
         INSERT INTO chatbot_messages (
         conversation_id,
         role,
         content,
+        processing_status,
         created_at
         )
         VALUES (
         #{conversationId},
         #{role},
         #{content},
+        #{status},
         UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
         )
     </insert>
 
-    <!-- 대화방을 논리 삭제하고 진행 중인 답변의 저장을 차단한다. -->
+    <!-- 처리 중인 사용자 질문만 완료 상태로 변경한다. -->
+    <update id="completeQuestion">
+        UPDATE chatbot_messages
+        SET processing_status = 'COMPLETED'
+        WHERE conversation_id = #{conversationId}
+        AND message_id = #{messageId}
+        AND role = 'USER'
+        AND processing_status = 'PENDING'
+        AND deleted_at IS NULL
+    </update>
+
+    <!-- 이미 완료되었거나 삭제된 메시지는 실패 상태로 덮어쓰지 않는다. -->
+    <update id="failQuestion">
+        UPDATE chatbot_messages
+        SET processing_status = 'FAILED'
+        WHERE conversation_id = #{conversationId}
+        AND message_id = #{messageId}
+        AND role = 'USER'
+        AND processing_status = 'PENDING'
+        AND deleted_at IS NULL
+    </update>
+
+    <!-- 서버 중단 등으로 오래 남은 처리 중 질문을 다음 요청에서 정리한다. -->
+    <update id="expirePendingQuestions">
+        UPDATE chatbot_messages
+        SET processing_status = 'FAILED'
+        WHERE conversation_id = #{conversationId}
+        AND role = 'USER'
+        AND processing_status = 'PENDING'
+        AND deleted_at IS NULL
+        AND created_at &lt; TIMESTAMPADD(
+        SECOND,
+        -#{timeoutSeconds},
+        UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        )
+    </update>
+
+    <!-- 채팅방 전체 삭제는 유지한다. -->
     <update id="deleteConversation">
         UPDATE chatbot_conversations
         SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR,
@@ -105,29 +164,6 @@
         UPDATE chatbot_messages
         SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
         WHERE conversation_id = #{conversationId}
-        AND deleted_at IS NULL
-    </update>
-
-    <!-- 메시지 삭제 전에 대화 버전을 갱신해 동시 변경을 검사한다. -->
-    <update id="advanceConversationRevision">
-        UPDATE chatbot_conversations
-        SET revision = revision + 1,
-        updated_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
-        <if test="resetTitle">
-            , title = '새 대화'
-        </if>
-        WHERE conversation_id = #{conversationId}
-        AND user_id = #{userId}
-        AND revision = #{revision}
-        AND deleted_at IS NULL
-    </update>
-
-    <!-- 서비스에서 확인한 질문·답변 두 개만 논리 삭제한다. -->
-    <update id="deleteExchangeMessages">
-        UPDATE chatbot_messages
-        SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
-        WHERE conversation_id = #{conversationId}
-        AND message_id IN (#{questionId}, #{answerId})
         AND deleted_at IS NULL
     </update>
 

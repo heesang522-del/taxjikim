@@ -28,7 +28,8 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
     @Override
     @Transactional(readOnly = true)
     public ChatbotUsageDto getUsage(CustomUserDetails principal) {
-        Long userId = requireUserId(principal);
+        // Security에서 인증한 사용자의 ID로 사용량을 조회한다.
+        Long userId = principal.getUserId();
         LocalDate today = LocalDate.now(KOREA_ZONE);
 
         Integer count = chatbotUsageMapper.findUsageCount(
@@ -45,7 +46,7 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
     @Override
     @Transactional
     public ChatbotUsageDto reserveUsage(CustomUserDetails principal) {
-        Long userId = requireUserId(principal);
+        Long userId = principal.getUserId();
 
         // 한 요청에서는 동일한 한국 날짜를 기준으로 처리한다.
         LocalDate today = LocalDate.now(KOREA_ZONE);
@@ -100,20 +101,5 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
                 .used(used)
                 .remaining(Math.max(0, DAILY_LIMIT - used))
                 .build();
-    }
-
-    private Long requireUserId(CustomUserDetails principal) {
-        // 사용량 API가 직접 호출되는 경우에도 인증 정보를 검증한다.
-        if (principal == null
-                || principal.getUserId() == null
-                || principal.getUserId() <= 0) {
-            throw new ApiException(
-                    HttpStatus.UNAUTHORIZED,
-                    "AUTHENTICATION_REQUIRED",
-                    "로그인이 필요합니다."
-            );
-        }
-
-        return principal.getUserId();
     }
 }

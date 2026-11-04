@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
                         .requestMatchers("/ws/chat/**").authenticated()
+                        .requestMatchers("/api/v1/chatbot/**").authenticated() // 챗봇 API는 로그인한 사용자만 접근할 수 있게 한다.
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> apiResponseWriter.write(response, 401,
