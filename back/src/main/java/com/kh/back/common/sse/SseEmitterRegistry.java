@@ -70,6 +70,18 @@ public class SseEmitterRegistry {
         return emitter;
     }
 
+    // 로그아웃 등으로 이 유저의 실시간 연결을 더 유지할 이유가 없을 때, 열려 있는 모든 emitter를 즉시 끊는다.
+    // 맵에서 먼저 떼어낸 뒤 완료 처리하므로, complete()가 트리거하는 onCompletion의 removeEmitter는 그냥 아무 일도 안 하고 끝난다.
+    public void closeSessionsForUser(Long userId) {
+        List<SseEmitter> emitters = emittersByUserId.remove(userId);
+        if (emitters == null) {
+            return;
+        }
+        for (SseEmitter emitter : emitters) {
+            emitter.complete();
+        }
+    }
+
     // 특정 회원에게 연결된 모든 탭(emitter)으로 이벤트를 보낸다. 로그인하지 않았거나 연결이 없으면 조용히 무시한다.
     public void send(Long userId, String eventName, Object data) {
         List<SseEmitter> emitters = emittersByUserId.get(userId);

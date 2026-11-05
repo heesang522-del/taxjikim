@@ -3,7 +3,7 @@
 
 import { create } from 'zustand';
 import { ACCOUNT_SEED } from '../data/content.js';
-import { loginSession, logoutSession } from '../api/authApi.js';
+import { loginSession, logoutSession, checkSession as checkSessionRequest } from '../api/authApi.js';
 import { getMyProfile } from '../api/userApi.js';
 
 const ACCOUNTS_KEY = 'taxlab.accounts.v1';
@@ -138,6 +138,18 @@ export const useAuthStore = create((set, get) => {
         if (revision !== authRevision) return;
         const user = toScreenUser(result.data);
         set({ userId: user.loginId, apiUser: user });
+      } catch (error) {
+        if (revision === authRevision && error.status === 401) get().clearAuth();
+        throw error;
+      }
+    },
+
+    // 화면을 옮길 때마다 세션이 아직 유효한지만 확인한다. refreshProfile과 달리 프로필을 다시 받아오지
+    // 않으므로 apiUser는 그대로 두고, 세션이 끝났을 때만(401) 로컬 상태를 비운다.
+    checkSession: async () => {
+      const revision = authRevision;
+      try {
+        await checkSessionRequest();
       } catch (error) {
         if (revision === authRevision && error.status === 401) get().clearAuth();
         throw error;

@@ -8,6 +8,7 @@ import com.kh.back.auth.security.LoginSessionRepository;
 import com.kh.back.auth.security.LoginSessionRepository.RotationResult;
 import com.kh.back.chat.handler.ChatWebSocketHandler;
 import com.kh.back.common.security.JwtTokenProvider;
+import com.kh.back.common.sse.SseEmitterRegistry;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletResponse;
@@ -27,12 +28,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AuthServiceImpl implements AuthService {
+
+    // 중복 로그인으로 밀려난 이전 세션에 보내는 SSE 이벤트명. payload는 신호 역할만 한다.
+    private static final String SESSION_REPLACED_EVENT = "session-replaced";
 
     private final UserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
@@ -42,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
     private final LoginSessionRepository loginSessionRepository;
     private final AuthCookieService authCookieService;
     private final ChatWebSocketHandler chatWebSocketHandler;
+    private final SseEmitterRegistry sseEmitterRegistry;
 
     /**
      * 회원 인증 후 현재 로그인을 교체하고, 선택한 로그인 방식에 맞춰 쿠키를 설정합니다.
@@ -82,9 +88,15 @@ public class AuthServiceImpl implements AuthService {
 
         String accessToken = jwtTokenProvider.generateAccessToken(userDto.getUserId(), sessionId);
 
-        // 5. 새 로그인을 현재 로그인으로 저장
-        loginSessionRepository.replaceCurrentSession(
+        // 5. 새 로그인을 현재 로그인으로 저장. 리턴값은 덮어쓰기 전 로그인의 sid(없으면 null).
+        String previousSessionId = loginSessionRepository.replaceCurrentSession(
                 userDto.getUserId(), sessionId, refreshTokenId, sessionExpiration);
+
+        // 5-1. 밀려난 이전 세션이 있으면 그 세션(의 모든 탭)에 즉시 알린다.
+        // Redis는 이미 덮어쓴 뒤라 사실 자체는 바뀌지 않으므로, 아래 DB 트랜잭션 커밋을 기다리지 않고 바로 보낸다.
+        if (previousSessionId != null) {
+            sseEmitterRegistry.send(userDto.getUserId(), SESSION_REPLACED_EVENT, Map.of("type", "SESSION_REPLACED"));
+        }
 
         // 6. 쿠키 설정. 자동 로그인 미선택 시 이전 리프레시 쿠키 삭제
         authCookieService.setAccessToken(response, accessToken, rememberMe);
@@ -243,9 +255,11 @@ public class AuthServiceImpl implements AuthService {
         SecurityContextHolder.clearContext();
 
         // 채팅 WebSocket은 핸드셰이크 때 한 번만 인증하므로, 로그아웃 이후에도 재검증 없이 계속 열려 있다.
-        // 여기서 그 유저가 열어둔 채팅 연결을 함께 끊어준다.
+        // 알림 SSE도 클라이언트가 스스로 연결을 끊긴 하지만, 서버는 다음 하트비트 전송 실패 전까지는 모른다.
+        // 둘 다 로그아웃 시점에 서버가 바로 끊어서, 쓰지 않는 연결이 메모리에 남아 있는 시간을 없앤다.
         if (loggedOutUserId != null) {
             chatWebSocketHandler.closeSessionsForUser(loggedOutUserId);
+            sseEmitterRegistry.closeSessionsForUser(loggedOutUserId);
         }
     }
 
