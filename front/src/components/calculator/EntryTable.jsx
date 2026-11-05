@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Card } from '../common/index';
-import { getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
+import { Button, Card, Icon } from '../common/index';
+import { deleteTransaction, getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
 import { getTransactionCashAmount } from '../../utils/taxInputSummary';
 import {
@@ -294,6 +294,27 @@ export function EntryTable() {
 
     resetCategory(operation.key);
     setCheckedKeys((previous) => previous.filter((key) => key !== operation.key));
+  }
+
+  // 저장된 거래는 삭제 응답을 받은 뒤 본문과 저장 목록에서 제거한다.
+  async function handleDeleteRow(row) {
+    if (workingRef.current || useTaxStore.getState().taxSaveBusy) return;
+
+    clearStatus();
+    workingRef.current = true;
+    useTaxStore.setState({ taxSaveBusy: true });
+    try {
+      if (row.persisted) {
+        await deleteTransaction(row.taxInputId, row.transactionId);
+      }
+      commitOperation({ ...row, type: 'delete' });
+      setMessage('거래를 삭제했습니다.');
+    } catch (cause) {
+      setError(cause?.message ?? '거래를 삭제하지 못했습니다.');
+    } finally {
+      workingRef.current = false;
+      useTaxStore.setState({ taxSaveBusy: false });
+    }
   }
 
   function hasRemainingChanges(current, completedKeys) {
@@ -617,6 +638,7 @@ export function EntryTable() {
             <col />
             <col className="tax-col-amount" />
             <col className="tax-col-category-read" />
+            <col />
           </colgroup>
 
           <thead>
@@ -626,6 +648,7 @@ export function EntryTable() {
               <th>설명</th>
               <th className="tax-amount">금액</th>
               <th>카테고리</th>
+              <th scope="col" aria-label="삭제" />
             </tr>
           </thead>
 
@@ -640,12 +663,25 @@ export function EntryTable() {
                 </td>
                 <td className="tax-amount">{formatMoney(row.amount)}</td>
                 <td>{getTransactionCategoryLabel(row.category)}</td>
+                <td>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    className="icon"
+                    aria-label={`${row.description} 삭제`}
+                    disabled={busy}
+                    onClick={() => void handleDeleteRow(row)}
+                  >
+                    <Icon name="trash" size={16} />
+                  </Button>
+                </td>
               </tr>
             ))}
 
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5}>표시할 거래가 없습니다.</td>
+                <td colSpan={6}>표시할 거래가 없습니다.</td>
               </tr>
             )}
           </tbody>
