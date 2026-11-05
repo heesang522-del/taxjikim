@@ -3,12 +3,10 @@ package com.kh.back.notification.controller;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.common.dto.CursorMeta;
-import com.kh.back.common.exception.ApiException;
 import com.kh.back.notification.dto.NotificationDto;
 import com.kh.back.notification.dto.NotificationPageDto;
 import com.kh.back.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,6 +19,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
+// 이 컨트롤러 경로(/api/v1/notifications/**)는 SecurityConfig에서 인증을 요구하므로,
+// 여기 도달한 요청은 이미 principal이 채워져 있다. 별도 null 체크가 필요 없다.
 @RestController
 @RequestMapping("/api/v1/notifications")
 @RequiredArgsConstructor
@@ -34,10 +34,6 @@ public class NotificationApiController {
     // SSE 응답은 스트림이라 공통 ApiResponse 포맷을 쓰지 않는다.
     @GetMapping(value = "/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribe(@AuthenticationPrincipal CustomUserDetails principal) {
-        if (principal == null || principal.getUserId() == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
-
         return notificationService.subscribe(principal.getUserId());
     }
 
@@ -48,10 +44,6 @@ public class NotificationApiController {
     public ApiResponse<List<NotificationDto>> getNotifications(@AuthenticationPrincipal CustomUserDetails principal,
                                                                  @RequestParam(required = false) Long cursorId,
                                                                  @RequestParam(required = false) Integer size) {
-        if (principal == null || principal.getUserId() == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
-
         NotificationPageDto page = notificationService.getNotifications(principal.getUserId(), cursorId, size);
         return ApiResponse.ok(page.getItems(), new CursorMeta(page.isHasMore(), page.getNextCursor()));
     }
@@ -60,10 +52,6 @@ public class NotificationApiController {
     // 모달 숫자 표시
     @GetMapping("/unread-count")
     public ApiResponse<Long> getUnreadCount(@AuthenticationPrincipal CustomUserDetails principal) {
-        if (principal == null || principal.getUserId() == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
-
         return ApiResponse.ok(notificationService.getUnreadCount(principal.getUserId()));
     }
 
@@ -71,10 +59,6 @@ public class NotificationApiController {
     @PatchMapping("/{notificationId}/read")
     public ApiResponse<Void> markAsRead(@AuthenticationPrincipal CustomUserDetails principal,
                                          @PathVariable Long notificationId) {
-        if (principal == null || principal.getUserId() == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
-
         notificationService.markAsRead(principal.getUserId(), notificationId);
         return ApiResponse.ok(null);
     }
@@ -82,10 +66,6 @@ public class NotificationApiController {
     // 로그인한 회원의 미읽음 알림을 전부 읽음 처리. 읽은 알림은 곧바로 목록에서 빠진다(소프트 삭제).
     @PatchMapping("/read-all")
     public ApiResponse<Void> markAllAsRead(@AuthenticationPrincipal CustomUserDetails principal) {
-        if (principal == null || principal.getUserId() == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
-
         notificationService.markAllAsRead(principal.getUserId());
         return ApiResponse.ok(null);
     }
