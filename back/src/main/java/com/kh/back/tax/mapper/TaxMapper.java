@@ -1,6 +1,7 @@
 package com.kh.back.tax.mapper;
 
 import com.kh.back.tax.dto.MonthlyTransactionDto;
+import com.kh.back.tax.dto.CategoryAmountDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
 import org.apache.ibatis.annotations.Mapper;
@@ -22,5 +23,8 @@ public interface TaxMapper {
 
     // 같은 분석의 수입·지출을 월과 거래 구분으로 묶어 한 번에 조회한다.
     List<MonthlyTransactionDto> findMonthlyTransactions(@Param("taxInputId") Long taxInputId);
+
+    // 실제 거래의 수입·지출 금액을 카테고리별로 조회한다.
+    List<CategoryAmountDto> findCategoryAmounts(@Param("taxInputId") Long taxInputId);
 
 }

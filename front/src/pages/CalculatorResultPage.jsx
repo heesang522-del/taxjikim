@@ -8,6 +8,7 @@ import { Button, Icon, Note } from '../components/common/index';
 import { SummaryCards } from '../components/calculator/result/SummaryCards';
 import { TaxChain } from '../components/calculator/result/TaxChain';
 import { MonthlyChart } from '../components/calculator/result/MonthlyChart';
+import { CategoryRatioCharts } from '../components/calculator/result/CategoryRatioCharts';
 import RegistrationCompare from '../components/calculator/result/RegistrationCompare';
 import { ROUTES } from '../utils/routes';
 import { useTax } from '../store/useTaxStore';
@@ -124,7 +125,14 @@ export default function CalcResultPage() {
           expenses={result?.monthlyExpenses}
           isLoading={isLoading}
           errorMessage={errorMessage}
-        />
+        >
+          {result && (
+            <CategoryRatioCharts
+              incomeCategories={result.incomeCategories ?? []}
+              expenseCategories={result.expenseCategories ?? []}
+            />
+          )}
+        </MonthlyChart>
       </div>
       <RegistrationCompare businessRegistered={result?.businessRegistered} />
       <Note title="안내">

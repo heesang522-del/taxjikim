@@ -1,6 +1,8 @@
 package com.kh.back.tax.service;
 
 import com.kh.back.tax.dto.TaxCalculationInputDto;
+import com.kh.back.tax.dto.CategoryAmountDto;
+import com.kh.back.tax.dto.CategoryRatioDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
 import com.kh.back.tax.dto.TaxCalculationResultDto;
 import com.kh.back.tax.exception.TaxCalculationException;
@@ -100,12 +102,26 @@ public class TaxServiceImpl implements TaxService {
             settlementAmount = balance.abs();
         }
 
-        // 7. 산출 근거·월별 목록·정산 예상액을 함께 반환한다.
+        // 7. 실제 거래만 사용해 수입과 지출의 카테고리 비율을 각각 계산한다.
+        List<CategoryAmountDto> categories = taxMapper.findCategoryAmounts(taxInputId);
         return new TaxCalculationResultDto(breakdown, incomes, expenses,
                 input.getBusinessRegistered(), actualIncome,
                 input.getTotalIncome().subtract(actualIncome), actualExpense,
                 input.getTotalExpense().subtract(actualExpense), actualNetIncome, deductedAmount,
-                settlementType, settlementAmount);
+                settlementType, settlementAmount,
+                categoryRatios(categories, "INCOME"), categoryRatios(categories, "EXPENSE"));
+    }
+
+    // 금액이 있는 카테고리의 비율을 같은 거래 구분의 합계로 계산한다.
+    private List<CategoryRatioDto> categoryRatios(List<CategoryAmountDto> categories, String transactionType) {
+        List<CategoryAmountDto> amounts = categories.stream()
+                .filter(row -> transactionType.equals(row.transactionType()) && row.amount().signum() > 0)
+                .toList();
+        BigDecimal total = amounts.stream().map(CategoryAmountDto::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        return amounts.stream()
+                .map(row -> new CategoryRatioDto(row.category(), row.amount(),
+                        row.amount().movePointRight(2).divide(total, 2, RoundingMode.HALF_UP)))
+                .toList();
     }
 
     // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.

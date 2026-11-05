@@ -41,4 +41,15 @@
         ORDER BY MONTH(TRANSACTION_DATE), TRANSACTION_TYPE
     </select>
 
+    <select id="findCategoryAmounts" resultType="com.kh.back.tax.dto.CategoryAmountDto">
+        SELECT TRANSACTION_TYPE AS transactionType,
+               COALESCE(NULLIF(TRIM(CATEGORY), ''), 'UNCLASSIFIED') AS category,
+               COALESCE(SUM(CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                                 THEN PRE_TAX_INCOME ELSE AMOUNT END), 0) AS amount
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_TYPE IN ('INCOME', 'EXPENSE')
+        GROUP BY TRANSACTION_TYPE, COALESCE(NULLIF(TRIM(CATEGORY), ''), 'UNCLASSIFIED')
+        ORDER BY TRANSACTION_TYPE, amount DESC, category
+    </select>
 </mapper>
