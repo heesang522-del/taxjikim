@@ -120,7 +120,10 @@ export function ProfileForm() {
         <div className="intro">
           <div>
             <h2>기본정보</h2>
-            <p className="small muted">면세 1인 유튜버의 세금 분석에 필요한 정보예요.</p>
+            <p className="small muted">
+              이 서비스는 부가가치세 면세 대상인 1인 미디어 창작자의 예상 소득세와 지방소득세를 계산합니다.
+              사업자등록 여부는 결과 화면의 안내에만 사용됩니다.
+            </p>
           </div>
           <span className="year">{profile.taxYear}년 기준</span>
         </div>

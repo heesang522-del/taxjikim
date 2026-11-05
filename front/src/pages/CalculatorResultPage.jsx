@@ -13,10 +13,7 @@ import { ROUTES } from '../utils/routes';
 import { useTax } from '../store/useTaxStore';
 import { useAuth } from '../store/useAuthStore';
 import { useToast } from '../store/useToastStore';
-import { useTaxResult, useSimpleResult } from '../utils/useTaxResult';
 import { useHistory } from '../utils/useHistory';
-
-const TOTAL_TAX_OPTIONS = { excludeWithholding: true };
 
 export default function CalcResultPage() {
   const [searchParams] = useSearchParams();
@@ -58,9 +55,6 @@ export default function CalcResultPage() {
   }, [calculated, taxInputId, validTaxInputId]);
   const { loggedIn } = useAuth();
   const toast = useToast();
-  // 사업자등록 비교는 기존 예시 계산을 유지하며 서버 계산 결과와 구분한다.
-  const c = useTaxResult(TOTAL_TAX_OPTIONS);
-  const simple = useSimpleResult(TOTAL_TAX_OPTIONS);
   const { save } = useHistory();
   const saveResult = () => {
     if (!loggedIn) {
@@ -132,10 +126,7 @@ export default function CalcResultPage() {
           errorMessage={errorMessage}
         />
       </div>
-      <div>
-        <p className="hint">아래 사업자등록 비교는 예시입니다.</p>
-        <RegistrationCompare netNow={c.total} netSimple={simple.total} />
-      </div>
+      <RegistrationCompare businessRegistered={result?.businessRegistered} />
       <Note title="안내">
         이 결과는 입력값과 계산 가정에 따른 참고용 추정치이며 세무 조언이 아닙니다. 실제 신고 전에 국세청 자료를
         확인하거나 세무사와 상담하세요.
