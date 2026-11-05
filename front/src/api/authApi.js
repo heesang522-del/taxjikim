@@ -20,6 +20,7 @@ async function requestAuth(config) {
             ? '서버에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.'
             : cause.message)
     );
+    error.status = cause.response?.status ?? cause.status;
     error.code = detail?.code ?? cause.code;
     error.details = detail?.details ?? cause.details;
     throw error;
@@ -40,6 +41,12 @@ export function logoutSession() {
     url: '/auth/sessions/current',
     method: 'DELETE',
   });
+}
+
+// 화면 전환마다 세션이 아직 유효한지만 가볍게 확인한다. 전체 프로필(/users/me)보다 가벼워서
+// 네비게이션마다 부르는 용도에 맞는다.
+export function checkSession() {
+  return requestAuth({ url: '/auth/session' });
 }
 
 export function getLockedAccounts() {

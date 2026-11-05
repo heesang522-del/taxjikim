@@ -4,6 +4,7 @@ import com.kh.back.auth.dto.AccountRecoveryRequestDto;
 import com.kh.back.auth.dto.LoginRequestDto;
 import com.kh.back.auth.dto.LoginResponseDto;
 import com.kh.back.auth.dto.TokenResponseDto;
+import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.service.AuthService;
 import com.kh.back.auth.service.EmailVerificationService;
 import com.kh.back.common.dto.ApiResponse;
@@ -15,8 +16,10 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -35,6 +38,16 @@ public class AuthApiController {
     public ResponseEntity<ApiResponse<LoginResponseDto>> login(@RequestBody LoginRequestDto request, HttpServletResponse response) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(
                 authService.login(request.loginId(), request.password(), request.rememberMe(), response)));
+    }
+
+    // 세션이 아직 유효한지만 가볍게 확인한다. JwtAuthenticationFilter가 이미 토큰·Redis 세션을 검증해
+    // principal을 채워놨는지만 보고, 화면 전환마다 무거운 /users/me 전체 프로필을 다시 조회하지 않게 한다.
+    @GetMapping("/session")
+    public ApiResponse<Void> checkSession(@AuthenticationPrincipal CustomUserDetails principal) {
+        if (principal == null) {
+            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
+        }
+        return ApiResponse.ok(null);
     }
 
     // 현재 로그인 종료 및 인증 쿠키 삭제 요청 처리
