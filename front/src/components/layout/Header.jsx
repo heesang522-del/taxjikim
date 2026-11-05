@@ -12,8 +12,18 @@ import { Button, Icon, Modal, Pill } from '../common/index';
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
-  const { items, unreadCount, hasMore, loadingMore, openList, closeList, loadMore, markRead, markAllRead } =
-    useNotifications();
+  const {
+    items,
+    unreadCount,
+    hasMore,
+    loadingMore,
+    openList,
+    closeList,
+    loadMore,
+    markRead,
+    markAllRead,
+    sessionReplaced,
+  } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -31,6 +41,13 @@ export function Header() {
     } finally {
       setLoggingOut(false);
     }
+  }
+
+  // 다른 기기에서 로그인해 이 세션이 끝났을 때 보여주는 모달의 유일한 동작.
+  // 새로고침하면 쿠키가 이미 무효화돼 있어 checkAuth가 비로그인으로 판단하고,
+  // 보호된 화면은 기존 가드가 알아서 로그인 페이지로 보낸다.
+  function handleSessionReplacedConfirm() {
+    window.location.reload();
   }
 
   async function handleMarkAllRead() {
@@ -162,6 +179,17 @@ export function Header() {
             {!hasMore && items.length > 0 && (
               <p className="small muted" style={{ textAlign: 'center' }}>마지막 알림입니다</p>
             )}
+          </div>
+        </Modal>
+      )}
+      {sessionReplaced && (
+        // 바깥 클릭·Esc도 확인 버튼과 같은 동작을 하게 해서, 사실상 "확인" 외에 다른 선택지가 없게 한다.
+        <Modal title="로그인 종료" onClose={handleSessionReplacedConfirm}>
+          <div className="grid" style={{ gap: 12, minWidth: 280 }}>
+            <p>다른 기기에서 로그인했거나 현재 로그인이 종료되었습니다.</p>
+            <Button size="lg" onClick={handleSessionReplacedConfirm}>
+              확인
+            </Button>
           </div>
         </Modal>
       )}

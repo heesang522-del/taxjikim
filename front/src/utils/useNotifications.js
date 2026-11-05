@@ -42,13 +42,16 @@ function toNotificationItem(n) {
   };
 }
 
-/** 헤더 알림 벨이 쓰는 훅.
- *  안읽음 수(unreadCount)는 로그인 중 서버 SSE 구독(/notifications/subscribe)으로 받는다.
- *  서버가 보내는 이벤트는 "알림이 바뀌었다"는 신호만 담고 있어서, 받으면 안읽음 수를 다시 조회한다.
+/** 헤더 알림 벨이 쓰는 훅. 로그인 중인 사용자 하나당 서버 SSE 구독(/notifications/subscribe)을
+ *  하나만 열어 두고, 알림과 중복 로그인 감지가 이 연결을 함께 쓴다.
+ *  안읽음 수(unreadCount)는 로그인 중 이 SSE로 받는다.
+ *  서버가 보내는 'notification' 이벤트는 "알림이 바뀌었다"는 신호만 담고 있어서, 받으면 안읽음 수를 다시 조회한다.
  *  알림 목록(items)은 항상 미읽음 알림만 담는다. 알림창을 열 때(openList) 최신 1페이지를 불러오고,
  *  열려 있는 동안 SSE 신호를 받으면 같은 방식으로 다시 불러와 실시간으로 반영한다(closeList로 끈다).
  *  스크롤로 더 볼 때만 loadMore로 이어붙이고, 알림을 읽으면(markRead) 서버에서 바로 삭제되므로
- *  화면 목록에서도 같이 제거한다. */
+ *  화면 목록에서도 같이 제거한다.
+ *  같은 계정으로 다른 곳에서 로그인하면 서버가 'session-replaced' 이벤트를 보내고, 그러면
+ *  sessionReplaced를 true로 바꾼다. 실제 로그아웃 처리(새로고침)는 이 값을 보는 Header가 담당한다. */
 export function useNotifications() {
   const { loggedIn } = useAuth();
   const [items, setItems] = useState([]);
@@ -59,6 +62,8 @@ export function useNotifications() {
   const [loadingMore, setLoadingMore] = useState(false);
   // 알림창이 화면에 열려 있는지. SSE 신호를 받았을 때 목록을 같이 다시 불러올지 판단하는 데만 쓴다.
   const isListOpenRef = useRef(false);
+  // 다른 기기에서 로그인해 이 세션이 밀려났는지. true가 되면 Header가 강제 로그아웃 모달을 띄운다.
+  const [sessionReplaced, setSessionReplaced] = useState(false);
 
   const refreshUnreadCount = useCallback(() => {
     if (!loggedIn) return Promise.resolve();
@@ -95,6 +100,7 @@ export function useNotifications() {
       setHasMore(false);
       setNextCursor(null);
       isListOpenRef.current = false;
+      setSessionReplaced(false);
       return undefined;
     }
 
@@ -118,6 +124,12 @@ export function useNotifications() {
         refreshUnreadCount();
         // 알림창이 열려 있는 동안 새 알림이 오면 닫았다 다시 열지 않아도 바로 목록에 반영되게 한다.
         if (isListOpenRef.current) openList();
+      });
+
+      // 같은 계정으로 다른 곳에서 로그인하면 서버가 이 세션의 sid를 덮어쓰고 이 이벤트를 보낸다.
+      // 신호만 담겨 있으므로 값은 보지 않고, 받으면 바로 모달을 띄울 상태로만 바꾼다.
+      eventSource.addEventListener('session-replaced', () => {
+        setSessionReplaced(true);
       });
 
       eventSource.onerror = () => {
@@ -171,5 +183,16 @@ export function useNotifications() {
     });
   }, []);
 
-  return { items, unreadCount, hasMore, loadingMore, openList, closeList, loadMore, markRead, markAllRead };
+  return {
+    items,
+    unreadCount,
+    hasMore,
+    loadingMore,
+    openList,
+    closeList,
+    loadMore,
+    markRead,
+    markAllRead,
+    sessionReplaced,
+  };
 }

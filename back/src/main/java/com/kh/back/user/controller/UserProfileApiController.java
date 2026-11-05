@@ -31,9 +31,11 @@ public class UserProfileApiController {
     private final AuthCookieService authCookieService;
     private final LoginSessionRepository loginSessionRepository;
 
+    // JwtAuthenticationFilter가 이 요청 인증 과정에서 이미 DB로 같은 회원을 조회해 principal에 담아뒀으므로,
+    // 여기서 다시 조회하지 않고 그 값을 그대로 돌려준다.
     @GetMapping
     public ApiResponse<UserDto> getUser(@AuthenticationPrincipal CustomUserDetails principal) {
-        return ApiResponse.ok(userService.getUserById(principal.getUserId()));
+        return ApiResponse.ok(principal.getUserDto());
     }
 
     @PatchMapping("/nickname")
