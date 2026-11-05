@@ -114,14 +114,24 @@ public class TaxServiceImpl implements TaxService {
 
     // 금액이 있는 카테고리의 비율을 같은 거래 구분의 합계로 계산한다.
     private List<CategoryRatioDto> categoryRatios(List<CategoryAmountDto> categories, String transactionType) {
-        List<CategoryAmountDto> amounts = categories.stream()
-                .filter(row -> transactionType.equals(row.transactionType()) && row.amount().signum() > 0)
-                .toList();
-        BigDecimal total = amounts.stream().map(CategoryAmountDto::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
-        return amounts.stream()
-                .map(row -> new CategoryRatioDto(row.category(), row.amount(),
-                        row.amount().movePointRight(2).divide(total, 2, RoundingMode.HALF_UP)))
-                .toList();
+        List<CategoryAmountDto> amounts = new ArrayList<>();
+        BigDecimal total = BigDecimal.ZERO;
+
+        // 같은 거래 구분에서 금액이 있는 카테고리만 모아 합계를 구한다.
+        for (CategoryAmountDto category : categories) {
+            if (transactionType.equals(category.transactionType()) && category.amount().signum() > 0) {
+                amounts.add(category);
+                total = total.add(category.amount());
+            }
+        }
+
+        List<CategoryRatioDto> ratios = new ArrayList<>();
+        for (CategoryAmountDto category : amounts) {
+            BigDecimal percentage = category.amount().multiply(BigDecimal.valueOf(100))
+                    .divide(total, 2, RoundingMode.HALF_UP);
+            ratios.add(new CategoryRatioDto(category.category(), category.amount(), percentage));
+        }
+        return ratios;
     }
 
     // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.

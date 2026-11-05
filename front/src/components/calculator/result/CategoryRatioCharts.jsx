@@ -27,11 +27,31 @@ const Charts = styled.div`
 `;
 
 const Pie = styled.div`
+  position: relative;
+  display: grid;
+  place-items: center;
   width: min(108px, 100%);
   aspect-ratio: 1;
   border-radius: 50%;
   margin: 10px auto;
   background: ${({ $gradient }) => $gradient};
+`;
+
+const PieCenter = styled.div`
+  display: grid;
+  place-content: center;
+  width: 72%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface, #fff);
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.35;
+  pointer-events: none;
+
+  strong {
+    font-size: 12px;
+  }
 `;
 
 const PieArea = styled.div`
@@ -77,6 +97,7 @@ const Legend = styled.ul`
 `;
 
 const formatNumber = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 2 });
+const compactNumber = new Intl.NumberFormat('ko-KR', { notation: 'compact', maximumFractionDigits: 1 });
 
 function CategoryPie({ title, basis, categories }) {
   const [hoveredIndex, setHoveredIndex] = useState(-1);
@@ -87,7 +108,14 @@ function CategoryPie({ title, basis, categories }) {
   const segments = categories.map(({ amount }, index) => {
     const start = end;
     end = index === categories.length - 1 ? 100 : end + (Number(amount) / total) * 100;
-    return { end, colorStop: `${COLORS[index % COLORS.length]} ${start}% ${end}%` };
+    const gap = categories.length > 1 ? Math.min(0.45, (end - start) / 4) : 0;
+    const color = COLORS[index % COLORS.length];
+    return {
+      end,
+      colorStop: gap
+        ? `transparent ${start}% ${start + gap}%, ${color} ${start + gap}% ${end - gap}%, transparent ${end - gap}% ${end}%`
+        : `${color} ${start}% ${end}%`,
+    };
   });
 
   // 원의 위쪽을 시작점으로 마우스 각도를 구해 해당 조각을 찾는다.
@@ -95,7 +123,8 @@ function CategoryPie({ title, basis, categories }) {
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - bounds.left - bounds.width / 2;
     const y = event.clientY - bounds.top - bounds.height / 2;
-    if (Math.hypot(x, y) > bounds.width / 2) {
+    const distance = Math.hypot(x, y);
+    if (distance > bounds.width / 2 || distance < bounds.width * 0.36) {
       setHoveredIndex(-1);
       return;
     }
@@ -112,11 +141,15 @@ function CategoryPie({ title, basis, categories }) {
         <>
           <PieArea>
             <Pie
-              aria-hidden="true"
               $gradient={`conic-gradient(${segments.map((segment) => segment.colorStop).join(', ')})`}
               onPointerMove={handlePointerMove}
               onPointerLeave={() => setHoveredIndex(-1)}
-            />
+            >
+              <PieCenter>
+                <span>실제 합계</span>
+                <strong title={`${formatNumber.format(total)}원`}>${compactNumber.format(total)}원</strong>
+              </PieCenter>
+            </Pie>
             {hovered && (
               <Tooltip aria-hidden="true">
                 {getTransactionCategoryLabel(hovered.category)} · {formatNumber.format(hovered.amount)}원 ·{' '}
