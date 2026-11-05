@@ -255,9 +255,11 @@ public class AuthServiceImpl implements AuthService {
         SecurityContextHolder.clearContext();
 
         // 채팅 WebSocket은 핸드셰이크 때 한 번만 인증하므로, 로그아웃 이후에도 재검증 없이 계속 열려 있다.
-        // 여기서 그 유저가 열어둔 채팅 연결을 함께 끊어준다.
+        // 알림 SSE도 클라이언트가 스스로 연결을 끊긴 하지만, 서버는 다음 하트비트 전송 실패 전까지는 모른다.
+        // 둘 다 로그아웃 시점에 서버가 바로 끊어서, 쓰지 않는 연결이 메모리에 남아 있는 시간을 없앤다.
         if (loggedOutUserId != null) {
             chatWebSocketHandler.closeSessionsForUser(loggedOutUserId);
+            sseEmitterRegistry.closeSessionsForUser(loggedOutUserId);
         }
     }
 
