@@ -105,6 +105,7 @@ public class TaxTransactionDto {
         private TaxInputRequest input;
         private List<TaxCategoryChange> changes;
         // 최초 저장할 신규 거래 목록
+        private Integer expectedTransactionCount;
         private List<TaxTransactionDto> transactions;
     }
 }

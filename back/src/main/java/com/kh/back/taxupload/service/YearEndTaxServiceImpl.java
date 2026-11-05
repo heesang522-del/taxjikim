@@ -167,10 +167,28 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                             null
                     );
 
-            // 같은 저장 요청을 재전송하면 기존 거래를 반환한다.
-            if (sameTransactions(existing, requested)) {
+            Integer expectedCount = request.getExpectedTransactionCount();
+            if (expectedCount != null) {
+                // 화면이 알고 있는 저장 건수와 비교해 추가 저장과 재시도를 구분한다.
+                taxValidator.validateNewTransactionIds(rows);
+                if (expectedCount < 0 || expectedCount > existing.size()) {
+                    throw invalid("expectedTransactionCount", "저장된 거래 목록을 확인해주세요.");
+                }
+                if (existing.size() > expectedCount) {
+                    savedRows = existing.subList(expectedCount, existing.size());
+                    if (!sameTransactions(savedRows, requested)) {
+                        throw new ApiException(HttpStatus.CONFLICT, "TRANSACTIONS_CHANGED",
+                                "저장된 거래가 변경됐습니다. 목록을 확인해주세요.");
+                    }
+                } else if (!requested.isEmpty()) {
+                    taxMapper.insertTransactions(requested);
+                    invalidateAfterTransactionChange(taxInputId);
+                    List<TaxTransactionDto> stored = taxMapper.findTransactions(taxInputId, null);
+                    savedRows = stored.subList(expectedCount, stored.size());
+                }
+            } else if (sameTransactions(existing, requested)) {
+                // 기존 최초 저장 요청의 재시도는 같은 거래 목록을 돌려준다.
                 savedRows = existing;
-
             } else {
                 // 최초 저장 요청으로 기존 거래 전체를 교체하지 않는다.
                 if (!existing.isEmpty()) {

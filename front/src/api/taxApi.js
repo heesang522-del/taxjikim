@@ -188,7 +188,7 @@ export async function getTaxResult(taxInputId) {
 // input만 전달하면 기본정보를 생성한다.
 // taxInputId와 transactions를 전달하면 기존 분석에 거래를 최초 저장한다.
 // input과 transactions를 전달하면 기본정보와 거래를 한 요청으로 저장한다.
-export async function saveTaxData({ input, taxInputId, transactions } = {}) {
+export async function saveTaxData({ input, taxInputId, transactions, expectedTransactionCount } = {}) {
   const data = {};
 
   if (taxInputId == null) {
@@ -211,6 +211,9 @@ export async function saveTaxData({ input, taxInputId, transactions } = {}) {
     }
 
     data.transactions = transactions;
+    if (expectedTransactionCount !== undefined) {
+      data.expectedTransactionCount = expectedTransactionCount;
+    }
   }
 
   return request({
@@ -234,7 +237,7 @@ export async function createTaxInput(input) {
 
 // 기존 화면에서 사용하는 거래 저장 함수 이름과 응답 형식을 유지한다.
 // 기존 거래의 수정 반영에서는 호출하지 않는다.
-export async function saveTransactions(taxInputId, rows) {
+export async function saveTransactions(taxInputId, rows, expectedTransactionCount) {
   if (!Array.isArray(rows)) {
     throw new Error('저장할 거래 목록이 필요합니다.');
   }
@@ -242,6 +245,7 @@ export async function saveTransactions(taxInputId, rows) {
   const result = await saveTaxData({
     taxInputId,
     transactions: rows,
+    expectedTransactionCount,
   });
 
   return {
@@ -726,8 +730,10 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
   let savedCount = 0;
 
   for (const [year, entries] of groups) {
-    // 같은 화면에서 재시도할 때 기존에 생성한 분석번호를 사용한다.
-    let taxInputId = state.taxPendingInputIdsByYear?.[year] ?? null;
+    // 첫 저장에서 발급한 분석번호를 같은 화면의 같은 연도에 재사용한다.
+    let taxInputId = state.taxInputIdsByYear?.[year] ?? state.taxPendingInputIdsByYear?.[year] ?? null;
+    const previousRows =
+      (state.taxSavedSnapshots ?? []).find((snapshot) => snapshot.taxInputId === taxInputId)?.rows ?? [];
 
     if (taxInputId == null) {
       const response = await createTaxInput({
@@ -750,7 +756,8 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
 
     const response = await saveTransactions(
       taxInputId,
-      entries.map(({ payload }) => payload)
+      entries.map(({ payload }) => payload),
+      previousRows.length
     );
 
     const savedRows = response?.data;
@@ -798,7 +805,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
     await onGroupSaved({
       taxYear: year,
       taxInputId,
-      rows: savedRows,
+      rows: [...previousRows, ...savedRows],
       bindings,
     });
 

@@ -161,20 +161,21 @@ export function EntryTable() {
   const selectedBulk = ALL_CATEGORIES.some((item) => item.value === bulkCategory) ? bulkCategory : '';
 
   const rowKeys = JSON.stringify(rows.map((row) => row.key).sort());
+  const unclassifiedKeys = JSON.stringify(visibleRows.map((row) => row.key).sort());
 
-  // 새 거래가 추가된 경우에만 팝업을 자동으로 연다.
+  // 새로 추가된 미분류 거래가 있을 때만 팝업을 자동으로 연다.
   useEffect(() => {
     if (busy) return;
 
     const currentKeys = new Set(JSON.parse(rowKeys));
-    const hasNewRows = [...currentKeys].some((key) => !previousKeysRef.current.has(key));
+    const hasNewUnclassifiedRows = JSON.parse(unclassifiedKeys).some((key) => !previousKeysRef.current.has(key));
 
     previousKeysRef.current = currentKeys;
 
-    if (hasNewRows) {
+    if (hasNewUnclassifiedRows) {
       setOpen(true);
     }
-  }, [rowKeys, busy]);
+  }, [rowKeys, unclassifiedKeys, busy]);
 
   // React 상태에 맞춰 dialog를 제어하고 배경 스크롤을 막는다.
   useEffect(() => {
@@ -553,7 +554,7 @@ export function EntryTable() {
         onInputCreated: rememberCreatedInput,
         onGroupSaved: (group) => {
           commitSavedGroup(group);
-          completedCount += group.rows.length;
+          completedCount += group.bindings.length;
         },
       });
 
