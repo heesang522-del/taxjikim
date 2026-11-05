@@ -35,10 +35,10 @@ from .income_classifier import classify_descriptions as classify_income_descript
 # 프로젝트 루트와 ml 폴더 중 어디서 서버를 실행해도 같은 스케줄러를 사용한다.
 if __package__ == "ml.app":
     from ..scripts.feedback_preprocessing import filter_feedback, write_feedback_review
-    from ..scripts.retrain_scheduler import run_scheduler
+    from ..scripts.retrain_scheduler import read_last_training, run_scheduler
 else:
     from scripts.feedback_preprocessing import filter_feedback, write_feedback_review
-    from scripts.retrain_scheduler import run_scheduler
+    from scripts.retrain_scheduler import read_last_training, run_scheduler
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -84,6 +84,39 @@ def load_transaction_model(kind: str, label: str) -> dict:
         ) from exc
 
 
+# 성공 기록과 학습 보고서가 일치할 때만 기존 모델 종류의 새 번들을 적용한다.
+def apply_retrained_model(app: FastAPI, kind: str) -> None:
+    retraining_dir = MODEL_DIR / "retraining"
+    classifier_dir = retraining_dir / kind / "classifier"
+    try:
+        record = read_last_training(retraining_dir / f"{kind}_last_training.json")
+        trained_at = record.get("trained_at")
+        if not trained_at or trained_at == getattr(app.state, f"{kind}_trained_at", None):
+            return
+
+        report = json.loads((classifier_dir / "model_report.json").read_text(encoding="utf-8"))
+        versions = {
+            str(Path(path).relative_to(MODEL_DIR.parent)): digest
+            for path, digest in report["input_sha256"].items()
+        }
+        if versions != record["data_versions"]:
+            logger.warning("재학습 성공 기록과 모델 자료가 일치하지 않습니다: %s", kind)
+            return
+
+        current_model = getattr(app.state, f"{kind}_model")
+        selected = current_model["model_name"]
+        bundle = joblib.load(classifier_dir / f"{selected}_bundle.pkl")
+        if bundle["model_name"] != selected or not bundle["pipeline"]:
+            raise ValueError("분류 모델 번들 형식을 확인해주세요.")
+    except Exception:
+        logger.exception("재학습 모델 적용 실패. 기존 모델 사용: %s", kind)
+        return
+
+    setattr(app.state, f"{kind}_model", bundle)
+    setattr(app.state, f"{kind}_trained_at", trained_at)
+    logger.info("재학습 모델 적용 완료: 유형=%s, 모델=%s, 학습=%s", kind, selected, trained_at)
+
+
 # 서버 시작 시 모델과 스케줄러를 준비하고 종료 시 스케줄러를 정리한다.
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -96,10 +129,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.income_model = load_transaction_model("income", "수입")
     logger.info("수입 분류 모델: %s", app.state.income_model["model_name"])
+    for kind in ("income", "expense"):
+        setattr(app.state, f"{kind}_trained_at", None)
+        apply_retrained_model(app, kind)
 
     # 요청을 처리하는 서버와 별도로 스케줄러를 실행한다.
     stop_event = Event()
-    worker = Thread(target=run_scheduler, args=(stop_event,))
+    worker = Thread(target=run_scheduler, args=(stop_event, lambda kind: apply_retrained_model(app, kind)))
     worker.start()
     logger.info("재학습 스케줄러 시작")
 

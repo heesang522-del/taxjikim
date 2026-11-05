@@ -7,6 +7,7 @@ import json
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from threading import Event
@@ -18,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 SAVE_DIR = BASE_DIR / "models/retraining"
 
 # 수입·지출 확인이 끝나면 기본 60분 후 다시 확인한다.
-CHECK_INTERVAL_MINUTES = 60
+CHECK_INTERVAL_MINUTES = 1
 
 
 # 기본 자료와 추가 자료의 CSV 경로를 모은다.
@@ -141,17 +142,19 @@ def check_and_train(transaction_type: str) -> bool:
 
 
 # 서버 종료 신호를 받을 때까지 수입·지출 학습을 60분 간격으로 확인한다.
-def run_scheduler(stop_event: Event) -> None:
+def run_scheduler(stop_event: Event, on_success: Callable[[str], None] | None = None) -> None:
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
     while not stop_event.is_set():
-        check_and_train("income")
+        if check_and_train("income") and on_success is not None:
+            on_success("income")
 
         # 수입 학습 중 서버가 종료됐다면 지출 학습을 새로 시작하지 않는다.
         if stop_event.is_set():
             break
 
-        check_and_train("expense")
+        if check_and_train("expense") and on_success is not None:
+            on_success("expense")
 
         # 60분을 기다리되, 서버 종료 신호가 오면 기다리기를 끝낸다.
         if stop_event.wait(CHECK_INTERVAL_MINUTES * 60):
