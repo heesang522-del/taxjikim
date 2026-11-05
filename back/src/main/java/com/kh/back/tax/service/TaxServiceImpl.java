@@ -2,7 +2,6 @@ package com.kh.back.tax.service;
 
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.CategoryAmountDto;
-import com.kh.back.tax.dto.CategoryRatioDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
 import com.kh.back.tax.dto.TaxCalculationResultDto;
 import com.kh.back.tax.exception.TaxCalculationException;
@@ -113,25 +112,25 @@ public class TaxServiceImpl implements TaxService {
     }
 
     // 금액이 있는 카테고리의 비율을 같은 거래 구분의 합계로 계산한다.
-    private List<CategoryRatioDto> categoryRatios(List<CategoryAmountDto> categories, String transactionType) {
+    private List<CategoryAmountDto> categoryRatios(List<CategoryAmountDto> categories, String transactionType) {
         List<CategoryAmountDto> amounts = new ArrayList<>();
         BigDecimal total = BigDecimal.ZERO;
 
         // 같은 거래 구분에서 금액이 있는 카테고리만 모아 합계를 구한다.
         for (CategoryAmountDto category : categories) {
-            if (transactionType.equals(category.transactionType()) && category.amount().signum() > 0) {
+            if (transactionType.equals(category.getTransactionType()) && category.getAmount().signum() > 0) {
                 amounts.add(category);
-                total = total.add(category.amount());
+                total = total.add(category.getAmount());
             }
         }
 
-        List<CategoryRatioDto> ratios = new ArrayList<>();
+        // 조회한 DTO에 비율만 채우므로 별도 응답 DTO로 옮겨 담지 않는다.
         for (CategoryAmountDto category : amounts) {
-            BigDecimal percentage = category.amount().multiply(BigDecimal.valueOf(100))
+            BigDecimal percentage = category.getAmount().multiply(BigDecimal.valueOf(100))
                     .divide(total, 2, RoundingMode.HALF_UP);
-            ratios.add(new CategoryRatioDto(category.category(), category.amount(), percentage));
+            category.setPercentage(percentage);
         }
-        return ratios;
+        return amounts;
     }
 
     // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.

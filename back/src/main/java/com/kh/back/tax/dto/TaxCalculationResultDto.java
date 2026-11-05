@@ -22,6 +22,6 @@ public class TaxCalculationResultDto {
     private final BigDecimal deductedAmount;             // 실제 세전 - 세후 차액, 국내 기납부세액으로 단정하지 않음
     private final String settlementType;                 // PAYMENT / REFUND / NONE, 계산 불가 시 null
     private final BigDecimal settlementAmount;           // 차감액 전액 반영 가정의 정산 예상액 (양수로 표시)
-    private final List<CategoryRatioDto> incomeCategories;  // 실제 세전 수입의 카테고리 비율
-    private final List<CategoryRatioDto> expenseCategories; // 실제 지출의 카테고리 비율
+    private final List<CategoryAmountDto> incomeCategories;  // 실제 세전 수입의 카테고리 비율
+    private final List<CategoryAmountDto> expenseCategories; // 실제 지출의 카테고리 비율
 }
