@@ -34,8 +34,10 @@ from .income_classifier import classify_descriptions as classify_income_descript
 
 # 프로젝트 루트와 ml 폴더 중 어디서 서버를 실행해도 같은 스케줄러를 사용한다.
 if __package__ == "ml.app":
+    from ..scripts.feedback_preprocessing import filter_feedback, write_feedback_review
     from ..scripts.retrain_scheduler import run_scheduler
 else:
+    from scripts.feedback_preprocessing import filter_feedback, write_feedback_review
     from scripts.retrain_scheduler import run_scheduler
 
 
@@ -395,7 +397,8 @@ def save_training_feedback(feedback: list[TrainingFeedback]) -> None:
             target = data_dir / kind / "user_approved" / "category_feedback.csv"
             base = data_dir / kind / "training" / "training_data.csv"
             with base.open(encoding="utf-8-sig", newline="") as file:
-                labels = {row["category_code"] for row in csv.DictReader(file)}
+                base_rows = list(csv.DictReader(file))
+            labels = {row["category_code"] for row in base_rows}
             rows = {}
             if target.exists():
                 with target.open(encoding="utf-8-sig", newline="") as file:
@@ -409,12 +412,27 @@ def save_training_feedback(feedback: list[TrainingFeedback]) -> None:
                 rows[sample_id] = dict(zip(
                     FEEDBACK_FIELDS, (sample_id, description, item.category, sample_id, "APPROVED")
                 ))
+            # 통과한 후보만 학습용 파일에 저장하고 제외 기록은 따로 보관한다.
+            accepted, excluded = filter_feedback(base_rows, list(rows.values()))
+            review_path = target.parent.parent / "user_approved_review.csv"
+            review = {}
+            if review_path.exists():
+                with review_path.open(encoding="utf-8-sig", newline="") as file:
+                    review = {row["sample_id"]: row for row in csv.DictReader(file)}
+            for item in items:
+                review.pop(f"user-category-{item.transactionId}", None)
+            for row in accepted:
+                review.pop(row["sample_id"], None)
+            review.update((row["sample_id"], row) for row in excluded)
+            rows = {row["sample_id"]: row for row in accepted}
+
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_suffix(".tmp")
             with temporary.open("w", encoding="utf-8", newline="") as file:
                 writer = csv.DictWriter(file, fieldnames=FEEDBACK_FIELDS)
                 writer.writeheader()
                 writer.writerows(rows.values())
+            write_feedback_review(target.parent, list(review.values()))
             temporary.replace(target)
             saved_items = [
                 (item.transactionId, item.description.strip(), item.category)

@@ -67,12 +67,14 @@ def filter_feedback(
     return accepted, excluded
 
 
-# 추가 학습 폴더 밖에 이번 제외 결과를 덮어쓴다.
+# 추가 학습 폴더 밖에 누적된 제외 기록을 저장한다.
 def write_feedback_review(incoming_dir: Path, excluded: list[dict[str, str]]) -> None:
     path = incoming_dir.parent / "user_approved_review.csv"
     if not excluded and not path.exists():
         return
-    with path.open("w", encoding="utf-8-sig", newline="") as file:
+    temporary = path.with_suffix(".tmp")
+    with temporary.open("w", encoding="utf-8-sig", newline="") as file:
         writer = csv.DictWriter(file, fieldnames=("sample_id", "description", "category_code", "reason", "detail"))
         writer.writeheader()
         writer.writerows(excluded)
+    temporary.replace(path)

@@ -20,9 +20,9 @@ from sklearn.svm import LinearSVC
 
 
 if __package__:
-    from .feedback_preprocessing import filter_feedback, normalized, write_feedback_review
+    from .feedback_preprocessing import filter_feedback, normalized
 else:
-    from feedback_preprocessing import filter_feedback, normalized, write_feedback_review
+    from feedback_preprocessing import filter_feedback, normalized
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -212,9 +212,8 @@ def main() -> None:
     counts["duplicates"] += sum(row["reason"] == "중복" for row in excluded)
     if any(path.read_bytes() != data for path, data in contents.items()):
         raise ValueError("읽는 중 학습 CSV가 변경됐습니다. 다시 실행해주세요.")
-    write_feedback_review(args.incoming_dir, excluded)
     if excluded:
-        print(f"추가 학습 후보 제외 {len(excluded)}건: 검토 CSV에 기록했습니다.")
+        print(f"추가 학습 후보 제외 {len(excluded)}건")
 
     if args.combined:
         # 실제 학습에 사용한 중복 제거 결과를 확인할 수 있게 남긴다.
