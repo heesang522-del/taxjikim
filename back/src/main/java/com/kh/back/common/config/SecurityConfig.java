@@ -75,6 +75,7 @@ public class SecurityConfig {
                         // 업로드·작성·수정·삭제만 인증을 요구한다.
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts/community/**").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/community/**").authenticated()
+                        .requestMatchers("/api/v1/chatbot/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> apiResponseWriter.write(response, 401,

@@ -266,3 +266,20 @@ ALTER TABLE TAX_TRANSACTIONS
 - `INPUT_DATA_SNAPSHOT`에는 추가 수입·지출·기부금 JSON, 결과 금액 세 컬럼에는 저장 당시 계산값을 기록한다. 스키마 변경은 없다.
 - localStorage·sessionStorage·JSESSIONID 사용이나 데이터 이관은 추가하지 않는다.
 - 시뮬레이션 계산 API `POST /api/v1/tax/inputs/simulation`도 로그인 필수이며 `SecurityConfig`에서 접근을 관리한다.
+
+
+## AI 챗봇 복구 API (2026-11-06)
+
+- 모든 `/api/v1/chatbot/**` 요청은 로그인 세션이 필요하다. 실제 백엔드 API를 사용한다.
+- `GET /chatbot/conversations`: 본인 대화방 목록 조회.
+- `POST /chatbot/conversations`: 새 대화 생성. 삭제되지 않은 대화방은 사용자별 최대 10개다.
+- `GET /chatbot/conversations/{conversationId}/messages`: 본인 메시지 조회.
+- `DELETE /chatbot/conversations/{conversationId}`: 대화방 논리 삭제.
+- `GET /chatbot/usage`: 한국 날짜 기준 일일 질문 사용량 조회. 현재 한도는 30회다.
+- `POST /chatbot/conversations/{conversationId}/messages`: 기존 일반 질문 API를 유지한다.
+- `GET /chatbot/subscribe`: 세션 인증 SSE. `chatbot-ready` 수신 후 비동기 질문을 보낸다.
+- `POST /chatbot/conversations/{conversationId}/messages/async`: `{requestId: UUID, message: string}`을 보내며 접수 시 202를 반환한다.
+- SSE 이벤트는 `chatbot-delta`(delta), `chatbot-done`(최종 reply·remaining), `chatbot-failed`(code·message)이며 requestId와 conversationId로 요청을 구분한다.
+- 답변 조각은 개인정보 검사 후 표시하고 완성된 답변을 DB에 저장한다. 실패한 질문도 사용 횟수에 포함된다.
+- 화면 이탈·연결 오류는 자동 질문 재전송 없이 DB 기록 재조회로 확인한다. 서버 작업은 계속될 수 있다.
+- OPENAI_API_KEY와 OPENAI_CHAT_MODEL은 실행 환경에서 지정한다. 실제 개인 거래·세금 분석 결과는 AI에 제공하지 않는다.
