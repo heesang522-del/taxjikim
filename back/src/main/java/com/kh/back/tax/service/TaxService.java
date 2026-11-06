@@ -1,22 +1,16 @@
 package com.kh.back.tax.service;
 
-import com.kh.back.tax.dto.TaxDto;
-import com.kh.back.tax.dto.MonthlyAmountDto;
-
-import java.util.List;
+import com.kh.back.tax.dto.TaxCalculationResultDto;
+import tools.jackson.databind.JsonNode;
 
 // 세금 분석 결과 처리 기능을 선언한다.
 public interface TaxService {
+    // 화면의 결과 전체를 JSON으로 보관한다.
+    void saveResult(Long taxInputId, JsonNode result);
 
-    // 분석번호에 해당하는 월별 실제·예상 세전 수입 목록을 반환한다.
-    List<MonthlyAmountDto> getMonthlyIncomes(Long taxInputId);
+    // 저장한 결과 JSON을 조회한다.
+    JsonNode getSavedResult(Long taxInputId);
 
-    // 분석번호에 해당하는 월별 실제 지출 목록을 반환한다.
-    List<MonthlyAmountDto> getMonthlyExpenses(Long taxInputId);
-
-    // 실제·예상 금액을 포함한 세전 총수입을 반환한다.
-    TaxDto getTotalIncome(Long taxInputId);
-
-    // 실제·예상 금액을 포함한 총지출을 반환한다.
-    TaxDto getTotalExpense(Long taxInputId);
+    // 한 번 조회한 월별 목록으로 총액·세금을 계산하고 페이지 데이터를 모은다.
+    TaxCalculationResultDto getCalculationResult(Long taxInputId);
 }

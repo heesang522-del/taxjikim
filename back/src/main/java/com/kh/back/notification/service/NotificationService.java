@@ -20,6 +20,9 @@ public interface NotificationService {
     // 알림 1건을 읽음 처리한다. 본인 알림이 아니거나 이미 처리된 알림이면 예외를 던진다.
     void markAsRead(Long userId, Long notificationId);
 
+    // 로그인한 회원의 미읽음 알림을 전부 읽음 처리한다. 읽을 알림이 없어도 그냥 끝낸다(예외 없음).
+    void markAllAsRead(Long userId);
+
     // 정보공유·팁·QnA 게시글에 댓글이 달렸을 때 게시글 작성자에게 알림 발송 (본인 댓글 제외)
     void notifyPostComment(Long postId, Long postAuthorId, Long commenterId, String commenterNickname,
                             String postTitle, String commentContent);

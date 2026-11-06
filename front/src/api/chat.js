@@ -51,11 +51,18 @@ export function getMemberUnreadCount(roomId) {
   return requestChat({ url: `/chat/rooms/${roomId}/unread-count` });
 }
 
+// 상담 종료. 본인의 진행중(IN_PROGRESS) 방만 가능. WAITING 방은 취소 대상이 아니며 409
+export function closeMemberRoom(roomId) {
+  return requestChat({ url: `/chat/rooms/${roomId}/close`, method: 'POST' });
+}
+
 /* ================= 관리자 ================= */
 
-// 상태별 상담방 목록. status: WAITING | IN_PROGRESS | CLOSED
-export function getAdminRooms(status) {
-  return requestChat({ url: '/admin/chat/rooms', params: { status } });
+// 상태별 상담방 목록 커서 페이징 조회 (무한스크롤). status: WAITING | IN_PROGRESS | CLOSED
+// cursorId: 이전 조회 결과의 meta.nextCursor 값. 없으면 처음부터 조회한다.
+// size: 한 번에 가져올 개수. 생략하면 서버 기본값(10)을 쓴다.
+export function getAdminRooms(status, { cursorId, size } = {}) {
+  return requestChat({ url: '/admin/chat/rooms', params: { status, cursorId, size } });
 }
 
 // 대기 상담방 수 (대시보드)

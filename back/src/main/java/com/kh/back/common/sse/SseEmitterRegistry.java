@@ -28,7 +28,8 @@ public class SseEmitterRegistry {
     // 하트비트 주기(초). 리버스 프록시·로드밸런서의 idle timeout보다 짧게 유지해서 연결이 끊긴 것처럼 보이지 않게 한다.
     private static final long HEARTBEAT_INTERVAL_SECONDS = 20L;
 
-    // 유저 한 명이 탭을 여러 개 열면 emitter가 여러 개 쌓이므로 리스트로 관리한다.
+    // 유저 한 명이 탭을 여러 개 열면 emitter가 여러 개 쌓이므로 리스트로 관리한다.//
+    // 개별 HTTP 커넥션 단위이기 때문에 같은 iserId로 들어온 여러 개의 독립된 emitter를 다 들고 있어야함.
     private final Map<Long, List<SseEmitter>> emittersByUserId = new ConcurrentHashMap<>();
 
     private ScheduledExecutorService heartbeatExecutor;
@@ -53,16 +54,32 @@ public class SseEmitterRegistry {
         List<SseEmitter> emitters = emittersByUserId.computeIfAbsent(userId, key -> new CopyOnWriteArrayList<>());
         emitters.add(emitter);
 
+        // 클라이언트가 탭을 닫거나 응답 스트림이 정상적으로 끝났을 때 호출될 콜백.
         emitter.onCompletion(() -> removeEmitter(userId, emitter));
+        // (30분)가 지나 타임아웃됐을 때 호출될 콜백. 맵에서 제거만하지 않고 emitter.complete()도 같이 불러서,
+        // 브라우저의 EventSource가 연결 종료를 인지하고 재연결을 시도하게 만든다.
         emitter.onTimeout(() -> {
             // 타임아웃되면 emitter를 완료 처리해야 브라우저 EventSource가 재연결을 시도한다.
             removeEmitter(userId, emitter);
             emitter.complete();
         });
+        //네트워크 끊김 등 I/O 에러로 스트림이 깨졌을 때 호출될 콜백.
         emitter.onError(ex -> removeEmitter(userId, emitter));
 
         log.debug("SSE 구독 등록: userId={}", userId);
         return emitter;
+    }
+
+    // 로그아웃 등으로 이 유저의 실시간 연결을 더 유지할 이유가 없을 때, 열려 있는 모든 emitter를 즉시 끊는다.
+    // 맵에서 먼저 떼어낸 뒤 완료 처리하므로, complete()가 트리거하는 onCompletion의 removeEmitter는 그냥 아무 일도 안 하고 끝난다.
+    public void closeSessionsForUser(Long userId) {
+        List<SseEmitter> emitters = emittersByUserId.remove(userId);
+        if (emitters == null) {
+            return;
+        }
+        for (SseEmitter emitter : emitters) {
+            emitter.complete();
+        }
     }
 
     // 특정 회원에게 연결된 모든 탭(emitter)으로 이벤트를 보낸다. 로그인하지 않았거나 연결이 없으면 조용히 무시한다.
@@ -76,10 +93,6 @@ public class SseEmitterRegistry {
         }
     }
 
-    // 여러 회원에게 같은 이벤트를 보낼 때 사용한다(예: 공지사항 전체 브로드캐스트).
-    public void sendToUsers(Collection<Long> userIds, String eventName, Object data) {
-        userIds.forEach(userId -> send(userId, eventName, data));
-    }
 
     // 지금 연결돼 있는 모든 회원에게 같은 이벤트를 보낸다. 전체 브로드캐스트처럼 대상 유저 목록을 따로 조회할 필요가 없을 때 쓴다.
     public void sendToAll(String eventName, Object data) {
@@ -105,6 +118,7 @@ public class SseEmitterRegistry {
                 try {
                     // 데이터 없는 주석(comment) 라인만 보내서 연결을 살려둔다. 클라이언트의 알림 처리 로직에는 영향이 없다.
                     emitter.send(SseEmitter.event().comment("heartbeat"));
+                    log.debug("heartbeatTest");
                 } catch (IOException | IllegalStateException e) {
                     removeEmitter(userId, emitter);
                 }

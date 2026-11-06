@@ -137,8 +137,10 @@ IntelliJ 아래쪽의 `Terminal` 또는 별도 PowerShell을 엽니다. 프로�
 - `data/`, `models/`는 필요할 때 생성하며, 해당 폴더의 `.gitkeep`은 공유할 수 있습니다.
 - 라이브러리를 변경하면 ML 가상환경에서 버전 목록을 갱신하고 변경 내용을 확인합니다.
 
+아래 명령은 프로젝트 최상위 폴더에서 실행합니다. 라이브러리 목록은 `ml/requirements.txt`에서 관리합니다.
+
 ```powershell
-.\.venv\Scripts\python.exe -m pip freeze > requirements.txt
+.\ml\.venv\Scripts\python.exe -m pip freeze > .\ml\requirements.txt
 ```
 
 ## 커밋 전 확인

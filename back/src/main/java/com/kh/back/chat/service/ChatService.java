@@ -2,6 +2,7 @@ package com.kh.back.chat.service;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatRoomPageDto;
 import com.kh.back.chat.dto.ChatRoomSummaryDto;
 
 import java.util.List;
@@ -29,8 +30,8 @@ public interface ChatService {
     // 본인 방에서 상대방이 보낸 안 읽은 메시지 수 조회
     long getUnreadCount(Long roomId, Long requesterId);
 
-    // 관리자용: 상태별(WAITING/IN_PROGRESS/CLOSED) 상담방 목록
-    List<ChatRoomSummaryDto> getRoomsByStatus(String status);
+    // 관리자용: 상태별(WAITING/IN_PROGRESS/CLOSED) 상담방 목록 커서 페이징 조회. cursorId·size가 없으면 기본값으로 처음부터 조회한다.
+    ChatRoomPageDto getRoomsByStatus(String status, Long cursorId, Integer size);
 
     // 관리자용: 방 단건 요약 조회. 새로고침 후 선택 상태 복원에 쓰며 없으면 404
     ChatRoomSummaryDto getRoomSummary(Long roomId);
@@ -42,7 +43,10 @@ public interface ChatService {
     ChatRoomDto enterRoom(Long roomId, Long adminId);
 
     // 상담 종료. 담당 관리자 본인의 진행중 방일 때만 성공
-    void closeRoom(Long roomId, Long adminId);
+    void closeAdminRoom(Long roomId, Long adminId);
+
+    // 상담 종료. 회원 본인의 방일 때만 성공(대기중이어도 취소할 수 있다)
+    void closeUserRoom(Long roomId, Long userId);
 
     // 담당 관리자 본인 방의 메시지 목록 조회
     List<ChatMessageDto> getMessagesForAdmin(Long roomId, Long adminId);

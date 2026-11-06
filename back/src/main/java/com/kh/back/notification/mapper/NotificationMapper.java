@@ -22,6 +22,9 @@ public interface NotificationMapper {
     // 알림 1건을 읽음 처리(+소프트 삭제)한다. 처리된 행 수를 반환한다(0이면 대상 없음/본인 알림 아님).
     int markAsReadById(@Param("userId") Long userId, @Param("notificationId") Long notificationId);
 
+    // 로그인한 회원의 미읽음 알림을 전부 읽음 처리(+소프트 삭제)한다. 처리된 행 수를 반환한다.
+    int markAllAsReadByUserId(@Param("userId") Long userId);
+
     // 댓글 알림 1건 생성 (수신자: 게시글 작성자)
     int insertCommentNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
                                    @Param("title") String title, @Param("message") String message);

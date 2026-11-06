@@ -39,7 +39,7 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void broadcastNoticePost(Long postId, String title) {
-        notificationMapper.insertNoticeBroadcast(postId, title);
+        notificationMapper.insertNoticeBroadcast(postId, truncateTitle(title));
         // insert가 아직 커밋되기 전에 push하면, push를 받은 클라이언트가 바로 목록을 다시 조회해도
         // 아직 안 보이는 경우가 생긴다. 그래서 커밋이 끝난 뒤에만 push 하도록 미룬다.
         // 대상 유저 목록을 따로 조회하지 않고, 지금 연결돼 있는(=로그인 중인) 모든 회원에게 보낸다.
@@ -81,15 +81,20 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     @Transactional
+    public void markAllAsRead(Long userId) {
+        // 단건 읽음 처리와 달리, 읽을 미읽음 알림이 하나도 없어도(처리 행 수 0) 오류가 아니다.
+        notificationMapper.markAllAsReadByUserId(userId);
+    }
+
+    @Override
+    @Transactional
     public void notifyPostComment(Long postId, Long postAuthorId, Long commenterId, String commenterNickname,
                                    String postTitle, String commentContent) {
         // 본인 글에 본인이 댓글을 달면 알림을 보내지 않는다. 탈퇴 여부는 체크하지 않는다.
         if (postAuthorId.equals(commenterId)) {
             return;
         }
-        String safeTitle = (postTitle != null && postTitle.length() > TITLE_MAX_LENGTH)
-                ? postTitle.substring(0, TITLE_MAX_LENGTH)
-                : postTitle;
+        String safeTitle = truncateTitle(postTitle);
         // 알림 목록에는 "닉네임: 댓글 미리보기" 형태로 보여준다.
         String message = commenterNickname + ": " + buildPreview(commentContent);
         notificationMapper.insertCommentNotification(postAuthorId, postId, safeTitle, message);
@@ -105,13 +110,19 @@ public class NotificationServiceImpl implements NotificationService {
         if (parentCommentAuthorId.equals(replierId)) {
             return;
         }
-        String safeTitle = (postTitle != null && postTitle.length() > TITLE_MAX_LENGTH)
-                ? postTitle.substring(0, TITLE_MAX_LENGTH)
-                : postTitle;
+        String safeTitle = truncateTitle(postTitle);
         String message = replierNickname + ": " + buildPreview(replyContent);
         notificationMapper.insertReplyNotification(parentCommentAuthorId, postId, safeTitle, message);
         // 부모 댓글 작성자 한 명에게만 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
         pushAfterCommit(() -> sseEmitterRegistry.send(parentCommentAuthorId, NOTIFICATION_EVENT, Map.of("type", "REPLY")));
+    }
+
+    // NOTIFICATIONS.TITLE(VARCHAR(100)) 길이 제한. POSTS.TITLE은 255자까지 허용돼서,
+    // 자르지 않고 그대로 넣으면 100자를 넘는 제목에서 INSERT가 실패해 호출한 트랜잭션 전체가 롤백된다.
+    private String truncateTitle(String title) {
+        return (title != null && title.length() > TITLE_MAX_LENGTH)
+                ? title.substring(0, TITLE_MAX_LENGTH)
+                : title;
     }
 
     // 댓글 내용 미리보기: 15자를 넘으면 자르고 말줄임표(...)를 붙인다.

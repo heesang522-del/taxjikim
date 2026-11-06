@@ -1,5 +1,15 @@
 # 프론트 API 연결 안내
 
+- 2026-11-03 월별 조회 통합: `findMonthlyTransactions`가 월·거래 구분별 합계를 한 번 조회한다. 수입은 세전 금액, 지출은 실제 금액을 합산한다. 서비스에서 기존 수입·지출 응답 목록으로 나누므로 화면 형식은 유지한다. 전체 DB 조회는 기본정보·기간·월별 합계 총 3회이며 아래 4회 조회 기록을 대체한다.
+- 2026-11-03 정리: 기존 breakdown·월별 개별 API와 전용 서비스 메서드·TaxDto·프론트 월별 API 함수를 제거했다. 결과 조회는 calculation-result 하나만 사용한다. 아래 과거 개별 API 유지 기록은 더 이상 적용하지 않는다.
+## 총세금·산출 근거 연결 (2026-11-02)
+
+- `getTaxBreakdown(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/breakdown`.
+- `TaxBreakdownDto`를 공통 응답 `data`로 반환한다. 총수입·총지출, 기부금 인정액, 사업소득, 기본공제, 과세표준, 세율·누진공제, 산출세액·표준세액공제·소득세·지방소득세·총세금을 포함한다.
+- 결과 페이지가 한 번 조회해 `SummaryCards`와 `TaxChain`에 같은 결과·로딩·오류 상태를 전달한다. 요약 카드의 기존 개별 합계 요청은 제거했다.
+- 월별 그래프는 기존 월별 API를 유지한다. 분석번호는 여전히 테스트용 `21`이며 입력 화면에서의 실제 분석번호 전달 연결은 별도 후속 작업이다.
+- 오류는 서버 안내를 표시하며 예시 결과로 대체하지 않는다. 결과 저장은 기존 브라우저 저장 방식을 유지하되 화면에 표시한 서버 금액을 저장한다.
+
 ## 총수입·총지출 Spring 연결 (2026-10-29)
 
 - `getTotalIncome(taxInputId, { signal })`: GET `/api/v1/tax/inputs/{taxInputId}/total-income`.
@@ -53,6 +63,18 @@
 - 실시간 연결은 실제로 그 화면을 보고 있는 동안만 연다(회원: 패널 열림, 관리자: 담당 중인 방을 열어본 동안). 닫혀 있을 때는 REST로 안읽은 수만 주기적으로 확인한다.
 - `vite.config.js`에 `/ws` 프록시(`ws: true`)를 추가해 개발 서버에서 WebSocket이 백엔드로 전달되게 했다.
 - 범위 제한: 마이페이지의 "지난 상담" 목록과 헤더의 "관리자 답변" 알림은 이번 작업에서 제외했다(백엔드에 회원별 전체 상담방 목록 API가 없음). 마이페이지에는 준비 중 안내만 남겼다.
+
+## 회원 채팅 종료 권한 추가 (2026-10-30)
+
+- 기존에는 상담 종료가 관리자 전용이었다. `src/api/chat.js`에 `closeMemberRoom(roomId)`를 추가해 회원도 본인 상담방을 종료할 수 있게 했다(`POST /api/v1/chat/rooms/{roomId}/close`).
+- 대기(WAITING)·진행중(IN_PROGRESS) 모두 종료 가능하다. 회원이 메시지를 보내면 바로 대기 방이 생기므로, 관리자가 입장하기 전에도 그 방을 취소할 수 있어야 하기 때문이다. `ChatWidget`의 "상담 종료" 버튼도 방이 있고 CLOSED가 아니면 항상 보인다(진행중일 때만 보이던 것에서 변경).
+- `useChatStore.js`의 `useMemberChat`에 `close()`를 추가했다. 이미 종료된 상담(409 `ROOM_NOT_CLOSABLE`)은 에러로 표시하지 않고 조용히 넘어간다(중복 클릭·상대가 먼저 종료한 경우 대비).
+- 백엔드(`ChatServiceImpl`)는 종료에 성공하면 종료한 쪽을 발신자로 "회원이 상담을 종료하였습니다." 또는 "관리자가 상담을 종료하였습니다." 메시지를 그 방에 저장한다. 누가 종료했는지 알 수 있도록 방 상태 문구가 아니라 채팅방 메시지로, 종료한 쪽에 따라 다른 문구로 남기기로 했기 때문이다.
+- `close()`는 종료 후 `getMyRoom()`(열린 방만 찾는 API)을 다시 부르지 않는다. 그러면 방금 CLOSED된 방이 조회에서 사라져 "종료되었습니다" 안내가 안 보이는 버그가 있었다. 대신 메시지 목록만 다시 불러와(위 종료 메시지 수신) 방 상태를 로컬에서 바로 CLOSED로 바꾼다.
+- 관리자가 대화 중인 방을 회원이 먼저 종료하면, 관리자 쪽은 다음 전송 시도에서 서버가 `CHAT_ROOM_CLOSED`로 거절하는데, 이 경우를 감지해 방 상태와 메시지 목록을 다시 불러오고 안내 문구("회원이 상담을 종료했습니다.")를 띄우도록 `useRoomMessages`에 `onRoomClosed` 콜백을 추가했다(`useAdminChat`·`useMemberChat` 양쪽에 연결). 이건 전송을 시도했을 때만 걸리는 뒤늦은 감지라, 아래 실시간 브로드캐스트를 추가한 뒤에도 네트워크 재연결 중 등 안전망으로 남겨뒀다.
+- **실시간 브로드캐스트**: 종료한 사람 본인은 REST 응답으로 바로 반영되지만, 상대방은 그 방을 보고만 있어도(메시지를 보내려 하지 않아도) 똑같이 바로 알아야 한다. 그래서 백엔드가 상담 종료 시 그 방에 연결된 상대방의 WebSocket으로 종료 안내 메시지를 즉시 보낸다 — `{"type":"MESSAGE","message":{...},"roomClosed":true}`. `useChatSocket`이 이 `roomClosed` 플래그를 `onMessage`의 두 번째 인자로 넘기고, `useRoomMessages`는 메시지를 먼저 붙인 뒤(`setMessages`) `onRoomClosed`를 호출해 방 상태를 CLOSED로 바꾼다 — 역시 "메시지 먼저, 상태 변경은 그 다음" 순서를 지킨다. SSE 대신 이미 방마다 열려 있는 채팅 WebSocket을 그대로 썼다(알림 벨용 SSE는 채팅과 무관한 별개 채널이라 여기엔 안 맞음).
+- 순서 보장: 종료 메시지("회원이/관리자가 상담을 종료하였습니다.")는 방 상태를 CLOSED로 바꾸기 전에 화면에 먼저 반영한다(메시지 목록 reload → 그 다음 상태 변경). 네 군데(본인 종료 두 곳, 상대 종료 감지 두 곳) 모두 이 순서를 지키도록 맞췄다. 반대 순서였다면 입력창이 먼저 사라진 뒤에야 종료 메시지가 보여 어색했다.
+- (한때 "관리자가 입장해야 종료 버튼이 보인다"는 문제를 5초 폴링으로 고쳤다가, 대기중에도 종료를 허용하는 쪽으로 바꾸면서 폴링을 제거했다 — 버튼이 항상 보이므로 더 필요하지 않다.)
 
 ## 관리자 제한 계정 시각 (2026-10-16)
 
@@ -167,6 +189,46 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 인증용 mock 계정·잠금·접속 기록도 메모리에서만 관리한다. 이전 인증 관련 웹 스토리지 키 6개는 앱 시작 시 양쪽 저장소에서 제거한다.
 - 다른 기능의 게시글·상담·계산 기록 웹 스토리지 사용은 유지한다.
+# 결과 데이터 통합 조회 (2026-11-03)
+
+- 정산 시안 응답: `settlementType: 'PAYMENT' | 'REFUND' | 'NONE' | null`, `settlementAmount: number | null`. 총세금에서 실제 차감액 전액을 뺀 부호로 구분하고 금액은 절댓값이다. 입금액 누락 또는 차감액 음수이면 null이다. 해외 세금 공제한도·미래 원천징수액을 반영한 확정 납부/환급액이 아니다.
+
+- 추가 응답 필드: `actualNetIncome: number | null`(실제 세후 수입 합계), `deductedAmount: number | null`(실제 세전 합계 − 실제 세후 합계). 수입 입금액 누락 시 둘 다 null이다. 추가 납부액이나 국내 기납부세액으로 확정한 값이 아니다. 최신 화면 합의에 따라 둘 다 카드에서 별도 표시하지 않으며, 추가 납부·환급 정산 연결은 후속 작업이다.
+
+- `GET /api/v1/tax/inputs/{taxInputId}/calculation-result`
+- 공통 응답 `data`: `{ breakdown: TaxBreakdownDto, monthlyIncomes: MonthlyAmountDto[], monthlyExpenses: MonthlyAmountDto[], businessRegistered: boolean | null, actualIncome: number, predictedIncome: number, actualExpense: number, predictedExpense: number }`
+- `actualIncome`·`actualExpense`는 실제 월별 금액 합계, `predictedIncome`·`predictedExpense`는 남은 달 예상 금액 합계다. 수입은 모두 세전 기준이다. 실제·예상 합계는 breakdown의 각 총액과 일치한다.
+- 월별 항목: `{ month: number, amount: number, predicted: boolean }`. 실제·예상 금액을 서버에서 계산한다.
+- 첫·마지막 거래 연도가 다르면 HTTP 400, `error.code: TAX_TRANSACTION_YEAR_MISMATCH`를 반환한다. 유효한 거래 날짜가 없으면 HTTP 400, `TAX_TRANSACTION_DATE_REQUIRED`를 반환한다.
+- 페이지에서 한 번 조회하고 자식 컴포넌트에 전달한다. 기존 월별 API와 breakdown API는 유지하지만 결과 페이지에서는 개별 호출하지 않는다.
+# 분석 기본정보 입력 계약 변경 (2026-11-03)
+
+저장 `POST /api/v1/tax/save`의 `input`과 수정 `POST /api/v1/tax/inputs/{taxInputId}/update`의 `input`은 같은 필드를 사용한다.
+
+```json
+{
+  "input": {
+    "taxYear": 2026,
+    "businessRegistered": false,
+    "dependentCount": 0,
+    "generalDonationAmount": 0,
+    "specialDonationAmount": 0,
+    "saveStatus": "TEMP"
+  }
+}
+```
+
+- 금액 0은 기부금이 없는 입력 예시다. 두 기부금은 각각 음수가 아닌 DECIMAL(15,2) 저장 범위이며, 미입력은 저장 정규화에서 0으로 처리한다.
+- 나이·감면·지역·기존 단일 기부금 필드는 저장 계약에서 제거한다. 요청의 분석번호·소유자는 기존 서버 결정 규칙을 유지한다.
+- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다. 기존 DB 변경 방법은 `docs/tax-input-migration.md`를 따른다.
+# 결과 JSON 보관 (TJK-202)
+
+- `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.
+- `GET /api/v1/tax/inputs/{taxInputId}/result`: 저장 JSON을 `ApiResponse.data`로 반환한다. 세금 재계산은 하지 않는다.
+- 로그인 접근은 `SecurityConfig`에서 관리한다. 결과 서비스에는 로그인 검사·세션 조회·회원 연결을 넣지 않는다. 분석 소유자 확인은 별도 작업이다.
+- 저장과 함께 `SAVE_STATUS`만 `SAVED`로 변경한다. `USER_ID`는 변경하지 않는다. JSON은 `tax_results.RESULT_DETAIL`, 저장 시각은 기존 `CALCULATED_AT`에 기록한다.
+- 결과 다시 보기 주소: `/calculator/result?taxInputId={분석번호}&saved=true`. 마이페이지 목록 UI 연결은 별도 작업이다.
+- 기존 입력·거래 수정 시 결과를 삭제하는 무효화 동작은 유지한다. 저장 내용은 클라이언트가 보낸 당시 화면 값이며 서버 검증 계산 결과로 취급하지 않는다.
 
 ## 이메일 인증번호 발송 대기 시간 (2026-11-02)
 

@@ -12,11 +12,9 @@
         <result property="userId" column="USER_ID"/>
         <result property="taxYear" column="TAX_YEAR"/>
         <result property="businessRegistered" column="BUSINESS_REGISTERED"/>
-        <result property="age" column="AGE"/>
-        <result property="startupReliefApplied" column="STARTUP_RELIEF_APPLIED"/>
-        <result property="businessRegion" column="BUSINESS_REGION"/>
         <result property="dependentCount" column="DEPENDENT_COUNT"/>
-        <result property="donationAmount" column="DONATION_AMOUNT"/>
+        <result property="generalDonationAmount" column="GENERAL_DONATION_AMOUNT"/>
+        <result property="specialDonationAmount" column="SPECIAL_DONATION_AMOUNT"/>
         <result property="saveStatus" column="SAVE_STATUS"/>
     </resultMap>
 
@@ -35,15 +33,6 @@
         <result property="amount" column="AMOUNT"/>
     </resultMap>
 
-    <resultMap id="resultMap"
-               type="com.kh.back.taxupload.dto.TaxTransactionDto$TaxResultRow">
-
-        <id property="taxInputId" column="TAX_INPUT_ID"/>
-
-        <result property="resultDetail" column="RESULT_DETAIL"/>
-        <result property="calculatedAt" column="CALCULATED_AT"/>
-    </resultMap>
-
     <insert id="insertInput"
             useGeneratedKeys="true"
             keyProperty="taxInputId"
@@ -53,22 +42,18 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         )
         VALUES (
         #{userId},
         #{taxYear},
         #{businessRegistered},
-        #{age},
-        #{startupReliefApplied},
-        #{businessRegion},
         #{dependentCount},
-        #{donationAmount},
+        #{generalDonationAmount},
+        #{specialDonationAmount},
         #{saveStatus}
         )
     </insert>
@@ -79,11 +64,9 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
@@ -96,38 +79,13 @@
         USER_ID,
         TAX_YEAR,
         BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
         DEPENDENT_COUNT,
-        DONATION_AMOUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
         SAVE_STATUS
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
         FOR UPDATE
-    </select>
-
-    <select id="findSavedInputs" resultMap="inputMap">
-        SELECT
-        TAX_INPUT_ID,
-        USER_ID,
-        TAX_YEAR,
-        BUSINESS_REGISTERED,
-        AGE,
-        STARTUP_RELIEF_APPLIED,
-        BUSINESS_REGION,
-        DEPENDENT_COUNT,
-        DONATION_AMOUNT,
-        SAVE_STATUS
-        FROM tax_inputs
-        WHERE USER_ID = #{userId}
-        AND SAVE_STATUS = 'SAVED'
-
-        <if test="taxYear != null">
-            AND TAX_YEAR = #{taxYear}
-        </if>
-
-        ORDER BY UPDATED_AT DESC, TAX_INPUT_ID DESC
     </select>
 
     <update id="updateInput">
@@ -135,11 +93,9 @@
         SET USER_ID = #{userId},
         TAX_YEAR = #{taxYear},
         BUSINESS_REGISTERED = #{businessRegistered},
-        AGE = #{age},
-        STARTUP_RELIEF_APPLIED = #{startupReliefApplied},
-        BUSINESS_REGION = #{businessRegion},
         DEPENDENT_COUNT = #{dependentCount},
-        DONATION_AMOUNT = #{donationAmount},
+        GENERAL_DONATION_AMOUNT = #{generalDonationAmount},
+        SPECIAL_DONATION_AMOUNT = #{specialDonationAmount},
         SAVE_STATUS = #{saveStatus},
         UPDATED_AT = CURRENT_TIMESTAMP
         WHERE TAX_INPUT_ID = #{taxInputId}
@@ -156,10 +112,7 @@
         WHERE TAX_INPUT_ID = #{taxInputId}
     </update>
 
-    <insert id="insertTransaction"
-            useGeneratedKeys="true"
-            keyProperty="transactionId"
-            keyColumn="TRANSACTION_ID">
+    <insert id="insertTransactions">
 
         INSERT INTO tax_transactions (
         TAX_INPUT_ID,
@@ -171,16 +124,19 @@
         DEDUCTED_TAX_RATE,
         AMOUNT
         )
-        VALUES (
-        #{taxInputId},
-        #{transactionType},
-        #{transactionDate},
-        #{description},
-        #{category},
-        #{preTaxIncome},
-        #{deductedTaxRate},
-        #{amount}
+        VALUES
+        <foreach collection="rows" item="row" separator=",">
+        (
+        #{row.taxInputId},
+        #{row.transactionType},
+        #{row.transactionDate},
+        #{row.description},
+        #{row.category},
+        #{row.preTaxIncome},
+        #{row.deductedTaxRate},
+        #{row.amount}
         )
+        </foreach>
     </insert>
 
     <!-- 거래번호가 있으면 특정 거래, 없으면 분석의 전체 거래를 조회한다. -->
@@ -205,12 +161,28 @@
         ORDER BY TRANSACTION_ID
     </select>
 
-    <update id="updateCategory">
+    <update id="updateCategories">
         UPDATE tax_transactions
-        SET CATEGORY = #{category}
+        SET CATEGORY = CASE TRANSACTION_ID
+        <foreach collection="changes" item="change">
+            WHEN #{change.transactionId} THEN #{change.category}
+        </foreach>
+        ELSE CATEGORY END
         WHERE TAX_INPUT_ID = #{taxInputId}
-        AND TRANSACTION_ID = #{transactionId}
+          AND TRANSACTION_ID IN
+        <foreach collection="changes" item="change" open="(" separator="," close=")">
+            #{change.transactionId}
+        </foreach>
     </update>
+
+    <delete id="deleteTransactionBatch">
+        DELETE FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_ID IN
+        <foreach collection="transactionIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
 
     <delete id="deleteTransaction">
         DELETE FROM tax_transactions
@@ -218,35 +190,9 @@
         AND TRANSACTION_ID = #{transactionId}
     </delete>
 
-    <select id="findResult" resultMap="resultMap">
-        SELECT
-        TAX_INPUT_ID,
-        RESULT_DETAIL,
-        CALCULATED_AT
-        FROM tax_results
-        WHERE TAX_INPUT_ID = #{taxInputId}
-    </select>
-
     <delete id="deleteResult">
         DELETE FROM tax_results
         WHERE TAX_INPUT_ID = #{taxInputId}
     </delete>
-
-    <insert id="insertProcessLog">
-        INSERT INTO tax_process_logs (
-        TAX_INPUT_ID,
-        USER_ID,
-        PROCESS_TYPE,
-        STATUS,
-        FAIL_REASON
-        )
-        VALUES (
-        #{taxInputId},
-        #{userId},
-        #{processType},
-        #{status},
-        #{failReason}
-        )
-    </insert>
 
 </mapper>

@@ -3,6 +3,33 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <!-- 같은 분석번호의 결과는 화면에서 보낸 JSON으로 덮어쓴다. -->
+    <insert id="saveResult">
+        INSERT INTO tax_results (TAX_INPUT_ID, RESULT_DETAIL, CALCULATED_AT)
+        VALUES (#{taxInputId}, #{resultDetail}, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE RESULT_DETAIL = #{resultDetail}, CALCULATED_AT = CURRENT_TIMESTAMP
+    </insert>
+
+    <update id="markResultSaved">
+        UPDATE tax_inputs SET SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </update>
+
+    <select id="findResult" resultType="java.lang.String">
+        SELECT RESULT_DETAIL FROM tax_results WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <!-- 거래 합계와 별도로 입력한 계산 조건을 같은 분석번호로 조회한다. -->
+    <select id="findCalculationInput" resultType="com.kh.back.tax.dto.TaxCalculationInputDto">
+        SELECT TAX_YEAR AS taxYear,
+               BUSINESS_REGISTERED AS businessRegistered,
+               DEPENDENT_COUNT AS dependentCount,
+               SPECIAL_DONATION_AMOUNT AS specialDonationAmount,
+               GENERAL_DONATION_AMOUNT AS generalDonationAmount
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
     <!-- 수입·지출을 포함한 전체 자료 기간을 한 번에 조회한다. -->
     <select id="findTransactionPeriod" resultType="com.kh.back.tax.dto.TransactionPeriodDto">
         SELECT MIN(TRANSACTION_DATE) AS firstDate,
@@ -11,26 +38,34 @@
         WHERE TAX_INPUT_ID = #{taxInputId}
     </select>
 
-    <!-- 날짜가 있는 세전 수입을 월별로 묶고, 합계를 정수 금액으로 반올림한다. -->
-    <select id="findMonthlyIncomes" resultType="com.kh.back.tax.dto.MonthlyAmountDto">
+    <!-- 월·거래 구분으로 묶되, 수입은 세전 금액·지출은 실제 금액을 합산한다. -->
+    <select id="findMonthlyTransactions" resultType="com.kh.back.tax.dto.MonthlyTransactionDto">
         SELECT MONTH(TRANSACTION_DATE) AS month,
-               ROUND(COALESCE(SUM(PRE_TAX_INCOME), 0), 0) AS amount
+               TRANSACTION_TYPE AS transactionType,
+               ROUND(COALESCE(SUM(
+                   CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                        THEN PRE_TAX_INCOME ELSE AMOUNT END
+               ), 0), 0) AS amount,
+               CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                         AND COUNT(AMOUNT) = COUNT(*)
+                    THEN SUM(AMOUNT)
+                    ELSE NULL END AS netIncome
         FROM tax_transactions
         WHERE TAX_INPUT_ID = #{taxInputId}
-          AND TRANSACTION_TYPE = 'INCOME'
-        GROUP BY MONTH(TRANSACTION_DATE)
-        ORDER BY MONTH(TRANSACTION_DATE)
+          AND TRANSACTION_TYPE IN ('INCOME', 'EXPENSE')
+        GROUP BY MONTH(TRANSACTION_DATE), TRANSACTION_TYPE
+        ORDER BY MONTH(TRANSACTION_DATE), TRANSACTION_TYPE
     </select>
 
-    <!-- 날짜가 있는 지출을 월별로 묶고, 합계를 정수 금액으로 반올림한다. NULL 금액은 합산에서 제외한다. -->
-    <select id="findMonthlyExpenses" resultType="com.kh.back.tax.dto.MonthlyAmountDto">
-        SELECT MONTH(TRANSACTION_DATE) AS month,
-               ROUND(COALESCE(SUM(AMOUNT), 0), 0) AS amount
+    <select id="findCategoryAmounts" resultType="com.kh.back.tax.dto.CategoryAmountDto">
+        SELECT TRANSACTION_TYPE AS transactionType,
+               CATEGORY AS category,
+               COALESCE(SUM(CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                                 THEN PRE_TAX_INCOME ELSE AMOUNT END), 0) AS amount
         FROM tax_transactions
         WHERE TAX_INPUT_ID = #{taxInputId}
-          AND TRANSACTION_TYPE = 'EXPENSE'
-        GROUP BY MONTH(TRANSACTION_DATE)
-        ORDER BY MONTH(TRANSACTION_DATE)
+          AND TRANSACTION_TYPE IN ('INCOME', 'EXPENSE')
+        GROUP BY TRANSACTION_TYPE, CATEGORY
+        ORDER BY TRANSACTION_TYPE, amount DESC, category
     </select>
-
 </mapper>

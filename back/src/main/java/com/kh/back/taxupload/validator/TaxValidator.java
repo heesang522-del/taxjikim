@@ -1,8 +1,8 @@
 package com.kh.back.taxupload.validator;
 
-import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
+import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -16,30 +16,28 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 @Component
 public class TaxValidator {
 
     // 실제 금융 한도가 아니라 DECIMAL(15, 2)의 DB 저장 범위다.
     private static final BigDecimal MAX_AMOUNT =
-            new BigDecimal("9999999999999.99");
+            new BigDecimal("9999999999999.99");  // 상수 검사 기준을 모아둠
 
-    // 실제 적용 세율이 아니라 DB에 저장할 수 있는 숫자 범위다.
+    // 실제 적용 세율이 아니라 DB에 저장할 수 있는 세율 범위다.
     private static final BigDecimal MAX_RATE =
-            new BigDecimal("100");
+            new BigDecimal("100"); //  db의 숫자 저장 한계
 
-    private static final int MAX_UNSIGNED_SMALL_INT = 65535;
+    private static final int MAX_UNSIGNED_SMALL_INT = 65535;  // 세율 데이터 허용 상한
     private static final int MAX_DESCRIPTION_LENGTH = 255;
 
-    // 실제 카테고리 목록이 아니라 코드 형식과 길이를 검사한다.
-    private static final Pattern CATEGORY_PATTERN =
-            Pattern.compile("[A-Z][A-Z0-9_]{0,49}");
-
-    private static final Set<String> BUSINESS_REGIONS = Set.of(
-            "CAPITAL_CONGESTION",
-            "CAPITAL_OTHER",
-            "NON_CAPITAL"
+    // 카테고리 목록 자체는 제한하지 않고 코드 형식과 길이만 검사한다.
+    private static final Set<String> INCOME_CATEGORIES = Set.of(
+            "YOUTUBE_SETTLEMENT", "AD_SPONSORSHIP", "EXTERNAL_SUPPORT"
+    );
+    private static final Set<String> EXPENSE_CATEGORIES = Set.of(
+            "SOFTWARE_LICENSE", "EQUIPMENT", "TELECOMMUNICATION", "TRANSPORT",
+            "SUPPLIES_PROPS", "SPACE_RENTAL", "OUTSOURCING", "AD_PROMOTION"
     );
 
     private static final Set<String> TRANSACTION_TYPES = Set.of(
@@ -53,11 +51,8 @@ public class TaxValidator {
             "SAVED"
     );
 
-    public void validateId(
-            Long value,
-            String field
-    ) {
-        if (value == null || value <= 0) {
+    public void validateId(Long value, String field) {  // validateid() 번호검사
+        if (value == null || value <= 0) {  // 분석번호나 거래번호가 유효한지 검사
             throw invalid(
                     field,
                     "유효한 번호가 필요합니다."
@@ -65,34 +60,21 @@ public class TaxValidator {
         }
     }
 
-    public void validateTaxYear(Integer taxYear) {
-        validateYearRange(
-                taxYear,
-                "taxYear",
-                "귀속 연도를 네 자리 숫자로 입력해주세요."
-        );
-    }
-
-    // 귀속 연도와 거래 날짜의 연도 범위 조건을 한곳에서 관리한다.
-    private void validateYearRange(
-            Integer year,
-            String field,
-            String message
-    ) {
-        if (year == null || year < 1000 || year > 9999) {
-            throw invalid(field, message);
+    public void validateTaxYear(Integer taxYear) {  // 네자리 연도 검사
+        if (taxYear == null
+                || taxYear < 1000
+                || taxYear > 9999) {
+            throw invalid(
+                    "taxYear",
+                    "귀속 연도를 네 자리 숫자로 입력해주세요."
+            );
         }
     }
 
-    /**
-     * 로그인 여부를 확인하고 인증된 사용자 번호를 반환한다.
-     */
-    public Long requireLogin(
-            CustomUserDetails principal
-    ) {
-        if (principal == null
-                || principal.getUserId() == null
-                || principal.getUserId() <= 0) {
+    public Long requireLogin(AccessContext access) {  // 로그인 여부와 회원번호 확인
+        if (access == null
+                || access.getUserId() == null
+                || access.getUserId() <= 0) {
             throw new ApiException(
                     HttpStatus.UNAUTHORIZED,
                     "AUTHENTICATION_REQUIRED",
@@ -100,15 +82,11 @@ public class TaxValidator {
             );
         }
 
-        return principal.getUserId();
+        return access.getUserId();
     }
 
-    /**
-     * 회원·관리자·비회원의 분석 접근 권한을 확인한다.
-     */
     public void requireAccess(
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
+            AccessContext access,
             TaxInputRequest input
     ) {
         if (input == null) {
@@ -119,47 +97,35 @@ public class TaxValidator {
             );
         }
 
-        // 관리자 권한은 요청 본문이 아닌 인증 정보에서 확인한다.
-        boolean admin = principal != null
-                && principal.getAuthorities()
-                .stream()
-                .anyMatch(authority ->
-                        "ROLE_ADMIN".equals(
-                                authority.getAuthority()
-                        )
-                );
+        if (access == null) {
+            throw forbidden();
+        }
 
-        if (admin) {
+        if (access.isAdmin()) {
             return;
         }
 
-        Long userId = principal == null
-                ? null
-                : principal.getUserId();
-
-        // 회원 분석은 해당 분석의 소유자에게 허용한다.
+        // 회원 분석은 분석 소유자에게 허용한다.
         if (input.getUserId() != null
                 && Objects.equals(
                 input.getUserId(),
-                userId
+                access.getUserId()
         )) {
             return;
         }
 
         // 비회원 분석은 해당 분석을 생성한 서버 세션에만 허용한다.
-        // 로그인 후에도 직접 만든 비회원 분석의 소유권 전환에 사용한다.
         if (input.getUserId() == null
-                && guestInputIds != null
-                && guestInputIds.contains(input.getTaxInputId())) {
+                && access.getGuestInputIds() != null
+                && access.getGuestInputIds()
+                .contains(input.getTaxInputId())) {
             return;
         }
 
         throw forbidden();
     }
 
-    public void validateInput(
-            TaxInputRequest request
-    ) {
+    public void validateInput(TaxInputRequest request) {
         if (request == null) {
             throw invalid(
                     "input",
@@ -170,40 +136,24 @@ public class TaxValidator {
         validateTaxYear(request.getTaxYear());
 
         validateUnsignedSmallInt(
-                request.getAge(),
-                "age",
-                true
-        );
-
-        validateUnsignedSmallInt(
                 request.getDependentCount(),
-                "dependentCount",
-                false
+                "dependentCount"
         );
 
-        if (request.getDonationAmount() == null) {
+        if (request.getGeneralDonationAmount() == null || request.getSpecialDonationAmount() == null) {
             throw invalid(
-                    "donationAmount",
+                    request.getGeneralDonationAmount() == null ? "generalDonationAmount" : "specialDonationAmount",
                     "기부금은 누락할 수 없습니다. 없으면 0을 입력해주세요."
             );
         }
 
         validateDecimal(
-                request.getDonationAmount(),
+                request.getGeneralDonationAmount(),
                 MAX_AMOUNT,
                 2,
-                "donationAmount"
+                "generalDonationAmount"
         );
-
-        String region = request.getBusinessRegion();
-
-        if (region != null
-                && !BUSINESS_REGIONS.contains(region)) {
-            throw invalid(
-                    "businessRegion",
-                    "지원하지 않는 사업장 지역 코드입니다."
-            );
-        }
+        validateDecimal(request.getSpecialDonationAmount(), MAX_AMOUNT, 2, "specialDonationAmount");
 
         String saveStatus = request.getSaveStatus();
 
@@ -215,8 +165,10 @@ public class TaxValidator {
             );
         }
 
-        // 기본정보 저장 검증만 수행한다.
-        // 최종 분석의 별도 업무 조건은 계산 경로에서 검사한다.
+        /*
+         * 기본정보의 저장 검증만 수행한다.
+         * 최종 분석에 필요한 별도 업무 조건은 계산 경로에서 검사한다.
+         */
     }
 
     public void validateTransactionRows(
@@ -263,9 +215,7 @@ public class TaxValidator {
         }
     }
 
-    public void validateCashTransaction(
-            TaxTransactionDto row
-    ) {
+    public void validateCashTransaction(TaxTransactionDto row) {
         // 공제대상금액은 실제 입출금액과 구분한다.
         if ("DEDUCTION_ELIGIBLE".equals(row.getAmountBasis())) {
             throw invalid(
@@ -292,9 +242,7 @@ public class TaxValidator {
         }
     }
 
-    public void validateStoredTransaction(
-            TaxTransactionDto row
-    ) {
+    public void validateStoredTransaction(TaxTransactionDto row) {
         if (row.getDescription() == null
                 || row.getDescription().isBlank()) {
             throw invalid(
@@ -326,7 +274,7 @@ public class TaxValidator {
 
         validateTaxYear(year);
 
-        // 저장 단계에서 분석 귀속 연도와의 일치를 추가로 검사한다.
+        // 저장할 분석의 귀속 연도와 거래 날짜의 연도를 비교한다.
         if (!Objects.equals(taxYear, Integer.valueOf(year))) {
             throw invalid(
                     "transactionDate",
@@ -335,9 +283,7 @@ public class TaxValidator {
         }
     }
 
-    public void validatePdfTransactionDate(
-            TaxTransactionDto source
-    ) {
+    public void validatePdfTransactionDate(TaxTransactionDto source) {
         if (source.getTransactionDate() == null) {
             throw invalid(
                     "transactionDate",
@@ -345,10 +291,8 @@ public class TaxValidator {
             );
         }
 
-        // PDF 추출 단계에서는 특정 분석의 귀속 연도와 비교하지 않는다.
-        validateTaxYear(
-                source.getTransactionDate().getYear()
-        );
+        // PDF 추출 단계에서는 특정 분석 연도와 비교하지 않는다.
+        validateTaxYear(source.getTransactionDate().getYear());
     }
 
     public void validateNewTransactionIds(
@@ -405,16 +349,21 @@ public class TaxValidator {
             );
         }
 
-        // 일반 거래 검증은 날짜가 있을 때 범위만 검사한다.
-        // 날짜 필수 여부와 귀속 연도 일치는 저장 단계에서 검사한다.
         if (row.getTransactionDate() != null) {
-            validateYearRange(
-                    row.getTransactionDate().getYear(),
-                    field + ".transactionDate",
-                    "저장 가능한 거래 날짜가 아닙니다."
-            );
+            int year = row.getTransactionDate().getYear();
+
+            if (year < 1000 || year > 9999) {
+                throw invalid(
+                        field + ".transactionDate",
+                        "저장 가능한 거래 날짜가 아닙니다."
+                );
+            }
         }
 
+        /*
+         * 여기서는 날짜 자체의 범위만 검사한다.
+         * 분석 연도와의 일치는 validateStoredTransactionDate에서 검사한다.
+         */
         String description = row.getDescription();
 
         if (description != null
@@ -429,10 +378,10 @@ public class TaxValidator {
         }
 
         // 검증 중에는 값을 바꾸지 않고 전달된 값만 검사한다.
-        validateCategory(
-                row.getCategory(),
-                field + ".category"
-        );
+        String category = row.getCategory();
+        if (!"UNCLASSIFIED".equals(category) && !isAllowedCategory(category, type)) {
+            throw invalid(field + ".category", "거래 구분에 맞는 카테고리를 선택해주세요.");
+        }
 
         validateDecimal(
                 row.getAmount(),
@@ -464,43 +413,45 @@ public class TaxValidator {
         }
     }
 
-    public void validateCategory(
-            String category
-    ) {
-        validateCategory(category, "category");
+    // 카테고리 변경 요청에 필요한 새 코드와 기존 거래 정보를 검사한다.
+    public void validateCategory(String category, TaxTransactionDto row) {
+        if ("UNCLASSIFIED".equals(category)) {
+            throw invalid("category", "미분류는 수정할 카테고리로 선택할 수 없습니다.");
+        }
+        if (row.getDescription() == null || row.getDescription().isBlank()) {
+            throw invalid("description", "거래 설명이 필요합니다.");
+        }
+        String transactionType = row.getTransactionType();
+        if (!"INCOME".equals(transactionType) && !"EXPENSE".equals(transactionType)) {
+            throw invalid("transactionType", "수입 또는 지출로 구분된 거래만 수정할 수 있습니다.");
+        }
+        if (!isAllowedCategory(category, transactionType)) {
+            throw invalid("category", "거래 구분에 맞는 카테고리를 선택해주세요.");
+        }
     }
 
-    private void validateCategory(
-            String category,
-            String field
-    ) {
-        // 실제 분류 목록이 아니라 코드 형식과 길이를 검사한다.
-        if (category == null
-                || !CATEGORY_PATTERN.matcher(category).matches()) {
-            throw invalid(
-                    field,
-                    "카테고리는 영문 대문자로 시작하는 50자 이하 코드여야 합니다."
-            );
+    // 수입·지출별 카테고리와 공통 기타 코드만 허용한다.
+    private boolean isAllowedCategory(String category, String transactionType) {
+        if (category == null) {
+            return false;
         }
+        return "OTHER".equals(category)
+                || ("INCOME".equals(transactionType) && INCOME_CATEGORIES.contains(category))
+                || ("EXPENSE".equals(transactionType) && EXPENSE_CATEGORIES.contains(category));
     }
 
     private void validateUnsignedSmallInt(
             Integer value,
-            String field,
-            boolean nullable
+            String field
     ) {
         if (value == null) {
-            if (nullable) {
-                return;
-            }
-
             throw invalid(
                     field,
                     "필수 입력값입니다."
             );
         }
 
-        // 실제 나이 제한 등이 아니라 DB 타입의 저장 범위다.
+        // 공제 자격 판정이 아니라 가족 수를 저장할 DB 타입의 범위다.
         if (value < 0 || value > MAX_UNSIGNED_SMALL_INT) {
             throw invalid(
                     field,
@@ -575,8 +526,10 @@ public class TaxValidator {
             );
         }
 
-        // 파일 크기는 multipart 설정에서 제한한다.
-        // PDF 전체 구조와 페이지 검사는 후속 처리에서 수행한다.
+        /*
+         * 파일 크기는 multipart 설정에서 제한한다.
+         * PDF 전체 구조와 페이지 검사는 후속 처리에서 수행한다.
+         */
         return bytes;
     }
 

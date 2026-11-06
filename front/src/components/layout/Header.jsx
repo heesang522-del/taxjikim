@@ -12,7 +12,18 @@ import { Button, Icon, Modal, Pill } from '../common/index';
 export function Header() {
   const { loggedIn, isAdmin, logout } = useAuth();
   const toast = useToast();
-  const { items, unreadCount, hasMore, loadingMore, openList, loadMore, markRead } = useNotifications();
+  const {
+    items,
+    unreadCount,
+    hasMore,
+    loadingMore,
+    openList,
+    closeList,
+    loadMore,
+    markRead,
+    markAllRead,
+    sessionReplaced,
+  } = useNotifications();
   const [notifOpen, setNotifOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const navigate = useNavigate();
@@ -29,6 +40,21 @@ export function Header() {
       toast(error.message || '로그아웃하지 못했습니다. 다시 시도해주세요.');
     } finally {
       setLoggingOut(false);
+    }
+  }
+
+  // 다른 기기에서 로그인해 이 세션이 끝났을 때 보여주는 모달의 유일한 동작.
+  // 새로고침하면 쿠키가 이미 무효화돼 있어 checkAuth가 비로그인으로 판단하고,
+  // 보호된 화면은 기존 가드가 알아서 로그인 페이지로 보낸다.
+  function handleSessionReplacedConfirm() {
+    window.location.reload();
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      await markAllRead();
+    } catch (error) {
+      toast(error.message || '전체 읽음 처리하지 못했습니다. 다시 시도해주세요.');
     }
   }
 
@@ -103,7 +129,21 @@ export function Header() {
         )}
       </div>
       {notifOpen && (
-        <Modal title="알림" onClose={() => setNotifOpen(false)}>
+        <Modal
+          title="알림"
+          onClose={() => {
+            setNotifOpen(false);
+            closeList(); // 알림창을 닫으면 더 이상 SSE 신호로 목록을 자동 갱신하지 않게 한다.
+          }}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <strong>알림</strong>
+            {unreadCount > 0 && (
+              <Button variant="link" size="sm" onClick={handleMarkAllRead}>
+                모두 읽음
+              </Button>
+            )}
+          </div>
           <div
             className="grid"
             style={{ gap: 8, minWidth: 280, maxWidth: 360, maxHeight: 360, overflowY: 'auto' }}
@@ -121,12 +161,14 @@ export function Header() {
                   className="notif-item"
                   onClick={() => {
                     setNotifOpen(false);
+                    closeList();
                     markRead(n.id); // 알림을 열어본 시점에 읽음 처리(서버에서 바로 삭제됨)
                   }}
                 >
                   <p style={{ fontWeight: 600 }}>{n.title}</p>
-                  <p className="small muted">
-                    {n.desc} · {n.createdAt}
+                  <p className="small muted" style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span>{n.desc}</span>
+                    <span>{n.createdAt}</span>
                   </p>
                 </Link>
               ))
@@ -137,6 +179,17 @@ export function Header() {
             {!hasMore && items.length > 0 && (
               <p className="small muted" style={{ textAlign: 'center' }}>마지막 알림입니다</p>
             )}
+          </div>
+        </Modal>
+      )}
+      {sessionReplaced && (
+        // 바깥 클릭·Esc도 확인 버튼과 같은 동작을 하게 해서, 사실상 "확인" 외에 다른 선택지가 없게 한다.
+        <Modal title="로그인 종료" onClose={handleSessionReplacedConfirm}>
+          <div className="grid" style={{ gap: 12, minWidth: 280 }}>
+            <p>다른 기기에서 로그인했거나 현재 로그인이 종료되었습니다.</p>
+            <Button size="lg" onClick={handleSessionReplacedConfirm}>
+              확인
+            </Button>
           </div>
         </Modal>
       )}

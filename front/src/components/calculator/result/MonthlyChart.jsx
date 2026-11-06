@@ -1,9 +1,9 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useEffect, useState } from 'react';
-import { getMonthlyIncomes, getMonthlyExpenses } from '../../../api/taxApi';
+import { useState } from 'react';
 import { Card } from '../../common/index';
+import { won } from '../../../utils/format';
 
 const W = 640,
   H = 220,
@@ -45,46 +45,9 @@ function getYAxisScale(highestAmount) {
   return { max, step, unit, divisor };
 }
 
-// 분석번호로 월별 금액을 조회하고 기존 SVG 막대그래프로 표시한다.
-export function MonthlyChart({ taxInputId }) {
-  const [monthlyData, setMonthlyData] = useState({ incomes: [], expenses: [] });
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
-
-  // 분석번호가 바뀌면 이전 결과를 비우고 해당 분석의 수입·지출을 다시 조회한다.
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-
-    async function loadMonthlyData() {
-      setIsLoading(true);
-      setErrorMessage('');
-      setMonthlyData({ incomes: [], expenses: [] });
-
-      try {
-        const [incomeResult, expenseResult] = await Promise.all([
-          getMonthlyIncomes(taxInputId, { signal: controller.signal }),
-          getMonthlyExpenses(taxInputId, { signal: controller.signal }),
-        ]);
-        if (!cancelled) {
-          setMonthlyData({ incomes: incomeResult.data, expenses: expenseResult.data });
-        }
-      } catch (error) {
-        if (!cancelled) setErrorMessage(error.message || '월별 데이터를 불러오지 못했습니다.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    }
-
-    loadMonthlyData();
-    // 화면을 떠나거나 분석번호가 바뀐 뒤 이전 응답이 화면을 덮어쓰지 않게 한다.
-    return () => {
-      cancelled = true;
-      controller.abort();
-    };
-  }, [taxInputId]);
-
-  const { incomes, expenses } = monthlyData;
+// 페이지가 전달한 월별 실제·예상 금액을 기존 SVG 막대그래프로 표시한다.
+export function MonthlyChart({ incomes = [], expenses = [], isLoading = false, errorMessage = '', children }) {
+  const [hoveredMonth, setHoveredMonth] = useState(null);
   const monthly = { inc: Array(12).fill(0), exp: Array(12).fill(0) };
   const incomePredicted = Array(12).fill(false);
   const expensePredicted = Array(12).fill(false);
@@ -139,6 +102,7 @@ export function MonthlyChart({ taxInputId }) {
         width="100%"
         role="img"
         aria-label={`월별 수입과 지출 막대그래프. ${forecastLabel}`}
+        onMouseLeave={() => setHoveredMonth(null)}
       >
         {[0, 1, 2, 3, 4].map((i) => {
           const y = PAD.t + ih - (ih * i) / 4;
@@ -189,10 +153,45 @@ export function MonthlyChart({ taxInputId }) {
         <text x={PAD.l} y={PAD.t - 1} style={{ fontSize: 10 }}>
           ({unit})
         </text>
+        {/* 월 영역 전체를 감지하므로 작은 지출 막대나 점선 안쪽에서도 금액을 확인할 수 있다. */}
+        {monthly.inc.map((_, index) => (
+          <rect
+            key={`hover-${index}`}
+            x={PAD.l + index * bw}
+            y={PAD.t}
+            width={bw}
+            height={ih}
+            fill="transparent"
+            tabIndex={0}
+            aria-label={`${index + 1}월, 수입 ${won(monthly.inc[index])}, 지출 ${won(monthly.exp[index])}`}
+            onMouseEnter={() => setHoveredMonth(index)}
+            onFocus={() => setHoveredMonth(index)}
+            onBlur={() => setHoveredMonth(null)}
+          />
+        ))}
+        {/* SVG 좌표 안에서 위치를 제한해 오른쪽 끝 월의 안내도 잘리지 않게 한다. */}
+        {hoveredMonth !== null && (
+          <g
+            transform={`translate(${Math.min(PAD.l + hoveredMonth * bw + 8, W - PAD.r - 250)}, ${PAD.t + 18})`}
+            pointerEvents="none"
+          >
+            <rect width="250" height="76" rx="8" fill="var(--surface)" stroke="var(--border)" />
+            <text x="12" y="20" style={{ fill: 'var(--text-h)', fontSize: 12, fontWeight: 700 }}>
+              {hoveredMonth + 1}월
+            </text>
+            <text x="12" y="42" style={{ fill: 'var(--income)', fontSize: 12 }}>
+              수입 ({incomePredicted[hoveredMonth] ? '예상' : '실제'}) {won(monthly.inc[hoveredMonth])}
+            </text>
+            <text x="12" y="62" style={{ fill: 'var(--expense)', fontSize: 12 }}>
+              지출 ({expensePredicted[hoveredMonth] ? '예상' : '실제'}) {won(monthly.exp[hoveredMonth])}
+            </text>
+          </g>
+        )}
       </svg>
       <p className="small muted" style={{ marginTop: 8 }}>
         예측은 자료 기간의 월평균으로 계산합니다. 월 수입 편차가 큰 경우 실제 결과와 차이가 날 수 있습니다.
       </p>
+      {children}
     </Card>
   );
 }

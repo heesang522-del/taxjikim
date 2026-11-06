@@ -14,7 +14,7 @@ export default function ChatWidget() {
   const { loggedIn, isAdmin, user } = useAuth();
   const { open, setOpen } = useChat();
   // connected는 useMemberChat이 실제로 맺고 있는 WebSocket 소켓 상태를 그대로 반영한다.
-  const { room, messages, unreadCount, connected, send: sendMessage } = useMemberChat(open, user?.userId);
+  const { room, messages, unreadCount, connected, send: sendMessage, close: closeChat } = useMemberChat(open, user?.userId);
   const toast = useToast();
   const [text, setText] = useState('');
   const endRef = useRef(null);
@@ -23,6 +23,10 @@ export default function ChatWidget() {
   const disconnected = hasActiveRoom && !connected;
 
   const lastAt = messages[messages.length - 1]?.createdAt;
+  // 상담사가 입장만 하고 아직 답장이 없을 때만 "기다리는 중" 문구를 보여준다.
+  // room.status는 관리자가 입장해도 로컬에서 바로 갱신되지 않아 계속 WAITING으로 남을 수 있으므로,
+  // 실제로 상담사가 보낸 메시지가 왔는지로 판단한다.
+  const hasAdminReply = messages.some((m) => m.senderId !== user?.userId);
 
   // 메시지가 도착하거나 패널을 열면 맨 아래로 스크롤한다 (읽음 처리는 useMemberChat이 담당한다)
   useEffect(() => {
@@ -45,6 +49,15 @@ export default function ChatWidget() {
     }
   };
 
+  const handleClose = async () => {
+    try {
+      await closeChat();
+      // 종료 후에는 room.status가 CLOSED로 바뀌면서 채팅창에 "상담이 종료되었습니다" 안내가 뜬다. 토스트는 따로 띄우지 않는다.
+    } catch (cause) {
+      toast(cause.message || '상담을 종료하지 못했습니다');
+    }
+  };
+
   const hours = isBusinessHours();
 
   return (
@@ -64,9 +77,7 @@ export default function ChatWidget() {
             <>
               {disconnected && <p className="chat-warn" role="alert">연결이 끊어졌습니다. 다시 연결 중입니다…</p>}
               <div className="chat-body">
-                <p className="chat-note">상담 시간 {BUSINESS_HOURS_TEXT}{!hours && ' · 지금은 상담 시간이 아닙니다. 남겨주신 메시지는 상담 시간에 확인 후 답변드립니다.'}</p>
-                {room?.status === 'WAITING' && <p className="chat-note">상담사를 기다리는 중입니다.</p>}
-                {room?.status === 'CLOSED' && <p className="chat-note">상담이 종료되었습니다. 새 메시지를 보내면 새 상담이 시작됩니다.</p>}
+                {room?.status === 'WAITING' && !hasAdminReply && <p className="chat-note">상담사를 기다리는 중입니다.</p>}
                 {!room && <p className="chat-note">궁금한 점을 남겨 주세요.</p>}
                 {messages.map((m) => {
                   const fromAdmin = m.senderId !== user?.userId;
@@ -77,12 +88,28 @@ export default function ChatWidget() {
                     </div>
                   );
                 })}
+                {/* 종료된 방은 마지막 메시지 아래에 안내만 띄우고 입력을 막는다. 새 상담은 패널을 닫았다가 다시 열어 시작한다 */}
+                {room?.status === 'CLOSED' && (
+                  <p className="chat-note">종료된 채팅방입니다. 새로운 채팅방을 만드시려면 패널을 다시 열고 메시지를 입력해주세요.</p>
+                )}
                 <div ref={endRef} />
               </div>
               <form className="chat-form" onSubmit={send}>
-                <input className="in" aria-label="메시지 입력" placeholder="메시지를 입력하세요" maxLength={500} value={text} onChange={(e) => setText(e.target.value)} />
-                <Button type="submit" variant="primary" size="sm" disabled={disconnected}>보내기</Button>
+                <input
+                  className="in"
+                  aria-label="메시지 입력"
+                  placeholder="메시지를 입력하세요"
+                  maxLength={500}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  disabled={room?.status === 'CLOSED'}
+                />
+                <Button type="submit" variant="primary" size="sm" disabled={disconnected || room?.status === 'CLOSED'}>보내기</Button>
+                {hasActiveRoom && (
+                  <Button variant="danger" size="sm" onClick={handleClose}>상담 종료</Button>
+                )}
               </form>
+              <p className="chat-foot">상담 시간 {BUSINESS_HOURS_TEXT}{!hours && ' · 지금은 상담 시간이 아닙니다. 남겨주신 메시지는 상담 시간에 확인 후 답변드립니다.'}</p>
             </>
           )}
         </section>

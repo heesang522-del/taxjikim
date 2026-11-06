@@ -22,7 +22,7 @@ Python 코드를 추가·수정하거나 설명하기 전에는 `python-writing-
 | `app/main.py` | PDF 거래 설명을 선택한 모델로 분류 |
 | `app/pdf_parser.py` | PDF·OCR에서 거래 정보를 추출 |
 | `app/__init__.py` | Python 패키지 표시 |
-| `requirements.txt` | 실행에 필요한 라이브러리 목록 |
+| `ml/requirements.txt` (프로젝트 루트 기준) | 실행에 필요한 라이브러리 목록 |
 | `models/expense_classifier/*_bundle.pkl` | 설명 전처리와 모델 두 개 |
 | `models/expense_classifier/model_report.json` | 학습 건수·원본 식별값·서버 선택 모델. 현재 시험 정확도는 담지 않음 |
 | `models/expense_classifier/previous_test_report.json` | 이전 292/73 분할 실험의 점수. 현재 전체 학습 모델의 점수가 아님 |
@@ -39,7 +39,7 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 
 | 구분 | 정답 코드 | 한글 카테고리·포함 범위 |
 | --- | --- | --- |
-| 수입 | `YOUTUBE_SETTLEMENT` | 유튜브 플랫폼 정산 — 플랫폼 안의 후원 포함 |
+| 수입 | `YOUTUBE_SETTLEMENT` | 유튜브 정산 — 플랫폼 안의 후원 포함 |
 | 수입 | `AD_SPONSORSHIP` | 광고·협찬 수입 |
 | 수입 | `EXTERNAL_SUPPORT` | 유튜브 밖의 외부 후원 수입 |
 | 지출 | `SOFTWARE_LICENSE` | 소프트웨어 — 편집 프로그램·음원 라이선스·게임 이용권 등 |

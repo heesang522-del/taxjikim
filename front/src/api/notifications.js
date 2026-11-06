@@ -42,3 +42,8 @@ export function getUnreadNotificationCount() {
 export function markNotificationRead(notificationId) {
   return requestNotifications({ url: `/notifications/${notificationId}/read`, method: 'PATCH' })
 }
+
+// 미읽음 알림 전체 읽음 처리. 서버에서 곧바로 소프트 삭제되어 목록에서 모두 사라진다.
+export function markAllNotificationsRead() {
+  return requestNotifications({ url: '/notifications/read-all', method: 'PATCH' })
+}

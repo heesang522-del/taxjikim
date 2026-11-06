@@ -1,18 +1,45 @@
+'use no memo';
+
 import { useRef, useState } from 'react';
 import { Button, Card, KeyValue } from '../common/index';
-import {
-  dateText,
-  optionalNumber,
-  optionalInteger,
-  getTaxData,
-  getTaxReviewSignature,
-  updateTaxInput,
-} from '../../api/taxApi';
-import { normalizeTaxKind, useTax, useTaxStore } from '../../store/useTaxStore';
-import { getTaxInputSummary, getTransactionCashAmount } from '../../utils/taxInputSummary';
+import { getTaxReviewSignature, updateTaxInput } from '../../api/taxApi';
+import { useTax, useTaxStore } from '../../store/useTaxStore';
+import { getTaxInputSummary } from '../../utils/taxInputSummary';
 
 function money(value) {
   return `${Number(value ?? 0).toLocaleString('ko-KR')}원`;
+}
+
+function dateText(value) {
+  if (Array.isArray(value) && value.length === 3) {
+    return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
+  }
+
+  return String(value ?? '').trim();
+}
+
+function optionalNumber(value, label, fallback = null) {
+  if (value == null || String(value).trim() === '') {
+    return fallback;
+  }
+
+  const number = Number(String(value).replace(/,/g, '').trim());
+
+  if (!Number.isFinite(number) || number < 0) {
+    throw new Error(`${label}를 확인해주세요.`);
+  }
+
+  return number;
+}
+
+function optionalInteger(value, label, fallback = null) {
+  const number = optionalNumber(value, label, fallback);
+
+  if (number !== null && !Number.isSafeInteger(number)) {
+    throw new Error(`${label}는 정수로 입력해주세요.`);
+  }
+
+  return number;
 }
 
 function getScreenRows(state) {
@@ -29,15 +56,13 @@ function validId(value) {
   return Number.isSafeInteger(value) && value > 0;
 }
 
-// DB에 실제 저장되는 기본정보만 비교한다.
+// DB에 저장할 기본정보를 정리한다.
 function profileValues(profile) {
   return {
     businessRegistered: profile.businessRegistered ?? null,
-    age: optionalInteger(profile.age, '만 나이'),
-    startupReliefApplied: profile.startupReliefApplied ?? null,
-    businessRegion: String(profile.businessRegion ?? '').trim() || null,
-    dependentCount: optionalInteger(profile.dependentCount, '부양가족 수', 0),
-    donationAmount: optionalNumber(profile.donationAmount, '기부금', 0),
+    dependentCount: optionalInteger(profile.dependentCount, '공제 대상 가족 수', 0),
+    generalDonationAmount: optionalNumber(profile.generalDonationAmount, '일반기부금', 0),
+    specialDonationAmount: optionalNumber(profile.specialDonationAmount, '특례기부금', 0),
   };
 }
 
@@ -46,70 +71,7 @@ function validateProfile(profile) {
     throw new Error('사업자등록 여부를 선택해주세요.');
   }
 
-  const values = profileValues(profile);
-
-  if (profile.businessRegistered === false && values.age === null) {
-    throw new Error('현재 만 나이를 입력해주세요.');
-  }
-
-  if (profile.businessRegistered === true && typeof profile.startupReliefApplied !== 'boolean') {
-    throw new Error('창업 세액감면 적용 여부를 선택해주세요.');
-  }
-
-  if (
-    profile.businessRegistered === true &&
-    profile.startupReliefApplied === true &&
-    !['CAPITAL_CONGESTION', 'CAPITAL_OTHER', 'NON_CAPITAL'].includes(values.businessRegion)
-  ) {
-    throw new Error('창업 당시 사업장 지역을 선택해주세요.');
-  }
-
-  return values;
-}
-
-// 화면 거래와 DB 거래를 같은 형식으로 변환해 비교한다.
-function transactionValue(row, fromDatabase) {
-  const { taxInputId, transactionId } = row;
-
-  if (!validId(taxInputId) || !validId(transactionId)) {
-    throw new Error('저장된 거래 식별자를 확인하지 못했습니다. 거래 목록을 다시 확인해주세요.');
-  }
-
-  const amount = fromDatabase ? optionalNumber(row.amount, '거래 금액') : getTransactionCashAmount(row);
-
-  if (amount === null) {
-    throw new Error('거래 금액을 확인해주세요.');
-  }
-
-  return JSON.stringify([
-    taxInputId,
-    transactionId,
-    normalizeTaxKind(fromDatabase ? row.transactionType : row.kind),
-    dateText(fromDatabase ? row.transactionDate : row.date),
-    String(fromDatabase ? (row.description ?? '') : (row.memo ?? '')).trim(),
-    String(fromDatabase ? row.category || 'UNCLASSIFIED' : row.cat || 'UNCLASSIFIED').trim(),
-    amount,
-    optionalNumber(row.preTaxIncome, '세전 금액'),
-    optionalNumber(row.deductedTaxRate, '차감 세율'),
-  ]);
-}
-
-function transactionSignature(rows, fromDatabase) {
-  const seen = new Set();
-
-  const values = rows.map((row) => {
-    const key = `${row.taxInputId}:${row.transactionId}`;
-
-    if (seen.has(key)) {
-      throw new Error('저장된 거래가 목록에 중복되어 있습니다.');
-    }
-
-    seen.add(key);
-
-    return transactionValue(row, fromDatabase);
-  });
-
-  return JSON.stringify(values.sort());
+  return profileValues(profile);
 }
 
 export function SummaryRail({ onCalculate }) {
@@ -153,7 +115,6 @@ export function SummaryRail({ onCalculate }) {
       }
     } catch (cause) {
       setError(cause?.message ?? '입력 내용을 확인해주세요.');
-
       return;
     }
 
@@ -176,6 +137,13 @@ export function SummaryRail({ onCalculate }) {
       return;
     }
 
+    // 결과 화면은 한 번에 분석 한 건을 조회한다.
+    if (inputIds.size !== 1) {
+      setError('거래가 분석 한 건에 속할 때 결과를 볼 수 있습니다.');
+      return;
+    }
+    const [taxInputId] = inputIds;
+
     // 요청 도중 화면 입력이 변경되는지 확인한다.
     const initialSignature = getTaxReviewSignature(initial);
 
@@ -184,60 +152,21 @@ export function SummaryRail({ onCalculate }) {
     useTaxStore.setState({ taxSaveBusy: true });
 
     try {
-      const savedInputs = [];
-      const databaseRows = [];
+      const savedAnalysis = (initial.taxSavedSnapshots ?? []).find((snapshot) => snapshot.taxInputId === taxInputId);
+      const taxYear = savedAnalysis?.taxYear ?? Number(dateText(savedScreenRows[0].date).slice(0, 4));
 
-      // 분석별 기본정보와 전체 거래를 한 번의 요청으로 확인한다.
-      for (const taxInputId of inputIds) {
-        const response = await getTaxData(taxInputId);
-
-        const savedInput = response?.data?.input;
-        const savedRows = response?.data?.transactions;
-
-        if (!savedInput || savedInput.taxInputId !== taxInputId || !Array.isArray(savedRows)) {
-          throw new Error('저장된 분석 정보를 확인하지 못했습니다.');
-        }
-
-        savedInputs.push(savedInput);
-        databaseRows.push(...savedRows);
-      }
-
-      const screenSignature = transactionSignature(savedScreenRows, false);
-
-      const databaseSignature = transactionSignature(databaseRows, true);
-
-      if (screenSignature !== databaseSignature) {
-        throw new Error(
-          '화면 거래와 DB 거래가 일치하지 않습니다. ' +
-            '내역 확인·수정에서 변경 내용을 반영해주세요. ' +
-            '파일 내역을 화면에서만 제외했다면 저장된 거래 목록도 확인해주세요.'
-        );
-      }
-
-      if (getTaxReviewSignature(useTaxStore.getState()) !== initialSignature) {
-        throw new Error('확인 중 입력 내용이 변경됐습니다. 다시 분석 결과 보기를 눌러주세요.');
-      }
-
-      // 기본정보가 달라진 분석만 갱신한다.
-      for (const savedInput of savedInputs) {
-        const storedProfile = profileValues(savedInput);
-
-        if (JSON.stringify(storedProfile) === JSON.stringify(desiredProfile)) {
-          continue;
-        }
-
-        await updateTaxInput(savedInput.taxInputId, {
-          ...desiredProfile,
-          taxYear: savedInput.taxYear,
-          saveStatus: savedInput.saveStatus,
-        });
-      }
+      // 저장한 임시 분석에 현재 기본정보를 반영한 뒤 결과 화면으로 이동한다.
+      await updateTaxInput(taxInputId, {
+        ...desiredProfile,
+        taxYear,
+        saveStatus: 'TEMP',
+      });
 
       if (getTaxReviewSignature(useTaxStore.getState()) !== initialSignature) {
         throw new Error('저장 중 입력 내용이 변경됐습니다. 다시 분석 결과 보기를 눌러주세요.');
       }
 
-      // DB 확인과 기본정보 저장이 성공한 상태를 기록한다.
+      // 기본정보 저장이 성공한 상태를 기록한다.
       useTaxStore.setState((current) => ({
         taxLastSavedSignature: getTaxReviewSignature(current),
       }));
@@ -245,7 +174,7 @@ export function SummaryRail({ onCalculate }) {
       // 후속 화면에서 거래 처리 중으로 판단하지 않도록 해제한다.
       useTaxStore.setState({ taxSaveBusy: false });
 
-      await onCalculate();
+      await onCalculate(taxInputId);
     } catch (cause) {
       setError(cause?.message ?? '저장 상태를 확인하지 못했습니다.');
     } finally {
@@ -260,9 +189,7 @@ export function SummaryRail({ onCalculate }) {
       <KeyValue label="합계 대상 거래">{transactionRows.length}건</KeyValue>
 
       <KeyValue label="수입 합계">{money(income)}</KeyValue>
-
       <KeyValue label="지출 합계">{money(expense)}</KeyValue>
-
       <KeyValue label="미분류 합계">{money(unclassified)}</KeyValue>
 
       <KeyValue label="수입·지출 차액" total>
