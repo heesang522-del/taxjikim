@@ -125,11 +125,12 @@ export default function HelpPage() {
             : inquiriesError ? <p className="state-msg" role="alert">{inquiriesError}</p>
             : visibleInquiries.length
             ? <DataTable
+              // 제목 길이에 따라 작성자 칸이 움직이지 않도록 열 폭을 고정한다.
               columns={[
-                { key: 't', header: '제목', render: (q) => <>{q.visibility === 'private' && <Pill>비공개</Pill>} {q.title}</> },
-                { key: 'a', header: '작성자', render: (q) => q.author },
-                { key: 'd', header: '등록일', render: (q) => q.createdAt },
-                { key: 's', header: '상태', align: 'right', render: (q) => <Pill tone={q.status === '답변 완료' ? 'success' : 'warn'}>{q.status}</Pill> },
+                { key: 't', header: '제목', width: '50%', ellipsis: true, render: (q) => <>{q.visibility === 'private' && <Pill>비공개</Pill>} {q.title}</> },
+                { key: 'a', header: '작성자', width: '20%', ellipsis: true, render: (q) => q.author },
+                { key: 'd', header: '등록일', width: '18%', render: (q) => q.createdAt },
+                { key: 's', header: '상태', width: '12%', align: 'right', render: (q) => <Pill tone={q.status === '답변 완료' ? 'success' : 'warn'}>{q.status}</Pill> },
               ]}
               rows={visibleInquiries}
               rowKey={(q) => q.id}
