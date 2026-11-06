@@ -24,6 +24,8 @@ import java.util.ArrayList;
 import java.util.List;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import com.kh.back.tax.dto.TaxSimulationDto;
+import com.kh.back.tax.dto.SimulationScenarioDto;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -32,6 +34,71 @@ import tools.jackson.databind.json.JsonMapper;
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
+
+    // 소유자 필터링은 Mapper의 USER_ID 조건으로 처리한다.
+    @Override
+    @Transactional(readOnly = true)
+    public List<SimulationScenarioDto> getScenarios(Long userId) {
+        return taxMapper.findScenarios(userId);
+    }
+
+    // 기존 A/B/C 이름과 세 개 저장 정책을 유지한다.
+    @Override
+    @Transactional
+    public SimulationScenarioDto saveScenario(Long userId, SimulationScenarioDto scenario) {
+        List<SimulationScenarioDto> saved = taxMapper.findScenarios(userId);
+        if (saved.size() >= 3) {
+            throw new ApiException(HttpStatus.CONFLICT, "SCENARIO_LIMIT_REACHED", "시나리오는 최대 3개까지 저장할 수 있습니다.");
+        }
+        for (String name : List.of("A안", "B안", "C안")) {
+            boolean used = false;
+            for (SimulationScenarioDto row : saved) {
+                if (name.equals(row.getName())) used = true;
+            }
+            if (!used) {
+                scenario.setName(name);
+                break;
+            }
+        }
+        taxMapper.insertScenario(userId, scenario);
+        return scenario;
+    }
+
+    // 다른 회원의 번호를 보내도 삭제되지 않도록 SQL에서 회원번호를 함께 비교한다.
+    @Override
+    @Transactional
+    public void deleteScenario(Long userId, Long simulationId) {
+        if (taxMapper.deleteScenario(userId, simulationId) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "SCENARIO_NOT_FOUND", "삭제할 시나리오를 찾을 수 없습니다.");
+        }
+    }
+
+    // 기존 결과에 가정만 더한 뒤 동일한 계산 체인을 호출한다. DB 조회·저장은 하지 않는다.
+    @Override
+    public TaxBreakdownDto simulate(TaxSimulationDto request) {
+        if (request == null || request.getInput() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "기준 계산 결과가 필요합니다.");
+        }
+        TaxCalculationInputDto source = request.getInput();
+        BigDecimal[] amounts = {source.getTotalIncome(), source.getTotalExpense(),
+                source.getSpecialDonationAmount(), source.getGeneralDonationAmount(),
+                request.getExtraInc(), request.getExtraExp(), request.getExtraDonation()};
+        for (BigDecimal amount : amounts) {
+            if (amount == null || amount.signum() < 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "금액은 0 이상으로 입력해주세요.");
+            }
+        }
+        // 기준 결과를 변경하지 않도록 새로운 입력 객체에 복사한다.
+        TaxCalculationInputDto input = new TaxCalculationInputDto();
+        input.setTaxYear(source.getTaxYear());
+        input.setBusinessRegistered(source.getBusinessRegistered());
+        input.setDependentCount(source.getDependentCount());
+        input.setTotalIncome(source.getTotalIncome().add(request.getExtraInc()));
+        input.setTotalExpense(source.getTotalExpense().add(request.getExtraExp()));
+        input.setSpecialDonationAmount(source.getSpecialDonationAmount());
+        input.setGeneralDonationAmount(source.getGeneralDonationAmount().add(request.getExtraDonation()));
+        return calculateBreakdown(input);
+    }
 
     // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
     @Override

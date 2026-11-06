@@ -1,5 +1,23 @@
 import { client } from './client';
 
+// 시나리오는 브라우저 저장소 대신 기존 SIMULATION 테이블에서 관리한다.
+export async function getSimulationScenarios() {
+  return request({ url: '/tax/simulations', method: 'GET' });
+}
+
+export async function saveSimulationScenario(scenario) {
+  return request({ url: '/tax/simulations', method: 'POST', data: scenario });
+}
+
+export async function deleteSimulationScenario(simulationId) {
+  return request({ url: `/tax/simulations/${validateId(simulationId)}`, method: 'DELETE' });
+}
+
+// 결과 데이터와 추가 가정만 보내 기존 백엔드 계산을 재사용한다.
+export async function simulateTax(input, sim, { signal } = {}) {
+  return request({ url: '/tax/inputs/simulation', method: 'POST', data: { input, ...sim }, signal });
+}
+
 // 결과 화면의 데이터 전체를 JSON으로 보관한다. 같은 분석번호는 덮어쓴다.
 export async function saveTaxResult(taxInputId, result) {
   return request({ url: `${inputPath(taxInputId)}/result`, method: 'PUT', data: result });

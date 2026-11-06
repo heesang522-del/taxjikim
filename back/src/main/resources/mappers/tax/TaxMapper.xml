@@ -3,6 +3,32 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <!-- 기존 JSON 컬럼에는 추가 가정을, 금액 컬럼에는 저장 당시 결과 합계를 기록한다. -->
+    <insert id="insertScenario" useGeneratedKeys="true" keyProperty="scenario.simulationId" keyColumn="SIMULATION_ID">
+        INSERT INTO SIMULATION (USER_ID, TITLE, INPUT_DATA_SNAPSHOT,
+                                RESULT_EXPECTED_TAX, RESULT_TOTAL_INCOME, RESULT_TOTAL_EXPENSE)
+        VALUES (#{userId}, #{scenario.name},
+                JSON_OBJECT('extraInc', #{scenario.extraInc}, 'extraExp', #{scenario.extraExp},
+                            'extraDonation', #{scenario.extraDonation}),
+                #{scenario.totalTax}, #{scenario.totalIncome}, #{scenario.totalExpense})
+    </insert>
+
+    <select id="findScenarios" resultType="com.kh.back.tax.dto.SimulationScenarioDto">
+        SELECT SIMULATION_ID AS simulationId, TITLE AS name,
+               CAST(INPUT_DATA_SNAPSHOT->>'$.extraInc' AS DECIMAL(15,2)) AS extraInc,
+               CAST(INPUT_DATA_SNAPSHOT->>'$.extraExp' AS DECIMAL(15,2)) AS extraExp,
+               CAST(INPUT_DATA_SNAPSHOT->>'$.extraDonation' AS DECIMAL(15,2)) AS extraDonation,
+               RESULT_EXPECTED_TAX AS totalTax, RESULT_TOTAL_INCOME AS totalIncome,
+               RESULT_TOTAL_EXPENSE AS totalExpense
+        FROM SIMULATION
+        WHERE USER_ID = #{userId} AND DELETED_AT IS NULL
+        ORDER BY SIMULATION_ID
+    </select>
+
+    <delete id="deleteScenario">
+        DELETE FROM SIMULATION WHERE SIMULATION_ID = #{simulationId} AND USER_ID = #{userId}
+    </delete>
+
     <!-- 같은 분석번호의 결과는 화면에서 보낸 JSON으로 덮어쓴다. -->
     <insert id="saveResult">
         INSERT INTO tax_results (TAX_INPUT_ID, RESULT_DETAIL, CALCULATED_AT)

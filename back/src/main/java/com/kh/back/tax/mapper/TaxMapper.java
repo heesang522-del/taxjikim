@@ -4,6 +4,7 @@ import com.kh.back.tax.dto.MonthlyTransactionDto;
 import com.kh.back.tax.dto.CategoryAmountDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
+import com.kh.back.tax.dto.SimulationScenarioDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
@@ -14,6 +15,12 @@ import java.util.List;
 @Mapper
 @Repository("taxCalculationMapper")
 public interface TaxMapper {
+
+    List<SimulationScenarioDto> findScenarios(@Param("userId") Long userId);
+
+    int insertScenario(@Param("userId") Long userId, @Param("scenario") SimulationScenarioDto scenario);
+
+    int deleteScenario(@Param("userId") Long userId, @Param("simulationId") Long simulationId);
 
     // 같은 분석의 결과 JSON을 저장하거나 덮어쓴다.
     int saveResult(@Param("taxInputId") Long taxInputId, @Param("resultDetail") String resultDetail);
