@@ -120,16 +120,17 @@ public class NotificationServiceImpl implements NotificationService {
     @Override
     @Transactional
     public void notifyNewQnaPost(Long postId, Long authorId, String authorNickname, String postTitle, String postContent) {
-        Long adminId = notificationMapper.findAdminUserId();
-        // 관리자 계정이 없거나(로컬/테스트 환경), 관리자 본인이 작성한 글이면 알림을 보내지 않는다.
-        if (adminId == null || adminId.equals(authorId)) {
+        List<Long> adminIds = notificationMapper.findAdminUserIds(authorId);
+        // 관리자 계정이 없거나(로컬/테스트 환경), 작성자 본인뿐이면 알림을 보내지 않는다.
+        if (adminIds.isEmpty()) {
             return;
         }
         String safeTitle = truncateTitle(postTitle);
         String message = authorNickname + ": " + buildPreview(postContent);
-        notificationMapper.insertQnaPostNotification(adminId, postId, safeTitle, message);
-        // 담당 관리자 한 명에게만 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
-        pushAfterCommit(() -> sseEmitterRegistry.send(adminId, NOTIFICATION_EVENT, Map.of("type", "QNA_NEW")));
+        notificationMapper.insertQnaPostNotifications(adminIds, postId, safeTitle, message);
+        // 관리자 전원에게 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
+        pushAfterCommit(() -> adminIds.forEach(adminId ->
+                sseEmitterRegistry.send(adminId, NOTIFICATION_EVENT, Map.of("type", "QNA_NEW"))));
     }
 
     // NOTIFICATIONS.TITLE(VARCHAR(100)) 길이 제한. POSTS.TITLE은 255자까지 허용돼서,

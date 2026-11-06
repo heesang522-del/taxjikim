@@ -33,10 +33,10 @@ public interface NotificationMapper {
     int insertReplyNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
                                  @Param("title") String title, @Param("message") String message);
 
-    // 고정 담당 관리자 1명의 USER_ID 조회 (관리자가 여러 명이어도 가장 먼저 만들어진 계정 1명으로 고정)
-    Long findAdminUserId();
+    // 활성 상태인 ADMIN role 전체의 USER_ID 조회 (작성자 본인은 제외)
+    List<Long> findAdminUserIds(@Param("excludeUserId") Long excludeUserId);
 
-    // QNA 글 등록 알림 1건 생성 (수신자: 담당 관리자)
-    int insertQnaPostNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
-                                   @Param("title") String title, @Param("message") String message);
+    // QNA 글 등록 알림 생성 (수신자: ADMIN role 전체)
+    int insertQnaPostNotifications(@Param("userIds") List<Long> userIds, @Param("targetId") Long targetId,
+                                    @Param("title") String title, @Param("message") String message);
 }
