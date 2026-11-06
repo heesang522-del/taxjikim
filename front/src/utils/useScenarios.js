@@ -12,16 +12,16 @@ const useScenarioStore = create((set, get) => ({
   isLoading: false,
   isSaving: false,
   deletingId: null,
-  loaded: false,
   errorMessage: '',
 
   // 로그인한 회원이 바뀌면 이전 목록을 비우고 서버에서 본인 목록을 가져온다.
   load: async (userId) => {
-    if (get().userId === userId && (get().isLoading || get().loaded)) return;
-    set({ userId, scenarios: [], isLoading: true, loaded: false, errorMessage: '' });
+    // 결과 교체 후 다시 진입하면 삭제된 시나리오가 남지 않도록 DB 목록을 새로 읽는다.
+    if (get().userId === userId && get().isLoading) return;
+    set({ userId, scenarios: [], isLoading: true, errorMessage: '' });
     try {
       const response = await getSimulationScenarios();
-      if (get().userId === userId) set({ scenarios: response.data, loaded: true });
+      if (get().userId === userId) set({ scenarios: response.data });
     } catch (error) {
       if (get().userId === userId) set({ errorMessage: error.message || '시나리오를 불러오지 못했습니다.' });
     } finally {
@@ -65,7 +65,7 @@ const useScenarioStore = create((set, get) => ({
   },
 
   // 로그아웃 시 화면 메모리만 정리한다. 저장소나 쿠키를 읽거나 삭제하지 않는다.
-  clear: () => set({ userId: null, scenarios: [], loaded: false, isLoading: false, errorMessage: '' }),
+  clear: () => set({ userId: null, scenarios: [], isLoading: false, errorMessage: '' }),
 }));
 
 // 마이페이지와 시뮬레이션 화면은 같은 DB 목록과 저장·삭제 동작을 사용한다.

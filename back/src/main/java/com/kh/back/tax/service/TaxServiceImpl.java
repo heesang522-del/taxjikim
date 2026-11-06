@@ -60,7 +60,9 @@ public class TaxServiceImpl implements TaxService {
                 break;
             }
         }
-        taxMapper.insertScenario(userId, scenario);
+        if (taxMapper.insertScenario(userId, scenario) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "시나리오를 저장할 분석을 찾을 수 없습니다.");
+        }
         return scenario;
     }
 
@@ -111,6 +113,8 @@ public class TaxServiceImpl implements TaxService {
         if (taxMapper.markResultSaved(taxInputId, userId) != 1) {
             throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "저장할 수 있는 분석을 찾을 수 없습니다.");
         }
+        // 다른 분석의 이전 저장본은 부모를 삭제해 거래·결과·연결 시나리오를 함께 정리한다.
+        taxMapper.deletePreviousSavedInputs(userId, taxInputId);
         taxMapper.saveResult(taxInputId, result.toString());
     }
 

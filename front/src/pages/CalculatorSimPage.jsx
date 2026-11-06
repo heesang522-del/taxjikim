@@ -113,6 +113,7 @@ export function CalculatorSimPage() {
     <div className="grid g-side">
       <div className="grid" style={{ minWidth: 0 }}>
         <SimSliders
+          taxInputId={taxInputId}
           scenario={scenario}
           predictedIncome={result?.predictedIncome}
           predictedExpense={result?.predictedExpense}

@@ -22,6 +22,9 @@ public interface TaxMapper {
 
     int deleteScenario(@Param("userId") Long userId, @Param("simulationId") Long simulationId);
 
+    // 현재 저장할 분석을 제외한 회원의 이전 저장 분석을 삭제한다.
+    int deletePreviousSavedInputs(@Param("userId") Long userId, @Param("taxInputId") Long taxInputId);
+
     // 같은 분석의 결과 JSON을 저장하거나 덮어쓴다.
     int saveResult(@Param("taxInputId") Long taxInputId, @Param("resultDetail") String resultDetail);
 
