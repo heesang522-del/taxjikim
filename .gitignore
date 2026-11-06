@@ -156,3 +156,7 @@ workers
 /uploads/profile/*
 !/uploads/profile/default-profile.svg
 /docs/mypage-consultation-history-design.md
+
+# PyInstaller 빌드 중간 파일과 배포 결과물
+/build/
+/dist/

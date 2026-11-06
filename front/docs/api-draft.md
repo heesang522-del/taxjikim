@@ -201,3 +201,31 @@ ALTER TABLE TAX_TRANSACTIONS
 - 월별 항목: `{ month: number, amount: number, predicted: boolean }`. 실제·예상 금액을 서버에서 계산한다.
 - 첫·마지막 거래 연도가 다르면 HTTP 400, `error.code: TAX_TRANSACTION_YEAR_MISMATCH`를 반환한다. 유효한 거래 날짜가 없으면 HTTP 400, `TAX_TRANSACTION_DATE_REQUIRED`를 반환한다.
 - 페이지에서 한 번 조회하고 자식 컴포넌트에 전달한다. 기존 월별 API와 breakdown API는 유지하지만 결과 페이지에서는 개별 호출하지 않는다.
+# 분석 기본정보 입력 계약 변경 (2026-11-03)
+
+저장 `POST /api/v1/tax/save`의 `input`과 수정 `POST /api/v1/tax/inputs/{taxInputId}/update`의 `input`은 같은 필드를 사용한다.
+
+```json
+{
+  "input": {
+    "taxYear": 2026,
+    "businessRegistered": false,
+    "dependentCount": 0,
+    "generalDonationAmount": 0,
+    "specialDonationAmount": 0,
+    "saveStatus": "TEMP"
+  }
+}
+```
+
+- 금액 0은 기부금이 없는 입력 예시다. 두 기부금은 각각 음수가 아닌 DECIMAL(15,2) 저장 범위이며, 미입력은 저장 정규화에서 0으로 처리한다.
+- 나이·감면·지역·기존 단일 기부금 필드는 저장 계약에서 제거한다. 요청의 분석번호·소유자는 기존 서버 결정 규칙을 유지한다.
+- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다. 기존 DB 변경 방법은 `docs/tax-input-migration.md`를 따른다.
+# 결과 JSON 보관 (TJK-202)
+
+- `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.
+- `GET /api/v1/tax/inputs/{taxInputId}/result`: 저장 JSON을 `ApiResponse.data`로 반환한다. 세금 재계산은 하지 않는다.
+- 로그인 접근은 `SecurityConfig`에서 관리한다. 결과 서비스에는 로그인 검사·세션 조회·회원 연결을 넣지 않는다. 분석 소유자 확인은 별도 작업이다.
+- 저장과 함께 `SAVE_STATUS`만 `SAVED`로 변경한다. `USER_ID`는 변경하지 않는다. JSON은 `tax_results.RESULT_DETAIL`, 저장 시각은 기존 `CALCULATED_AT`에 기록한다.
+- 결과 다시 보기 주소: `/calculator/result?taxInputId={분석번호}&saved=true`. 마이페이지 목록 UI 연결은 별도 작업이다.
+- 기존 입력·거래 수정 시 결과를 삭제하는 무효화 동작은 유지한다. 저장 내용은 클라이언트가 보낸 당시 화면 값이며 서버 검증 계산 결과로 취급하지 않는다.

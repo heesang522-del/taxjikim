@@ -17,7 +17,7 @@ export default function CalcInputPage() {
         <EntryForm />
         <EntryTable />
       </div>
-      <SummaryRail onCalculate={() => navigate(ROUTES.calcLoading)} />
+      <SummaryRail onCalculate={(taxInputId) => navigate(`${ROUTES.calcLoading}?taxInputId=${taxInputId}`)} />
     </div>
   );
 }

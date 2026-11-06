@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Button, Card } from '../common/index';
-import { getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
+import { Button, Card, Icon } from '../common/index';
+import { deleteTransaction, getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
 import { getTransactionCashAmount } from '../../utils/taxInputSummary';
 import {
@@ -137,7 +137,6 @@ export function EntryTable() {
   const [open, setOpen] = useState(false);
   const [drafts, setDrafts] = useState({});
   const [checkedKeys, setCheckedKeys] = useState([]);
-  const [onlyUnclassified, setOnlyUnclassified] = useState(false);
   const [bulkCategory, setBulkCategory] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -146,7 +145,8 @@ export function EntryTable() {
   const rows = collectRows(state);
   const checked = new Set(checkedKeys);
 
-  const visibleRows = onlyUnclassified ? rows.filter((row) => row.category === 'UNCLASSIFIED') : rows;
+  // 본문 거래 목록에서 미분류만 골라 팝업에 표시한다.
+  const visibleRows = rows.filter((row) => row.category === 'UNCLASSIFIED');
 
   const selectedRows = rows.filter((row) => checked.has(row.key));
 
@@ -161,20 +161,21 @@ export function EntryTable() {
   const selectedBulk = ALL_CATEGORIES.some((item) => item.value === bulkCategory) ? bulkCategory : '';
 
   const rowKeys = JSON.stringify(rows.map((row) => row.key).sort());
+  const unclassifiedKeys = JSON.stringify(visibleRows.map((row) => row.key).sort());
 
-  // 새 거래가 추가된 경우에만 팝업을 자동으로 연다.
+  // 새로 추가된 미분류 거래가 있을 때만 팝업을 자동으로 연다.
   useEffect(() => {
     if (busy) return;
 
     const currentKeys = new Set(JSON.parse(rowKeys));
-    const hasNewRows = [...currentKeys].some((key) => !previousKeysRef.current.has(key));
+    const hasNewUnclassifiedRows = JSON.parse(unclassifiedKeys).some((key) => !previousKeysRef.current.has(key));
 
     previousKeysRef.current = currentKeys;
 
-    if (hasNewRows) {
+    if (hasNewUnclassifiedRows) {
       setOpen(true);
     }
-  }, [rowKeys, busy]);
+  }, [rowKeys, unclassifiedKeys, busy]);
 
   // React 상태에 맞춰 dialog를 제어하고 배경 스크롤을 막는다.
   useEffect(() => {
@@ -215,7 +216,6 @@ export function EntryTable() {
     if (busy || workingRef.current) return;
 
     resetDrafts();
-    setOnlyUnclassified(false);
     clearStatus();
     setOpen(true);
   }
@@ -294,6 +294,27 @@ export function EntryTable() {
 
     resetCategory(operation.key);
     setCheckedKeys((previous) => previous.filter((key) => key !== operation.key));
+  }
+
+  // 저장된 거래는 삭제 응답을 받은 뒤 본문과 저장 목록에서 제거한다.
+  async function handleDeleteRow(row) {
+    if (workingRef.current || useTaxStore.getState().taxSaveBusy) return;
+
+    clearStatus();
+    workingRef.current = true;
+    useTaxStore.setState({ taxSaveBusy: true });
+    try {
+      if (row.persisted) {
+        await deleteTransaction(row.taxInputId, row.transactionId);
+      }
+      commitOperation({ ...row, type: 'delete' });
+      setMessage('거래를 삭제했습니다.');
+    } catch (cause) {
+      setError(cause?.message ?? '거래를 삭제하지 못했습니다.');
+    } finally {
+      workingRef.current = false;
+      useTaxStore.setState({ taxSaveBusy: false });
+    }
   }
 
   function hasRemainingChanges(current, completedKeys) {
@@ -554,7 +575,7 @@ export function EntryTable() {
         onInputCreated: rememberCreatedInput,
         onGroupSaved: (group) => {
           commitSavedGroup(group);
-          completedCount += group.rows.length;
+          completedCount += group.bindings.length;
         },
       });
 
@@ -617,6 +638,7 @@ export function EntryTable() {
             <col />
             <col className="tax-col-amount" />
             <col className="tax-col-category-read" />
+            <col />
           </colgroup>
 
           <thead>
@@ -626,6 +648,7 @@ export function EntryTable() {
               <th>설명</th>
               <th className="tax-amount">금액</th>
               <th>카테고리</th>
+              <th scope="col" aria-label="삭제" />
             </tr>
           </thead>
 
@@ -640,12 +663,25 @@ export function EntryTable() {
                 </td>
                 <td className="tax-amount">{formatMoney(row.amount)}</td>
                 <td>{getTransactionCategoryLabel(row.category)}</td>
+                <td>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="danger"
+                    className="icon"
+                    aria-label={`${row.description} 삭제`}
+                    disabled={busy}
+                    onClick={() => void handleDeleteRow(row)}
+                  >
+                    <Icon name="trash" size={16} />
+                  </Button>
+                </td>
               </tr>
             ))}
 
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5}>표시할 거래가 없습니다.</td>
+                <td colSpan={6}>표시할 거래가 없습니다.</td>
               </tr>
             )}
           </tbody>
@@ -684,20 +720,7 @@ export function EntryTable() {
           )}
 
           <div className="tax-toolbar tax-editor-tools">
-            <label>
-              <input
-                type="checkbox"
-                checked={onlyUnclassified}
-                disabled={busy}
-                onChange={(event) => {
-                  setOnlyUnclassified(event.target.checked);
-                  setCheckedKeys([]);
-                  setBulkCategory('');
-                  clearStatus();
-                }}
-              />{' '}
-              미분류만 보기
-            </label>
+            <span>미분류 거래</span>
 
             <select
               className="tax-bulk-select"

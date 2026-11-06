@@ -8,7 +8,6 @@ import lombok.Setter;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 
@@ -63,12 +62,10 @@ public class TaxTransactionDto {
         private Integer taxYear;
 
         private Boolean businessRegistered;
-        private Integer age;
-        private Boolean startupReliefApplied;
-        private String businessRegion;
 
         private Integer dependentCount;
-        private BigDecimal donationAmount;
+        private BigDecimal generalDonationAmount; // 종교단체 외 일반기부금 입력액
+        private BigDecimal specialDonationAmount; // 영수증상 특례기부금 입력액
         private String saveStatus;
     }
 
@@ -87,18 +84,6 @@ public class TaxTransactionDto {
         private Set<Long> guestInputIds;
     }
 
-    @Getter
-    @Setter
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TaxResultRow {
-
-        private Long taxInputId;
-        private String resultDetail;
-        private LocalDateTime calculatedAt;
-    }
-
     /*
      * 통합 서비스 호출용 요청이다.
      * Controller가 작업 대상과 필요한 값을 builder로 구성한다.
@@ -114,11 +99,13 @@ public class TaxTransactionDto {
 
         private Long taxInputId;
         private Long transactionId;
+        private java.util.List<Long> transactionIds;
         private Integer taxYear;
 
         private TaxInputRequest input;
-        private String category;
+        private List<TaxCategoryChange> changes;
         // 최초 저장할 신규 거래 목록
+        private Integer expectedTransactionCount;
         private List<TaxTransactionDto> transactions;
     }
 }

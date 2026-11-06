@@ -16,7 +16,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 @Component
 public class TaxValidator {
@@ -33,13 +32,12 @@ public class TaxValidator {
     private static final int MAX_DESCRIPTION_LENGTH = 255;
 
     // 카테고리 목록 자체는 제한하지 않고 코드 형식과 길이만 검사한다.
-    private static final Pattern CATEGORY_PATTERN =
-            Pattern.compile("[A-Z][A-Z0-9_]{0,49}"); // 영문 대문자,숫자 , 전체길이 1~50 자
-
-    private static final Set<String> BUSINESS_REGIONS = Set.of(
-            "CAPITAL_CONGESTION",
-            "CAPITAL_OTHER",       // 카테고리의 실제 의미나 목록까지 검사는 하지 않고 형식만 맞으면 통과
-            "NON_CAPITAL"
+    private static final Set<String> INCOME_CATEGORIES = Set.of(
+            "YOUTUBE_SETTLEMENT", "AD_SPONSORSHIP", "EXTERNAL_SUPPORT"
+    );
+    private static final Set<String> EXPENSE_CATEGORIES = Set.of(
+            "SOFTWARE_LICENSE", "EQUIPMENT", "TELECOMMUNICATION", "TRANSPORT",
+            "SUPPLIES_PROPS", "SPACE_RENTAL", "OUTSOURCING", "AD_PROMOTION"
     );
 
     private static final Set<String> TRANSACTION_TYPES = Set.of(
@@ -138,40 +136,24 @@ public class TaxValidator {
         validateTaxYear(request.getTaxYear());
 
         validateUnsignedSmallInt(
-                request.getAge(),
-                "age",
-                true
-        );
-
-        validateUnsignedSmallInt(
                 request.getDependentCount(),
-                "dependentCount",
-                false
+                "dependentCount"
         );
 
-        if (request.getDonationAmount() == null) {
+        if (request.getGeneralDonationAmount() == null || request.getSpecialDonationAmount() == null) {
             throw invalid(
-                    "donationAmount",
+                    request.getGeneralDonationAmount() == null ? "generalDonationAmount" : "specialDonationAmount",
                     "기부금은 누락할 수 없습니다. 없으면 0을 입력해주세요."
             );
         }
 
         validateDecimal(
-                request.getDonationAmount(),
+                request.getGeneralDonationAmount(),
                 MAX_AMOUNT,
                 2,
-                "donationAmount"
+                "generalDonationAmount"
         );
-
-        String region = request.getBusinessRegion();
-
-        if (region != null
-                && !BUSINESS_REGIONS.contains(region)) {
-            throw invalid(
-                    "businessRegion",
-                    "지원하지 않는 사업장 지역 코드입니다."
-            );
-        }
+        validateDecimal(request.getSpecialDonationAmount(), MAX_AMOUNT, 2, "specialDonationAmount");
 
         String saveStatus = request.getSaveStatus();
 
@@ -396,10 +378,10 @@ public class TaxValidator {
         }
 
         // 검증 중에는 값을 바꾸지 않고 전달된 값만 검사한다.
-        validateCategory(
-                row.getCategory(),
-                field + ".category"
-        );
+        String category = row.getCategory();
+        if (!"UNCLASSIFIED".equals(category) && !isAllowedCategory(category, type)) {
+            throw invalid(field + ".category", "거래 구분에 맞는 카테고리를 선택해주세요.");
+        }
 
         validateDecimal(
                 row.getAmount(),
@@ -431,41 +413,45 @@ public class TaxValidator {
         }
     }
 
-    public void validateCategory(String category) {
-        validateCategory(category, "category");
+    // 카테고리 변경 요청에 필요한 새 코드와 기존 거래 정보를 검사한다.
+    public void validateCategory(String category, TaxTransactionDto row) {
+        if ("UNCLASSIFIED".equals(category)) {
+            throw invalid("category", "미분류는 수정할 카테고리로 선택할 수 없습니다.");
+        }
+        if (row.getDescription() == null || row.getDescription().isBlank()) {
+            throw invalid("description", "거래 설명이 필요합니다.");
+        }
+        String transactionType = row.getTransactionType();
+        if (!"INCOME".equals(transactionType) && !"EXPENSE".equals(transactionType)) {
+            throw invalid("transactionType", "수입 또는 지출로 구분된 거래만 수정할 수 있습니다.");
+        }
+        if (!isAllowedCategory(category, transactionType)) {
+            throw invalid("category", "거래 구분에 맞는 카테고리를 선택해주세요.");
+        }
     }
 
-    private void validateCategory(
-            String category,
-            String field
-    ) {
-        // 실제 분류 목록이 아니라 코드의 형식과 길이를 검사한다.
-        if (category == null
-                || !CATEGORY_PATTERN.matcher(category).matches()) {
-            throw invalid(
-                    field,
-                    "카테고리는 영문 대문자로 시작하는 50자 이하 코드여야 합니다."
-            );
+    // 수입·지출별 카테고리와 공통 기타 코드만 허용한다.
+    private boolean isAllowedCategory(String category, String transactionType) {
+        if (category == null) {
+            return false;
         }
+        return "OTHER".equals(category)
+                || ("INCOME".equals(transactionType) && INCOME_CATEGORIES.contains(category))
+                || ("EXPENSE".equals(transactionType) && EXPENSE_CATEGORIES.contains(category));
     }
 
     private void validateUnsignedSmallInt(
             Integer value,
-            String field,
-            boolean nullable
+            String field
     ) {
         if (value == null) {
-            if (nullable) {
-                return;
-            }
-
             throw invalid(
                     field,
                     "필수 입력값입니다."
             );
         }
 
-        // 실제 나이 제한 등이 아니라 DB 타입의 저장 범위다.
+        // 공제 자격 판정이 아니라 가족 수를 저장할 DB 타입의 범위다.
         if (value < 0 || value > MAX_UNSIGNED_SMALL_INT) {
             throw invalid(
                     field,
