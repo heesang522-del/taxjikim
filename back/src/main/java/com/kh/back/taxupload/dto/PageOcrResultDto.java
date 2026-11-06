@@ -35,5 +35,6 @@ public class PageOcrResultDto {
         private double x0;
         private double x1;
         private double top;
+        private double bottom;
     }
 }

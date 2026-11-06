@@ -47,10 +47,8 @@ public class PythonPdfClientImpl implements PythonPdfClient {
     public PythonPdfClientImpl(
             @Value("${python.api-url:http://127.0.0.1:8000}")
             String baseUrl,
-
             @Value("${python.connect-timeout-ms:5000}")
             int connectTimeout,
-
             @Value("${python.read-timeout-ms:90000}")
             int readTimeout
     ) {
@@ -60,50 +58,44 @@ public class PythonPdfClientImpl implements PythonPdfClient {
             );
         }
 
-        SimpleClientHttpRequestFactory factory =  // 외부 서버에 요청을 보낼 http 클라이언트를 만들고 , 연결 응답 대기 시간을 설정하는 부분
-                new SimpleClientHttpRequestFactory(); // http 연결을 실제로 처리할 객체 생성
+        SimpleClientHttpRequestFactory factory =  new SimpleClientHttpRequestFactory(); // python 서버와 http 통신할떄 사용할 연결처리 객체 생성
 
-        factory.setConnectTimeout(connectTimeout); // 외부 서버에 연결될 때까지 기다리는 최대시간 설정
-        factory.setReadTimeout(readTimeout); // 연결후 응답 데이터를 읽으며 기다리는 최대 시간 설정, 전체 요청의 총 제한 시간과는 다름
+        factory.setConnectTimeout(connectTimeout); // python 서버에 요청할 http 클라이언트 를 만들고 서버 주소와 대기 시간을 설정하는 부분
+        factory.setReadTimeout(readTimeout); // 연결후 응답 데이터를 읽을떄 기다리는 시간 제한을 설정
 
-        this.client = RestClient.builder()  // 설정을 조합하여 RestClient 를  생성하고, 현재 객체의 client 필드에 저장
-                .baseUrl(baseUrl) // 요청에 사용할 기본 서버 주소 지정
-                .requestFactory(factory) // 위에서 설정한 연결 방식과 대기 시간 적용
-                .build(); // 설정을 적용한 클라이언트 생성
+        this.client = RestClient.builder() // restclient 생성 시작
+                .baseUrl(baseUrl) // 요청할 기본 서버 주소 지정
+                .requestFactory(factory) // 앞에서 설정한 연결 처리 방식과 대기시간 제한 적용
+                .build(); // 설정한 내용으로 클라이언트 객체 완성
 
-        this.objectMapper = createObjectMapper(); // createObjectMapper()가 반환하는 객체를 objectmapper 필드에 저장
-    }
+        this.objectMapper = createObjectMapper();
+    }  // json 변한 규칙이 설정된 객체를 만들어 클래스 필드에ㅔ 저장하는 부분
 
-    private ObjectMapper createObjectMapper() { // python 서버가 보낸 json을 java 객체로 바꿀떄 적용할 규칙을 설정하는 함수
-        SimpleModule dateModule = new SimpleModule(); // SimpleModule 은 ObjectMapper 에 추가할 사용자 정의 변환 규칙을 담는 객체
+    private ObjectMapper createObjectMapper() { // json 의 날짜 값을 java의 localdate 로 바꾸는 규칙을 등록하기 시작
+        SimpleModule dateModule = new SimpleModule(); // 사용자 정의 변환 규칙을 담을 모듈을 만들고 datemodule 에 저장
 
-        /*
-         * Python이 반환하는 YYYY-MM-DD 문자열을 LocalDate로 변환한다.
-         * 날짜가 없는 월별 자료의 null은 그대로 유지한다.
-         */
-        dateModule.addDeserializer( // java 필드가 LOcalDate 타입이면 아래의 deserialize ()를 사용하도록 등록
+        dateModule.addDeserializer( // java 필드 타입이 localdate 라면 아래 변환 규칙을 사용
                 LocalDate.class,
-                new JsonDeserializer<LocalDate>() {
+                new JsonDeserializer<LocalDate>() { // 날짜 변환을 담당하는 객체를 익명 클래스로 만듬 , 별도 클래스 파일을 만들지 않고, 이어지는 { } 안에 deserialize() 메서드 구현
 
                     @Override
-                    public LocalDate deserialize(
+                    public LocalDate deserialize( // json 날짜 값을 변환하기 전에, 값이 문자열인지 검사하는 부분
                             JsonParser parser,
                             DeserializationContext context
                     ) throws IOException {
-
-                        if (!parser.hasToken(JsonToken.VALUE_STRING)) {
-                            throw JsonMappingException.from(
+                        if (!parser.hasToken(JsonToken.VALUE_STRING)) { // 현재값이 문자열이 아니면 조건이 참임
+                            throw JsonMappingException.from( // 문자열이 아니면 json 변환 오류를 발생시킴 , 날짜 형식과 실제 존재하는 날짜인지는 뒤의 localDate.parse() 에서 검사
                                     parser,
                                     "거래 날짜는 YYYY-MM-DD 문자열 또는 null이어야 합니다."
                             );
-                        } // 만약 날짜 값이 문자열인지 검사, 숫자나 배열등이 오면 오류 발생시킴
+                        }
 
-                        String value = parser.getText().trim(); // 문자열의 앞뒤 공백을 제거하고 날짜로 변환시킴
+                        String value = parser.getText().trim();  // 현재 json 문자열을 가져와 앞뒤 공백을 제거한뒤 value 에 저장하는 코드
 
                         try {
-                            return LocalDate.parse(value);
+                            return LocalDate.parse(value); // 문자열을 날짜 객체로 변환하고 성공하면 반환하는 코드
 
-                        } catch (DateTimeParseException exception) { // 날짜 형식이 잘못됬거나 실제로 존재하지 않으면 json 변환 오류로 전달
+                        } catch (DateTimeParseException exception) { // 문자열을 날짜로 변환하지 못했을떄 json 변환 오류로 바꿔 전달하는 부분
                             throw JsonMappingException.from(
                                     parser,
                                     "거래 날짜의 형식이 올바르지 않습니다."
@@ -113,63 +105,56 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                 }
         );
 
-        ObjectMapper mapper = new ObjectMapper(); // json 변환기를 만들고 위에서 정의한 날짜 변환 규칙을 적용
+        ObjectMapper mapper = new ObjectMapper(); // json 과 java 객체를 서로 변환하는 objectmapper 객체를 만들어 mapper 변수에 저장하는 부분
 
-        mapper.registerModule(dateModule); // python 응답에 java dto에는 없는 필드가 추가되어도 변환을 계속함
-        //   ex : dto에 amount 만 있는데 다음 응답이 오면 extrainfo 는 무시
+        mapper.registerModule(dateModule); // 앞에서 만든 날짜 변환 규칙을 objectmapper에 등록
 
-        /*
-         * 분석 서버에 보조 필드가 추가되어도 기존 DTO 변환을 유지한다.
-         * 필수 응답 구조는 parseResponse에서 별도로 확인한다.
-         */
+
         mapper.disable(
                 DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES
-        ); // python 응답에 java dto에는 없는 필드가 추가되어도 변환을 계속함
+        ); // json 에 java dto에 없는 필드가있어도 오류를 내지 않고 무시하도록 설정하는 부분
+
         mapper.enable(
                 DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS
-        );   // // Map<String, Object> 처럼 숫자의 구체적인 java 타입이 정해지지 않은 경우 , 소수를 double 대신 BigDecimal로 읽음
-
+        ); // json의 소수를 읽을떄 타입이 정해지지 않은 값은 double 대신 bigdecimal 로 변환하도록 설정
 
         mapper.enable(
                 DeserializationFeature.FAIL_ON_TRAILING_TOKENS
-        ); // 정상 json뒤에 다른 값이 이어지는 응답을 거부
+        ); // 정상 json 값뒤에 다른 값이 추가로 붙어 있으면 변환 오류 발생시키는 설정
 
         return mapper;
-    }
-    @Override
-    public PdfParseResponseDto analyze(
-            byte[] pdfBytes,
-            String fileName,
-            List<PageOcrResultDto> pages
-    ) {
-        if (pdfBytes == null
-                || pdfBytes.length == 0
-                || fileName == null
-                || fileName.isBlank()) {
+    } // mapper 로 반환
 
+    @Override
+    public PdfParseResponseDto analyze( // pdf 원본과 ocr 결과를 python 서버에 보내 분석 결과를 받는 메서드 선언
+            byte[] pdfBytes, // pdf 파일 원본을 바이트 배열로 읽은 데이터
+            String fileName, // 전송할 pdf 파일 이름
+            List<PageOcrResultDto> pages // java에서 추출한 페이지 별 텍스트 , ocr 결과 목록
+    ) {
+
+        if (fileName == null || fileName.isBlank()) {
             throw new ApiException(
                     HttpStatus.BAD_REQUEST,
                     "VALIDATION_ERROR",
                     "분석할 PDF 데이터와 파일명이 필요합니다."
             );
-        }
+        } // 파일이름이 비거나 없으면 예외처리
 
-        MultiValueMap<String, Object> parts =
-                createParts(
-                        pdfBytes,
-                        fileName,
-                        pages
-                );
+        MultiValueMap<String, Object> parts = createParts(
+                pdfBytes,
+                fileName,
+                pages
+        ); // python 서버에 보낼 pdf 파일과 ocr 결과를 요청 데이터로 묶는 부분 , 변환된 데이터를 parts에 저장
 
-        String responseBody;
+        String responseBody; // 응답 본문을 저장할 문자열 변수를 선언
 
         try {
-            responseBody = client.post()
-                    .uri("/api/pdf/analyze")
-                    .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .body(parts)
-                    .retrieve()
+            responseBody = client.post() // http post 요청 준비
+                    .uri("/api/pdf/analyze") // 분석 api 경로를 지정, 앞서 설정한 baseurl 뒤에 붙음
+                    .contentType(MediaType.MULTIPART_FORM_DATA) // 보내는 데이터가 파일과 일반 데이터를 함께 담는 multipart 형식임을 지정
+                    .accept(MediaType.APPLICATION_JSON) // 서버에 json 형식의 응답을 받고 싶다고 알림
+                    .body(parts) // 앞서 만든 pdf 파일과 ocr 결과를 요청 본문에 넣음
+                    .retrieve() // 요청을 실행해 응답을 일고, 응답본문을 문자열로 받아 responseBody 에 저장 , 이후 이 json 문자열을 java dto로 변환
                     .body(String.class);
 
         } catch (RestClientResponseException exception) {
@@ -178,28 +163,29 @@ public class PythonPdfClientImpl implements PythonPdfClient {
             log.warn(
                     "Python PDF 서버 HTTP 오류. status={}",
                     status
-            );
+            ); // python 서버가 http 오류 응답을 보냈을떄 상태 코드를 확인하고 로그에 기록하는 부분
 
             if (status == 400 || status == 422) {
-                String code = null;
+                String code = null; // python 서버의 http 상태가 400 또는 422 이면 아래코드를 실행
 
                 try {
                     JsonNode root = objectMapper.readTree(
                             exception.getResponseBodyAsString()
-                    );
+                    ); // python 서버가 보낸 오류 응답을 문자열로 꺼내 , json 구조로 읽는 부분
 
-                    if (root != null) {
+                    if (root != null) { // python 오류 응답에서 detail.code를 꺼내고, json을 읽지 못하면 공통 오류 처리로 넘어가는 부분
                         code = root.path("detail")
                                 .path("code")
                                 .asText(null);
                     }
 
                 } catch (JsonProcessingException ignored) {
-                    // 응답을 해석하지 못하면 아래 공통 오류로 처리한다.
+                  // 오류 응답이 올바른지 json이 아니어서 해석에 실패하면 여기서 잡고 계속 진행,
+                    // ignored 는 이 예외 객체를 사용하지 않겠다는 의도를 나타낸 변수이름
                 }
 
-                if ("PDF_DAILY_DETAILS_REQUIRED".equals(code)) {
-                    throw new ApiException(
+                if ("PDF_DAILY_DETAILS_REQUIRED".equals(code)) { // python 에서 받은 오류 코드가 pdf_dailt_details_required 인지 확인, 문자열 상수를 앞에 두어 code가 null 이어도 오류 없이 비교
+                    throw new ApiException( // 공통 예외처리
                             HttpStatus.UNPROCESSABLE_ENTITY,
                             code,
                             "날짜별 상세 내역을 업로드해주세요. "
@@ -207,7 +193,7 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                     );
                 }
 
-                if ("PDF_OCR_REQUIRED".equals(code)) {
+                if ("PDF_OCR_REQUIRED".equals(code)) { // python 에서 받은 오류 코드가 pdf_ocr_required 인지 확인
                     throw new ApiException(
                             HttpStatus.UNPROCESSABLE_ENTITY,
                             code,
@@ -283,13 +269,9 @@ public class PythonPdfClientImpl implements PythonPdfClient {
 
         return parseResponse(responseBody);
     }
-    private PdfParseResponseDto parseResponse(
-            String responseBody
 
-    ) {
-        if (responseBody == null
-                || responseBody.isBlank()) {
-
+    private PdfParseResponseDto parseResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
             throw new ApiException(
                     HttpStatus.BAD_GATEWAY,
                     "PDF_EMPTY_RESPONSE",
@@ -298,13 +280,8 @@ public class PythonPdfClientImpl implements PythonPdfClient {
         }
 
         try {
-            JsonNode root =
-                    objectMapper.readTree(responseBody);
+            JsonNode root = objectMapper.readTree(responseBody);
 
-            /*
-             * 현재 Python API는 data로 감싸지 않은 객체를 반환한다.
-             * 예상과 다른 구조를 빈 거래 목록으로 처리하지 않는다.
-             */
             if (root == null || !root.isObject()) {
                 throw invalidResponse(
                         "최상위 응답이 JSON 객체가 아닙니다."
@@ -329,7 +306,6 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                         || !value.isIntegralNumber()
                         || !value.canConvertToInt()
                         || value.intValue() < 0) {
-
                     throw invalidResponse(
                             field + " 값이 올바른 정수가 아닙니다."
                     );
@@ -342,9 +318,9 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                             PdfParseResponseDto.class
                     );
 
-            if (response.getTransactions().stream()
+            if (response.getTransactions()
+                    .stream()
                     .anyMatch(Objects::isNull)) {
-
                 throw invalidResponse(
                         "transactions 배열에 null 항목이 있습니다."
                 );
@@ -357,21 +333,10 @@ public class PythonPdfClientImpl implements PythonPdfClient {
                     response.getParsedCount()
             );
 
-            /*
-             * DB 저장 완료 여부는 이후 저장 서비스에서 설정한다.
-             * Python 분석 응답만으로 저장 성공을 표시하지 않는다.
-             */
-            response.setPersisted(false);
-            response.setSavedCount(0);
-            response.setTaxInputIdsByYear(null);
-
             return response;
 
         } catch (JsonMappingException exception) {
-            /*
-             * 필드 경로와 예외 종류만 남긴다.
-             * 예외 메시지에 포함될 수 있는 거래 값은 기록하지 않는다.
-             */
+            // 거래 원문 대신 필드 경로와 예외 종류만 기록한다.
             log.error(
                     "Python PDF DTO 변환 실패. exceptionType={}, fieldPath={}",
                     exception.getClass().getName(),
@@ -398,10 +363,7 @@ public class PythonPdfClientImpl implements PythonPdfClient {
         }
     }
 
-    private ApiException invalidResponse(
-            String reason
-    ) {
-        // reason에는 코드에서 정한 구조 설명만 전달한다.
+    private ApiException invalidResponse(String reason) {
         log.error(
                 "Python PDF 응답 구조 오류. reason={}",
                 reason
@@ -414,14 +376,11 @@ public class PythonPdfClientImpl implements PythonPdfClient {
         );
     }
 
-    private String mappingPath(
-            JsonMappingException exception
-    ) {
+    private String mappingPath(JsonMappingException exception) {
         StringBuilder path = new StringBuilder();
 
         for (JsonMappingException.Reference reference
                 : exception.getPath()) {
-
             if (reference.getFieldName() != null) {
                 if (!path.isEmpty()) {
                     path.append(".");
@@ -446,30 +405,28 @@ public class PythonPdfClientImpl implements PythonPdfClient {
             String fileName,
             List<PageOcrResultDto> pages
     ) {
-        ByteArrayResource resource =
-                new ByteArrayResource(pdfBytes) {
+        ByteArrayResource resource = new ByteArrayResource(pdfBytes) {
 
-                    @Override
-                    public String getFilename() {
-                        return fileName;
-                    }
-                };
+            @Override
+            public String getFilename() {
+                return fileName;
+            }
+        };
 
         MultiValueMap<String, Object> parts =
                 new LinkedMultiValueMap<>();
 
         parts.add("file", resource);
 
-        List<PageOcrResultDto> ocrPages =
-                pages == null
-                        ? List.of()
-                        : pages.stream()
-                        .filter(Objects::nonNull)
-                        .filter(PageOcrResultDto::isOcrUsed)
-                        .toList();
+        // 기존 동작과 동일하게 실제 OCR을 수행한 페이지만 전송한다.
+        List<PageOcrResultDto> ocrPages = pages == null
+                ? List.of()
+                : pages.stream()
+                .filter(Objects::nonNull)
+                .filter(PageOcrResultDto::isOcrUsed)
+                .toList();
 
         try {
-            // OCR 결과는 기존 Python API의 Form 필드 이름으로 전달한다.
             parts.add(
                     "ocrPages",
                     objectMapper.writeValueAsString(ocrPages)
@@ -491,9 +448,7 @@ public class PythonPdfClientImpl implements PythonPdfClient {
         return parts;
     }
 
-    private boolean hasTimeoutCause(
-            Throwable exception
-    ) {
+    private boolean hasTimeoutCause(Throwable exception) {
         Throwable current = exception;
 
         while (current != null) {

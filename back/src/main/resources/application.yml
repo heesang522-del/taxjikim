@@ -68,7 +68,7 @@ python:
 
 tax:
   ocr:
-    tessdata-path: C:/TAXJIKIM/back/tessdata
+    tessdata-path: ${TAX_OCR_TESSDATA_PATH:./tessdata}
     language: kor+eng
     dpi: 200
     max-pages: 50
