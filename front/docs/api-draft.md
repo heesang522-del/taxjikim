@@ -244,8 +244,9 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.
 - `GET /api/v1/tax/inputs/{taxInputId}/result`: 저장 JSON을 `ApiResponse.data`로 반환한다. 세금 재계산은 하지 않는다.
-- 로그인 접근은 `SecurityConfig`에서 관리한다. 결과 서비스에는 로그인 검사·세션 조회·회원 연결을 넣지 않는다. 분석 소유자 확인은 별도 작업이다.
-- 저장과 함께 `SAVE_STATUS`만 `SAVED`로 변경한다. `USER_ID`는 변경하지 않는다. JSON은 `tax_results.RESULT_DETAIL`, 저장 시각은 기존 `CALCULATED_AT`에 기록한다.
+- 로그인 접근은 `SecurityConfig`에서 관리한다. 컨트롤러는 인증 정보의 회원번호를 전달하며 서비스에 로그인 검사나 세션 조회를 추가하지 않는다.
+- 결과 저장 시 기존 `tax_inputs.USER_ID`에 인증 회원번호를 기록하고 `SAVE_STATUS`를 `SAVED`로 변경한다. 다른 회원에게 연결된 분석은 덮어쓰지 않는다. JSON 저장과 회원번호 기록은 같은 트랜잭션으로 처리한다.
+- `tax_results` 컬럼은 추가하지 않는다. JSON은 기존 `RESULT_DETAIL`, 저장 시각은 `CALCULATED_AT`에 기록한다. 회원당 한 건 제한과 비회원 분석 소유권 증명 방식은 별도 작업이다.
 - 결과 다시 보기 주소: `/calculator/result?taxInputId={분석번호}&saved=true`. 마이페이지 목록 UI 연결은 별도 작업이다.
 - 기존 입력·거래 수정 시 결과를 삭제하는 무효화 동작은 유지한다. 저장 내용은 클라이언트가 보낸 당시 화면 값이며 서버 검증 계산 결과로 취급하지 않는다.
 # 시뮬레이션 재계산

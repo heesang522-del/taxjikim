@@ -100,15 +100,18 @@ public class TaxServiceImpl implements TaxService {
         return calculateBreakdown(input);
     }
 
-    // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
+    // 결과 JSON과 분석의 회원번호·저장 상태를 같은 DB 트랜잭션에서 기록한다.
     @Override
     @Transactional
-    public void saveResult(Long taxInputId, JsonNode result) {
+    public void saveResult(Long taxInputId, Long userId, JsonNode result) {
         if (result == null || !result.isObject() || !result.path("breakdown").isObject()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "저장할 분석 결과가 필요합니다.");
         }
+        // 다른 회원에게 이미 연결된 분석의 소유자를 덮어쓰지 않는다.
+        if (taxMapper.markResultSaved(taxInputId, userId) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "저장할 수 있는 분석을 찾을 수 없습니다.");
+        }
         taxMapper.saveResult(taxInputId, result.toString());
-        taxMapper.markResultSaved(taxInputId);
     }
 
     // 저장된 JSON만 조회하며 계산 메서드나 업로드 서비스를 호출하지 않는다.

@@ -37,8 +37,9 @@
     </insert>
 
     <update id="markResultSaved">
-        UPDATE tax_inputs SET SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
+        UPDATE tax_inputs SET USER_ID = #{userId}, SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
         WHERE TAX_INPUT_ID = #{taxInputId}
+          AND (USER_ID IS NULL OR USER_ID = #{userId})
     </update>
 
     <select id="findResult" resultType="java.lang.String">

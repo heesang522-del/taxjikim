@@ -25,8 +25,8 @@ public interface TaxMapper {
     // 같은 분석의 결과 JSON을 저장하거나 덮어쓴다.
     int saveResult(@Param("taxInputId") Long taxInputId, @Param("resultDetail") String resultDetail);
 
-    // 임시 데이터 정리 대상에서 제외하도록 저장 상태만 변경한다.
-    int markResultSaved(@Param("taxInputId") Long taxInputId);
+    // 분석의 회원번호와 저장 상태를 함께 기록한다.
+    int markResultSaved(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
     // 저장한 JSON 원문을 조회한다.
     String findResult(@Param("taxInputId") Long taxInputId);

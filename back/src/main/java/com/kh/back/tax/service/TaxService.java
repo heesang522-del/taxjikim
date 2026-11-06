@@ -21,8 +21,8 @@ public interface TaxService {
     // 추가 수입·지출·기부금을 기존 세금 계산 순서에 반영한다.
     TaxBreakdownDto simulate(TaxSimulationDto request);
 
-    // 화면의 결과 전체를 JSON으로 보관한다.
-    void saveResult(Long taxInputId, JsonNode result);
+    // 화면의 결과 JSON과 해당 분석의 회원번호를 함께 보관한다.
+    void saveResult(Long taxInputId, Long userId, JsonNode result);
 
     // 저장한 결과 JSON을 조회한다.
     JsonNode getSavedResult(Long taxInputId);

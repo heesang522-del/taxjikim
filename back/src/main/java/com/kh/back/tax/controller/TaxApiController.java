@@ -15,6 +15,8 @@ import tools.jackson.databind.JsonNode;
 import com.kh.back.tax.dto.TaxSimulationDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
 import org.springframework.web.bind.annotation.PostMapping;
+import com.kh.back.auth.security.CustomUserDetails;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 
 // 세금 분석 결과 요청을 받는다.
@@ -33,9 +35,11 @@ public class TaxApiController {
 
     // 페이지에서 보낸 결과 JSON을 저장한다. 로그인 접근은 SecurityConfig에서 관리한다.
     @PutMapping("/{taxInputId}/result")
-    public ResponseEntity<Void> saveResult(@PathVariable("taxInputId") Long taxInputId,
+    public ResponseEntity<Void> saveResult(@AuthenticationPrincipal CustomUserDetails principal,
+                                         @PathVariable("taxInputId") Long taxInputId,
                                          @RequestBody JsonNode result) {
-        taxService.saveResult(taxInputId, result);
+        // 인증된 회원번호만 사용하며, 프론트가 보낸 회원번호나 세션 기록은 사용하지 않는다.
+        taxService.saveResult(taxInputId, principal.getUserId(), result);
         return ResponseEntity.noContent().build();
     }
 
