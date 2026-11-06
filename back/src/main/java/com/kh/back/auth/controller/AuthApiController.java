@@ -4,7 +4,6 @@ import com.kh.back.auth.dto.AccountRecoveryRequestDto;
 import com.kh.back.auth.dto.LoginRequestDto;
 import com.kh.back.auth.dto.LoginResponseDto;
 import com.kh.back.auth.dto.TokenResponseDto;
-import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.auth.service.AuthService;
 import com.kh.back.auth.service.EmailVerificationService;
 import com.kh.back.common.dto.ApiResponse;
@@ -16,7 +15,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -40,13 +38,11 @@ public class AuthApiController {
                 authService.login(request.loginId(), request.password(), request.rememberMe(), response)));
     }
 
-    // 세션이 아직 유효한지만 가볍게 확인한다. JwtAuthenticationFilter가 이미 토큰·Redis 세션을 검증해
-    // principal을 채워놨는지만 보고, 화면 전환마다 무거운 /users/me 전체 프로필을 다시 조회하지 않게 한다.
+    // 세션이 아직 유효한지만 가볍게 확인한다. 이 경로는 SecurityConfig에서 인증을 요구하므로
+    // 여기 도달했다는 것 자체가 유효하다는 뜻이고, 화면 전환마다 무거운 /users/me 전체 프로필을
+    // 다시 조회하지 않게 한다.
     @GetMapping("/session")
-    public ApiResponse<Void> checkSession(@AuthenticationPrincipal CustomUserDetails principal) {
-        if (principal == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
+    public ApiResponse<Void> checkSession() {
         return ApiResponse.ok(null);
     }
 

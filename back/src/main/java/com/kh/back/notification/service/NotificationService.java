@@ -30,4 +30,7 @@ public interface NotificationService {
     // 내 댓글에 답글이 달렸을 때 부모 댓글 작성자에게 알림 발송 (본인 답글 제외)
     void notifyCommentReply(Long postId, Long parentCommentAuthorId, Long replierId, String replierNickname,
                              String postTitle, String replyContent);
+
+    // QNA 게시글이 새로 등록됐을 때 고정 담당 관리자 1명에게 알림 발송 (관리자 본인이 작성한 경우 제외)
+    void notifyNewQnaPost(Long postId, Long authorId, String authorNickname, String postTitle, String postContent);
 }

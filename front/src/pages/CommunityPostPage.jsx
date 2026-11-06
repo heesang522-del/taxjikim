@@ -13,6 +13,7 @@ import { useAuth } from '../store/useAuthStore';
 import { usePost } from '../store/usePostStore';
 import { useToast } from '../store/useToastStore';
 import { useReports } from '../utils/useReports';
+import { createPostReport } from '../api/report';
 import { deletePost } from '../api/post';
 import { imagePreviewProps, videoPreviewProps } from '../store/post-preview';
 
@@ -100,7 +101,18 @@ export default function PostDetailPage() {
   const mine =
     loggedIn &&
     (post.source === 'server' ? String(post.userId) === String(user.userId) : post.author === user.nickname);
-  const report = (reason) => {
+  // 서버 글은 백엔드 신고 API를 호출한다. 브라우저에만 있는 예시 글은 아직 신고 API가 없어 로컬 기록으로 처리한다.
+  const report = async (reason) => {
+    if (post.source === 'server') {
+      try {
+        await createPostReport(post.id, reason);
+        toast('신고를 접수했습니다');
+      } catch (error) {
+        toast(error.message || '신고 접수에 실패했습니다.');
+      }
+      setReporting(false);
+      return;
+    }
     const target = { targetType: 'post', postId: post.id };
     if (hasReported(user.nickname, target)) toast('이미 신고한 글입니다');
     else {

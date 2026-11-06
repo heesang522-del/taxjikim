@@ -57,10 +57,11 @@ export default function PostListPage() {
     };
   }, [tab, query, page]);
 
+  // 제목 길이가 들쭉날쭉해도 작성자 위치가 흔들리지 않도록 열 폭을 고정한다(제목 70% / 작성자 30%, 조회는 짧은 고정폭).
   const columns = [
-    { key: 't', header: '제목', render: (p) => <><Pill tone={CATEGORY_TONE[p.tab]}>{p.tab}</Pill> {p.title}</> },
-    { key: 'w', header: '작성자', render: (p) => p.author },
-    { key: 'v', header: '조회', align: 'right', num: true, render: (p) => p.views.toLocaleString('ko-KR') },
+    { key: 't', header: '제목', width: '70%', ellipsis: true, render: (p) => <><Pill tone={CATEGORY_TONE[p.tab]}>{p.tab}</Pill> {p.title}</> },
+    { key: 'w', header: '작성자', width: '30%', ellipsis: true, render: (p) => p.author },
+    { key: 'v', header: '조회', width: '90px', align: 'right', num: true, render: (p) => p.views.toLocaleString('ko-KR') },
   ];
   const writeTab = tab === '전체' || (tab === '공지' && !isAdmin) ? POST_WRITE_TABS[0] : tab;
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);

@@ -4,15 +4,15 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.comment.dto.CommentDto;
 import com.kh.back.comment.service.CommentService;
 import com.kh.back.common.dto.ApiResponse;
-import com.kh.back.common.exception.ApiException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
+// 댓글 목록 조회(GET)는 비로그인도 허용하지만, 쓰기 동작(POST/PATCH/DELETE)은
+// SecurityConfig에서 인증을 요구하므로 그 메서드들에 도달한 요청은 이미 principal이 채워져 있다.
 @RestController
-@RequestMapping("/api/posts/{postId}/comments")
+@RequestMapping("/api/v1/posts/{postId}/comments")
 @RequiredArgsConstructor
 public class CommentApiController {
     private final CommentService commentService;
@@ -34,9 +34,8 @@ public class CommentApiController {
     @PostMapping
     public ApiResponse<Void> create(@PathVariable Long postId, @RequestBody CreateCommentRequest request,
                                    @AuthenticationPrincipal CustomUserDetails principal) {
-        Long userId = requireUserId(principal);
         // 알림에 표시할 작성자 닉네임은 인증된 로그인 정보에서 가져온다 (재조회 없이 재사용).
-        commentService.create(postId, userId, principal.getUserDto().getNickname(), request.content(),
+        commentService.create(postId, principal.getUserId(), principal.getUserDto().getNickname(), request.content(),
                 request.parentCommentId());
         return ApiResponse.ok(null);
     }
@@ -45,21 +44,14 @@ public class CommentApiController {
     public ApiResponse<Void> update(@PathVariable Long postId, @PathVariable Long commentId,
                                    @RequestBody UpdateCommentRequest request,
                                    @AuthenticationPrincipal CustomUserDetails principal) {
-        commentService.update(postId, commentId, requireUserId(principal), request.content());
+        commentService.update(postId, commentId, principal.getUserId(), request.content());
         return ApiResponse.ok(null);
     }
 
     @DeleteMapping("/{commentId}")
     public ApiResponse<Void> delete(@PathVariable Long postId, @PathVariable Long commentId,
                                    @AuthenticationPrincipal CustomUserDetails principal) {
-        commentService.delete(postId, commentId, requireUserId(principal));
+        commentService.delete(postId, commentId, principal.getUserId());
         return ApiResponse.ok(null);
-    }
-
-    private Long requireUserId(CustomUserDetails principal) {
-        if (principal == null || principal.getUserId() == null) {
-            throw new ApiException(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_REQUIRED", "로그인이 필요합니다.");
-        }
-        return principal.getUserId();
     }
 }
