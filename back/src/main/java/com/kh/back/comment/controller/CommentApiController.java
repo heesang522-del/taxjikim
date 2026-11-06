@@ -12,7 +12,7 @@ import java.util.List;
 // 댓글 목록 조회(GET)는 비로그인도 허용하지만, 쓰기 동작(POST/PATCH/DELETE)은
 // SecurityConfig에서 인증을 요구하므로 그 메서드들에 도달한 요청은 이미 principal이 채워져 있다.
 @RestController
-@RequestMapping("/api/posts/{postId}/comments")
+@RequestMapping("/api/v1/posts/{postId}/comments")
 @RequiredArgsConstructor
 public class CommentApiController {
     private final CommentService commentService;

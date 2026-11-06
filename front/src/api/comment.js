@@ -2,9 +2,8 @@ import { client } from './client.js';
 
 async function requestComments(postId, config = {}) {
   try {
-    // baseURL에 /api가 있으므로 요청 경로에는 중복해서 붙이지 않는다. 인증은 쿠키를 사용한다.
+    // 인증은 쿠키를 사용한다.
     const response = await client.request({
-      baseURL: '/api',
       url: `/posts/${encodeURIComponent(postId)}/comments`,
       ...config,
     });
