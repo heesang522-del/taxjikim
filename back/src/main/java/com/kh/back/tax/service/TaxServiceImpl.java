@@ -26,6 +26,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import com.kh.back.tax.dto.TaxSimulationDto;
 import com.kh.back.tax.dto.SimulationScenarioDto;
+import com.kh.back.tax.dto.SavedTaxResultDto;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -34,6 +35,13 @@ import com.kh.back.tax.dto.SimulationScenarioDto;
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
+
+    // 회원번호를 SQL 조건으로 전달하며 저장된 결과를 다시 계산하지 않는다.
+    @Override
+    @Transactional(readOnly = true)
+    public List<SavedTaxResultDto> getSavedResults(Long userId) {
+        return taxMapper.findSavedResults(userId);
+    }
 
     // 소유자 필터링은 Mapper의 USER_ID 조건으로 처리한다.
     @Override
@@ -60,7 +68,9 @@ public class TaxServiceImpl implements TaxService {
                 break;
             }
         }
-        taxMapper.insertScenario(userId, scenario);
+        if (taxMapper.insertScenario(userId, scenario) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "시나리오를 저장할 분석을 찾을 수 없습니다.");
+        }
         return scenario;
     }
 
@@ -100,15 +110,20 @@ public class TaxServiceImpl implements TaxService {
         return calculateBreakdown(input);
     }
 
-    // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
+    // 결과 JSON과 분석의 회원번호·저장 상태를 같은 DB 트랜잭션에서 기록한다.
     @Override
     @Transactional
-    public void saveResult(Long taxInputId, JsonNode result) {
+    public void saveResult(Long taxInputId, Long userId, JsonNode result) {
         if (result == null || !result.isObject() || !result.path("breakdown").isObject()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "저장할 분석 결과가 필요합니다.");
         }
+        // 다른 회원에게 이미 연결된 분석의 소유자를 덮어쓰지 않는다.
+        if (taxMapper.markResultSaved(taxInputId, userId) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "저장할 수 있는 분석을 찾을 수 없습니다.");
+        }
+        // 같은 귀속연도의 이전 저장본만 삭제해 연결 데이터를 정리하고, 다른 연도는 유지한다.
+        taxMapper.deletePreviousSavedInputs(userId, taxInputId);
         taxMapper.saveResult(taxInputId, result.toString());
-        taxMapper.markResultSaved(taxInputId);
     }
 
     // 저장된 JSON만 조회하며 계산 메서드나 업로드 서비스를 호출하지 않는다.

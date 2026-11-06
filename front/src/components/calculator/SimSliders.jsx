@@ -14,12 +14,13 @@ const FIELDS = [
   { key: 'extraDonation', label: '추가 기부금', hint: '기존 일반기부금에 더하며, 계산 한도 안의 금액만 반영합니다.' },
 ];
 
-export function SimSliders({ scenario, predictedIncome, predictedExpense, disabled = false }) {
+export function SimSliders({ taxInputId, scenario, predictedIncome, predictedExpense, disabled = false }) {
   const { sim, patchSim, resetSim } = useTax();
   const { save, isSaving, isLoading: isScenarioLoading } = useScenarios();
   const toast = useToast();
   const onSave = async () => {
     const r = await save({
+      taxInputId,
       extraInc: sim.extraInc,
       extraExp: sim.extraExp,
       extraDonation: sim.extraDonation ?? 0,

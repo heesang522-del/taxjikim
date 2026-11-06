@@ -1,5 +1,12 @@
 # 프론트 API 연결 안내
 
+## 마이페이지 저장 결과 목록 (TJK-231)
+
+- `GET /api/v1/tax/inputs/saved-results`: 로그인 필수. 회원번호는 인증 정보에서 가져오며 요청 파라미터로 받지 않는다.
+- `tax_inputs`와 `tax_results`를 연결해 본인의 `SAVED` 분석만 귀속연도 내림차순으로 반환한다. 결과 JSON 전체는 목록에 포함하지 않는다.
+- 공통 응답의 `data`는 `[{ taxInputId, taxYear, savedAt }]`이며, 저장 결과가 없으면 빈 배열이다. `savedAt`은 최근 JSON 저장 시각을 한국 시간 ISO 8601 문자열로 전달한다.
+- 결과 보기와 시뮬레이션은 각각 해당 화면에 `?taxInputId=분석번호&saved=true`로 이동해 기존 저장 결과 조회 API를 사용한다.
+
 ## 댓글 신고 백엔드 연동 (2026-11-06)
 
 - `src/api/report.js`에 `createCommentReport(postId, commentId, reasonDetail)`을 추가했다: POST `/api/v1/posts/{postId}/comments/{commentId}/reports`.
@@ -244,8 +251,9 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.
 - `GET /api/v1/tax/inputs/{taxInputId}/result`: 저장 JSON을 `ApiResponse.data`로 반환한다. 세금 재계산은 하지 않는다.
-- 로그인 접근은 `SecurityConfig`에서 관리한다. 결과 서비스에는 로그인 검사·세션 조회·회원 연결을 넣지 않는다. 분석 소유자 확인은 별도 작업이다.
-- 저장과 함께 `SAVE_STATUS`만 `SAVED`로 변경한다. `USER_ID`는 변경하지 않는다. JSON은 `tax_results.RESULT_DETAIL`, 저장 시각은 기존 `CALCULATED_AT`에 기록한다.
+- 로그인 접근은 `SecurityConfig`에서 관리한다. 컨트롤러는 인증 정보의 회원번호를 전달하며 서비스에 로그인 검사나 세션 조회를 추가하지 않는다.
+- 결과 저장 시 기존 `tax_inputs.USER_ID`에 인증 회원번호를 기록하고 `SAVE_STATUS`를 `SAVED`로 변경한다. 다른 회원에게 연결된 분석은 덮어쓰지 않는다. JSON 저장과 회원번호 기록은 같은 트랜잭션으로 처리한다.
+- `tax_results` 컬럼은 추가하지 않는다. JSON은 기존 `RESULT_DETAIL`, 저장 시각은 `CALCULATED_AT`에 기록한다. 비회원 분석 소유권 증명 방식은 별도 작업이다.
 - 결과 다시 보기 주소: `/calculator/result?taxInputId={분석번호}&saved=true`. 마이페이지 목록 UI 연결은 별도 작업이다.
 - 기존 입력·거래 수정 시 결과를 삭제하는 무효화 동작은 유지한다. 저장 내용은 클라이언트가 보낸 당시 화면 값이며 서버 검증 계산 결과로 취급하지 않는다.
 # 시뮬레이션 재계산
@@ -259,10 +267,10 @@ ALTER TABLE TAX_TRANSACTIONS
 # 시나리오 DB 보관
 
 - `GET /api/v1/tax/simulations`: 인증 회원의 저장 목록. 응답은 `ApiResponse.data` 배열이다.
-- `POST /api/v1/tax/simulations`: `{ extraInc, extraExp, extraDonation, totalTax, totalIncome, totalExpense }`를 기존 `SIMULATION`에 저장한다. 응답은 생성한 `simulationId`와 이름을 포함한 시나리오다.
+- `POST /api/v1/tax/simulations`: `{ taxInputId, extraInc, extraExp, extraDonation, totalTax, totalIncome, totalExpense }`를 기존 `SIMULATION`에 저장한다. 응답은 생성한 `simulationId`와 기준 `taxInputId`, 이름을 포함한 시나리오다.
 - `DELETE /api/v1/tax/simulations/{simulationId}`: 본인 회원번호와 함께 일치하는 시나리오 삭제. 성공 시 204.
 - 로그인 접근은 `SecurityConfig`에서 관리한다. 회원번호는 인증 정보에서 가져와 Mapper에 전달하며 요청 본문에서 받지 않는다.
 - 기존 A/B/C 이름과 최대 세 개 정책을 유지한다. 한도 초과는 409 `SCENARIO_LIMIT_REACHED`로 반환한다.
-- `INPUT_DATA_SNAPSHOT`에는 추가 수입·지출·기부금 JSON, 결과 금액 세 컬럼에는 저장 당시 계산값을 기록한다. 스키마 변경은 없다.
+- `INPUT_DATA_SNAPSHOT`에는 추가 수입·지출·기부금 JSON, 결과 금액 세 컬럼에는 저장 당시 계산값을 기록한다. `TAX_INPUT_ID`는 기준 분석을 가리키며 `ON DELETE CASCADE`로 연결한다. `DELETED_AT`·`RESULT_COMPARISON`은 제거한다.
 - localStorage·sessionStorage·JSESSIONID 사용이나 데이터 이관은 추가하지 않는다.
 - 시뮬레이션 계산 API `POST /api/v1/tax/inputs/simulation`도 로그인 필수이며 `SecurityConfig`에서 접근을 관리한다.
