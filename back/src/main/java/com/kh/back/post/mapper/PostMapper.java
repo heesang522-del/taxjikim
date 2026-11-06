@@ -49,6 +49,10 @@ public interface PostMapper {
             @Param("postId") Long postId
     );
 
+    void deleteByAdmin(
+            @Param("postId") Long postId
+    );
+
     List<FileMetadataDto> findFilesByPostId(
             @Param("postId") Long postId
     );

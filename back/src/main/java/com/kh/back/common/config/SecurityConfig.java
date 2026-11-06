@@ -66,6 +66,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts/*/comments").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/*/comments/*").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/*/comments/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts/*/comments/*/reports").authenticated()
                         // 게시글 목록·조회는 비로그인도 허용하고(비공개 QNA 필터링은 PostValidator가 처리),
                         // 업로드·작성·수정·삭제만 인증을 요구한다.
                         .requestMatchers(HttpMethod.POST, "/api/v1/posts/community/**").authenticated()
