@@ -22,6 +22,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -30,6 +32,28 @@ import java.util.List;
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
+
+    // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
+    @Override
+    @Transactional
+    public void saveResult(Long taxInputId, JsonNode result) {
+        if (result == null || !result.isObject() || !result.path("breakdown").isObject()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "저장할 분석 결과가 필요합니다.");
+        }
+        taxMapper.saveResult(taxInputId, result.toString());
+        taxMapper.markResultSaved(taxInputId);
+    }
+
+    // 저장된 JSON만 조회하며 계산 메서드나 업로드 서비스를 호출하지 않는다.
+    @Override
+    @Transactional(readOnly = true)
+    public JsonNode getSavedResult(Long taxInputId) {
+        String detail = taxMapper.findResult(taxInputId);
+        if (detail == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_RESULT_NOT_FOUND", "저장된 결과가 없습니다.");
+        }
+        return JsonMapper.builder().build().readTree(detail);
+    }
 
     // 거래 기간과 월별 목록을 한 번씩 조회해 계산과 그래프에서 함께 사용한다.
     @Override

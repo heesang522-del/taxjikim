@@ -15,6 +15,15 @@ import java.util.List;
 @Repository("taxCalculationMapper")
 public interface TaxMapper {
 
+    // 같은 분석의 결과 JSON을 저장하거나 덮어쓴다.
+    int saveResult(@Param("taxInputId") Long taxInputId, @Param("resultDetail") String resultDetail);
+
+    // 임시 데이터 정리 대상에서 제외하도록 저장 상태만 변경한다.
+    int markResultSaved(@Param("taxInputId") Long taxInputId);
+
+    // 저장한 JSON 원문을 조회한다.
+    String findResult(@Param("taxInputId") Long taxInputId);
+
     // 같은 분석의 귀속연도·가족 수·기부금액을 조회한다.
     TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId);
 

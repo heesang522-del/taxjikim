@@ -1,5 +1,15 @@
 import { client } from './client';
 
+// 결과 화면의 데이터 전체를 JSON으로 보관한다. 같은 분석번호는 덮어쓴다.
+export async function saveTaxResult(taxInputId, result) {
+  return request({ url: `${inputPath(taxInputId)}/result`, method: 'PUT', data: result });
+}
+
+// 저장 당시 결과를 조회하며 서버에서 다시 계산하지 않는다.
+export async function getSavedTaxResult(taxInputId, { signal } = {}) {
+  return request({ url: `${inputPath(taxInputId)}/result`, method: 'GET', signal });
+}
+
 // 서버의 공통 응답과 오류를 처리한다.
 // 본문이 없는 204 응답도 정상적으로 처리한다.
 async function request(config) {

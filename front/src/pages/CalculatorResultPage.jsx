@@ -3,7 +3,7 @@
 
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useEffect, useState } from 'react';
-import { getTaxCalculationResult } from '../api/taxApi';
+import { getTaxCalculationResult, getSavedTaxResult, saveTaxResult } from '../api/taxApi';
 import { Button, Icon, Note } from '../components/common/index';
 import { SummaryCards } from '../components/calculator/result/SummaryCards';
 import { TaxChain } from '../components/calculator/result/TaxChain';
@@ -14,22 +14,23 @@ import { ROUTES } from '../utils/routes';
 import { useTax } from '../store/useTaxStore';
 import { useAuth } from '../store/useAuthStore';
 import { useToast } from '../store/useToastStore';
-import { useHistory } from '../utils/useHistory';
 
 export default function CalcResultPage() {
   const [searchParams] = useSearchParams();
   const { search } = useLocation();
   const taxInputId = Number(searchParams.get('taxInputId'));
   const validTaxInputId = Number.isSafeInteger(taxInputId) && taxInputId > 0;
+  const savedResult = searchParams.get('saved') === 'true';
   const { calculated } = useTax();
   const [result, setResult] = useState(null);
   const breakdown = result?.breakdown;
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
 
   // 결과를 한 번 조회하고 산출 근거와 월별 목록을 각 컴포넌트에 나눠 전달한다.
   useEffect(() => {
-    if (!calculated || !validTaxInputId) return;
+    if ((!calculated && !savedResult) || !validTaxInputId) return;
     let cancelled = false;
     const controller = new AbortController();
 
@@ -39,7 +40,10 @@ export default function CalcResultPage() {
       setErrorMessage('');
       setResult(null);
       try {
-        const response = await getTaxCalculationResult(taxInputId, { signal: controller.signal });
+        // 저장 결과는 DB의 JSON을 그대로 사용하고, 새 분석일 때만 계산 API를 호출한다.
+        const response = savedResult
+          ? await getSavedTaxResult(taxInputId, { signal: controller.signal })
+          : await getTaxCalculationResult(taxInputId, { signal: controller.signal });
         if (!cancelled) setResult(response.data);
       } catch (error) {
         if (!cancelled) setErrorMessage(error.message || '계산 결과를 불러오지 못했습니다.');
@@ -53,11 +57,12 @@ export default function CalcResultPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [calculated, taxInputId, validTaxInputId]);
+  }, [calculated, savedResult, taxInputId, validTaxInputId]);
   const { loggedIn } = useAuth();
   const toast = useToast();
-  const { save } = useHistory();
-  const saveResult = () => {
+  // 페이지의 결과 전체를 저장하며 브라우저의 요약 기록으로 대체하지 않는다.
+  const handleSaveResult = async () => {
+    if (isSaving) return;
     if (!loggedIn) {
       toast('저장하려면 로그인하세요');
       return;
@@ -66,24 +71,22 @@ export default function CalcResultPage() {
       toast('계산 결과를 확인한 뒤 저장해주세요');
       return;
     }
-    const ok = save({
-      year: breakdown.taxYear,
-      income: breakdown.totalIncome,
-      expense: breakdown.totalExpense,
-      total: breakdown.totalTax,
-    });
-    toast(
-      ok
-        ? `${breakdown.taxYear}년 결과를 마이페이지에 저장했습니다`
-        : '저장하지 못했습니다. 브라우저 저장 공간을 확인하세요'
-    );
+    setIsSaving(true);
+    try {
+      await saveTaxResult(taxInputId, result);
+      toast(`${breakdown.taxYear}년 결과를 저장했습니다`);
+    } catch (error) {
+      toast(error.message || '결과를 저장하지 못했습니다');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!validTaxInputId) {
     return <p role="alert">분석번호가 없습니다. 입력 화면에서 분석 결과 보기를 눌러주세요.</p>;
   }
 
-  if (!calculated) return <Navigate to={`${ROUTES.calcLoading}${search}`} replace />;
+  if (!calculated && !savedResult) return <Navigate to={`${ROUTES.calcLoading}${search}`} replace />;
 
   return (
     <div className="grid">
@@ -113,7 +116,9 @@ export default function CalcResultPage() {
             로그인
           </Button>
         )}
-        <Button onClick={saveResult}>결과 저장</Button>
+        <Button onClick={handleSaveResult} disabled={isSaving}>
+          {isSaving ? '저장 중…' : '결과 저장'}
+        </Button>
         <Button variant="primary" to={ROUTES.calcSim}>
           <Icon name="sliders" size={16} /> 시뮬레이션으로 줄여보기
         </Button>

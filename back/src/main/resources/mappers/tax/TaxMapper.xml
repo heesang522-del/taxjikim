@@ -3,6 +3,22 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <!-- 같은 분석번호의 결과는 화면에서 보낸 JSON으로 덮어쓴다. -->
+    <insert id="saveResult">
+        INSERT INTO tax_results (TAX_INPUT_ID, RESULT_DETAIL, CALCULATED_AT)
+        VALUES (#{taxInputId}, #{resultDetail}, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE RESULT_DETAIL = #{resultDetail}, CALCULATED_AT = CURRENT_TIMESTAMP
+    </insert>
+
+    <update id="markResultSaved">
+        UPDATE tax_inputs SET SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </update>
+
+    <select id="findResult" resultType="java.lang.String">
+        SELECT RESULT_DETAIL FROM tax_results WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
     <!-- 거래 합계와 별도로 입력한 계산 조건을 같은 분석번호로 조회한다. -->
     <select id="findCalculationInput" resultType="com.kh.back.tax.dto.TaxCalculationInputDto">
         SELECT TAX_YEAR AS taxYear,
