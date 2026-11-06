@@ -113,7 +113,7 @@ public class TaxServiceImpl implements TaxService {
         if (taxMapper.markResultSaved(taxInputId, userId) != 1) {
             throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "저장할 수 있는 분석을 찾을 수 없습니다.");
         }
-        // 다른 분석의 이전 저장본은 부모를 삭제해 거래·결과·연결 시나리오를 함께 정리한다.
+        // 같은 귀속연도의 이전 저장본만 삭제해 연결 데이터를 정리하고, 다른 연도는 유지한다.
         taxMapper.deletePreviousSavedInputs(userId, taxInputId);
         taxMapper.saveResult(taxInputId, result.toString());
     }

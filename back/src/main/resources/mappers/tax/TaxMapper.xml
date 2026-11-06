@@ -32,10 +32,15 @@
         DELETE FROM SIMULATION WHERE SIMULATION_ID = #{simulationId} AND USER_ID = #{userId}
     </delete>
 
-    <!-- 이전 저장 분석만 삭제하고 현재 분석과 입력 중인 TEMP 분석은 유지한다. -->
+    <!-- 현재 분석과 귀속연도가 같은 이전 저장본만 삭제하고, 다른 연도와 TEMP 분석은 유지한다. -->
     <delete id="deletePreviousSavedInputs">
-        DELETE FROM tax_inputs
-        WHERE USER_ID = #{userId} AND SAVE_STATUS = 'SAVED' AND TAX_INPUT_ID != #{taxInputId}
+        DELETE previousInput
+        FROM tax_inputs previousInput
+        JOIN tax_inputs currentInput ON currentInput.TAX_INPUT_ID = #{taxInputId}
+                                   AND previousInput.TAX_YEAR = currentInput.TAX_YEAR
+        WHERE previousInput.USER_ID = #{userId}
+          AND previousInput.SAVE_STATUS = 'SAVED'
+          AND previousInput.TAX_INPUT_ID != #{taxInputId}
     </delete>
 
     <!-- 같은 분석번호의 결과는 화면에서 보낸 JSON으로 덮어쓴다. -->
