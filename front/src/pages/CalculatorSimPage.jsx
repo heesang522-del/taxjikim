@@ -2,14 +2,17 @@
 'use no memo';
 
 import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { SimSliders } from '../components/calculator/SimSliders';
 import { SimCompare } from '../components/calculator/SimCompare';
 import { getTaxCalculationResult, getSavedTaxResult, simulateTax } from '../api/taxApi';
 import { useTax } from '../store/useTaxStore';
 import { ScenarioTable } from '../components/calculator/ScenarioTable';
+import { useAuth } from '../store/useAuthStore';
+import { ROUTES } from '../utils/routes';
 
 export function CalculatorSimPage() {
+  const { loggedIn, authStatus } = useAuth();
   const { state } = useLocation();
   const [params] = useSearchParams();
   const taxInputId = Number(params.get('taxInputId'));
@@ -22,6 +25,7 @@ export function CalculatorSimPage() {
 
   // 결과창에서 받은 데이터를 우선 사용하고, 직접 접근한 경우에만 기준 결과를 조회한다.
   useEffect(() => {
+    if (!loggedIn || authStatus === 'checking') return;
     const controller = new AbortController();
     setErrorMessage('');
     if (state?.taxResult) {
@@ -49,11 +53,11 @@ export function CalculatorSimPage() {
     }
     loadResult();
     return () => controller.abort();
-  }, [state, taxInputId, saved]);
+  }, [state, taxInputId, saved, loggedIn, authStatus]);
 
   // 추가 금액만 서버에 전달한다. 입력을 멈춘 뒤 요청하고 이전 응답은 반영하지 않는다.
   useEffect(() => {
-    if (!result?.breakdown) return;
+    if (!loggedIn || authStatus === 'checking' || !result?.breakdown) return;
     const controller = new AbortController();
     setIsLoading(true);
     setErrorMessage('');
@@ -90,7 +94,7 @@ export function CalculatorSimPage() {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [result, sim.extraInc, sim.extraExp, sim.extraDonation]);
+  }, [result, sim.extraInc, sim.extraExp, sim.extraDonation, loggedIn, authStatus]);
 
   // 저장한 추가 가정을 입력칸에 적용하면 기존 재계산 Effect가 실행된다.
   function handleLoadScenario(savedScenario) {
@@ -100,6 +104,10 @@ export function CalculatorSimPage() {
       extraDonation: savedScenario.extraDonation,
     });
   }
+
+  // 새로고침 시 인증 복원이 끝난 후 판단하며, 비회원은 계산 화면을 표시하지 않는다.
+  if (authStatus === 'checking') return <p>로그인 상태를 확인하고 있습니다.</p>;
+  if (!loggedIn) return <Navigate to={ROUTES.auth} replace />;
 
   return (
     <div className="grid g-side">

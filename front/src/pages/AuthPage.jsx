@@ -22,7 +22,7 @@ const TITLES = Object.fromEntries(TABS);
 export default function AuthPage() {
   const [params] = useSearchParams();
   // 화면 종류를 URL에서 계산해 헤더 이동·뒤로가기와 표시 화면이 일치하도록 한다.
-  const { pathname } = useLocation();
+  const { pathname, state } = useLocation();
   const queryTab = params.get('tab');
   const tab =
     pathname === ROUTES.signup
@@ -39,13 +39,15 @@ export default function AuthPage() {
   const toast = useToast();
   const handleTab = (nextTab) => {
     // 폼 내부 링크도 헤더와 같은 주소로 이동하며 계정 찾기의 종류만 쿼리에 둔다.
-    if (nextTab === 'signup') navigate(ROUTES.signup);
-    else if (nextTab === 'login') navigate(ROUTES.auth);
-    else navigate(`${ROUTES.findAccount}?tab=${nextTab}`);
+    if (nextTab === 'signup') navigate(ROUTES.signup, { state });
+    else if (nextTab === 'login') navigate(ROUTES.auth, { state });
+    else navigate(`${ROUTES.findAccount}?tab=${nextTab}`, { state });
   };
   // 로그인에 성공하면 로그인 페이지로 오기 직전에 보던 페이지로 돌아간다 (없으면 메인)
   const enter = () => {
-    navigate(takeReturnTo(), { replace: true });
+    const previousPath = takeReturnTo();
+    // 기능 버튼이 지정한 복귀 화면과 데이터를 우선 사용한다. 저장소·쿠키에는 기록하지 않는다.
+    navigate(state?.returnTo ?? previousPath, { replace: true, state: state?.returnState });
     toast('로그인했습니다');
   };
 
@@ -74,12 +76,7 @@ export default function AuthPage() {
         </>
       )}
       <Card>
-        {tab === 'login' && (
-          <LoginForm
-            onSuccess={enter}
-            onTab={handleTab}
-          />
-        )}
+        {tab === 'login' && <LoginForm onSuccess={enter} onTab={handleTab} />}
         {tab === 'signup' && <SignupForm onDone={() => setSignedUp(true)} />}
         {tab === 'findid' && <RecoveryForm key="findid" mode="id" onTab={handleTab} />}
         {tab === 'findpw' && <RecoveryForm key="findpw" mode="pw" onTab={handleTab} />}

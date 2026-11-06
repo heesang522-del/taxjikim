@@ -1,91 +1,90 @@
-// taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
+import { create } from 'zustand';
 import { useAuth } from '../store/useAuthStore';
-import { MAX_SCENARIOS } from '../data/options';
+import { getSimulationScenarios, saveSimulationScenario, deleteSimulationScenario } from '../api/taxApi';
 
-const KEY = 'taxlab.scenarios.v1';
-const CHANGED_EVENT = 'taxlab:scenarios-changed';
-const NAMES = ['A안', 'B안', 'C안'];
-// 기존 노란우산 형식도 보관하되 새 시나리오는 기부금·서버 계산 결과를 저장한다.
-const isScenario = (s) =>
-  s &&
-  typeof s.name === 'string' &&
-  ['extraExp', 'extraInc'].every((k) => Number.isFinite(s[k])) &&
-  (Number.isFinite(s.extraDonation) || Number.isFinite(s.yellow));
+// DB 조회 결과를 화면끼리 공유하는 메모리 상태다. persist나 브라우저 저장소는 사용하지 않는다.
+const useScenarioStore = create((set, get) => ({
+  userId: null,
+  scenarios: [],
+  isLoading: false,
+  isSaving: false,
+  deletingId: null,
+  loaded: false,
+  errorMessage: '',
 
-const read = (userId) => {
-  if (!userId) return [];
-  try {
-    const list = JSON.parse(localStorage.getItem(`${KEY}.${userId}`));
-    return Array.isArray(list) ? list.filter(isScenario) : [];
-  } catch {
-    return [];
-  }
-};
+  // 로그인한 회원이 바뀌면 이전 목록을 비우고 서버에서 본인 목록을 가져온다.
+  load: async (userId) => {
+    if (get().userId === userId && (get().isLoading || get().loaded)) return;
+    set({ userId, scenarios: [], isLoading: true, loaded: false, errorMessage: '' });
+    try {
+      const response = await getSimulationScenarios();
+      if (get().userId === userId) set({ scenarios: response.data, loaded: true });
+    } catch (error) {
+      if (get().userId === userId) set({ errorMessage: error.message || '시나리오를 불러오지 못했습니다.' });
+    } finally {
+      if (get().userId === userId) set({ isLoading: false });
+    }
+  },
 
-/**
- * 저장한 시나리오(회원 계정별, 최대 MAX_SCENARIOS개). 이 브라우저의 localStorage에 저장한다.
- * save(sim)은 'ok' | 'login'(비회원) | 'max'(가득 참) | 'error'(저장 실패)를 돌려준다.
- */
+  // DB 저장이 성공한 응답만 목록에 추가한다.
+  save: async (userId, scenario) => {
+    if (!userId) return 'login';
+    if (get().isSaving) return 'busy';
+    set({ isSaving: true });
+    try {
+      const response = await saveSimulationScenario(scenario);
+      if (get().userId === userId) {
+        set({ scenarios: [...get().scenarios, response.data], errorMessage: '' });
+      }
+      return 'ok';
+    } catch (error) {
+      return error.code === 'SCENARIO_LIMIT_REACHED' ? 'max' : 'error';
+    } finally {
+      set({ isSaving: false });
+    }
+  },
+
+  // 삭제 요청이 성공한 뒤에만 화면에서 해당 시나리오를 제거한다.
+  remove: async (userId, simulationId) => {
+    if (!userId || get().deletingId !== null) return false;
+    set({ deletingId: simulationId });
+    try {
+      await deleteSimulationScenario(simulationId);
+      if (get().userId === userId) {
+        set({ scenarios: get().scenarios.filter((row) => row.simulationId !== simulationId) });
+      }
+      return true;
+    } catch {
+      return false;
+    } finally {
+      set({ deletingId: null });
+    }
+  },
+
+  // 로그아웃 시 화면 메모리만 정리한다. 저장소나 쿠키를 읽거나 삭제하지 않는다.
+  clear: () => set({ userId: null, scenarios: [], loaded: false, isLoading: false, errorMessage: '' }),
+}));
+
+// 마이페이지와 시뮬레이션 화면은 같은 DB 목록과 저장·삭제 동작을 사용한다.
 export function useScenarios() {
   const { user } = useAuth();
-  const userId = user?.id ?? null;
-  const [state, setState] = useState({ userId, list: read(userId) });
-  // 로그인/로그아웃으로 사용자가 바뀌면 그 사용자의 저장값으로 바꾼다
-  if (state.userId !== userId) setState({ userId, list: read(userId) });
-
-  // 같은 화면의 저장 버튼·목록은 각각 이 Hook을 사용하므로 변경 사실을 함께 알린다.
+  const userId = user?.userId ?? user?.id ?? null;
+  const state = useScenarioStore();
   useEffect(() => {
-    function refresh() {
-      setState({ userId, list: read(userId) });
-    }
-    window.addEventListener(CHANGED_EVENT, refresh);
-    window.addEventListener('storage', refresh);
-    return () => {
-      window.removeEventListener(CHANGED_EVENT, refresh);
-      window.removeEventListener('storage', refresh);
-    };
+    if (userId) useScenarioStore.getState().load(userId);
+    else useScenarioStore.getState().clear();
   }, [userId]);
 
-  const persist = useCallback(
-    (list) => {
-      try {
-        localStorage.setItem(`${KEY}.${userId}`, JSON.stringify(list));
-      } catch {
-        return false;
-      }
-      setState({ userId, list });
-      window.dispatchEvent(new Event(CHANGED_EVENT));
-      return true;
-    },
-    [userId]
-  );
-
-  const save = useCallback(
-    (sim) => {
-      if (!userId) return 'login';
-      const list = read(userId);
-      if (list.length >= MAX_SCENARIOS) return 'max';
-      const name = NAMES.find((n) => !list.some((s) => s.name === n)) ?? `${list.length + 1}안`;
-      return persist([
-        ...list,
-        {
-          extraInc: sim.extraInc,
-          extraExp: sim.extraExp,
-          extraDonation: sim.extraDonation ?? 0,
-          totalTax: sim.totalTax,
-          name,
-        },
-      ])
-        ? 'ok'
-        : 'error';
-    },
-    [userId, persist]
-  );
-
-  const remove = useCallback((name) => persist(read(userId).filter((s) => s.name !== name)), [userId, persist]);
-
-  return { scenarios: state.list, save, remove };
+  return {
+    scenarios: state.userId === userId ? state.scenarios : [],
+    isLoading: state.isLoading,
+    isSaving: state.isSaving,
+    deletingId: state.deletingId,
+    errorMessage: state.userId === userId ? state.errorMessage : '',
+    save: (scenario) => state.save(userId, scenario),
+    remove: (simulationId) => state.remove(userId, simulationId),
+  };
 }

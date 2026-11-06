@@ -256,3 +256,13 @@ ALTER TABLE TAX_TRANSACTIONS
 - 기존 `TaxBreakdownDto` 계산 체인을 사용하며 기부금 인정 한도도 동일하게 적용한다.
 - 응답: `ApiResponse.data`에 변경 후 `TaxBreakdownDto`. DB 조회·수정과 Python 호출은 하지 않는다.
 - 기준 결과는 결과 페이지의 이동 state로 전달한다. 분석번호로 직접 접근하면 기존 결과 API에서 한 번 조회한다.
+# 시나리오 DB 보관
+
+- `GET /api/v1/tax/simulations`: 인증 회원의 저장 목록. 응답은 `ApiResponse.data` 배열이다.
+- `POST /api/v1/tax/simulations`: `{ extraInc, extraExp, extraDonation, totalTax, totalIncome, totalExpense }`를 기존 `SIMULATION`에 저장한다. 응답은 생성한 `simulationId`와 이름을 포함한 시나리오다.
+- `DELETE /api/v1/tax/simulations/{simulationId}`: 본인 회원번호와 함께 일치하는 시나리오 삭제. 성공 시 204.
+- 로그인 접근은 `SecurityConfig`에서 관리한다. 회원번호는 인증 정보에서 가져와 Mapper에 전달하며 요청 본문에서 받지 않는다.
+- 기존 A/B/C 이름과 최대 세 개 정책을 유지한다. 한도 초과는 409 `SCENARIO_LIMIT_REACHED`로 반환한다.
+- `INPUT_DATA_SNAPSHOT`에는 추가 수입·지출·기부금 JSON, 결과 금액 세 컬럼에는 저장 당시 계산값을 기록한다. 스키마 변경은 없다.
+- localStorage·sessionStorage·JSESSIONID 사용이나 데이터 이관은 추가하지 않는다.
+- 시뮬레이션 계산 API `POST /api/v1/tax/inputs/simulation`도 로그인 필수이며 `SecurityConfig`에서 접근을 관리한다.
