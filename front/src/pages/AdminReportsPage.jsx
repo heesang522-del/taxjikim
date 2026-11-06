@@ -40,6 +40,12 @@ export default function AdminReportsPage() {
     return { label: snippet(post.title), gone: false };
   };
 
+  // 신고된 글·댓글을 쓴 사람(피신고자). 신고자와 구분해서 보여준다.
+  const authorOf = (r) => {
+    if (r.source === 'server') return r.targetAuthor ?? '-';
+    return posts.find((p) => p.id === r.postId)?.author ?? '-';
+  };
+
   const remove = (r) => async () => {
     if (r.source === 'server') {
       try {
@@ -71,24 +77,26 @@ export default function AdminReportsPage() {
     toast('신고를 반려했습니다');
   };
 
+  // 신고 대상·사유 길이에 따라 작성자·신고자 칸이 움직이지 않도록 열 폭을 고정한다.
   const columns = (withActions) => [
-    { key: 't', header: '유형', render: (r) => <Pill>{r.targetType === 'post' ? '게시글' : '댓글'}</Pill> },
-    { key: 'o', header: '신고 대상', render: (r) => {
+    { key: 't', header: '유형', width: '8%', render: (r) => <Pill>{r.targetType === 'post' ? '게시글' : '댓글'}</Pill> },
+    { key: 'o', header: '신고 대상', width: '24%', ellipsis: true, render: (r) => {
       const t = targetOf(r);
       return r.targetType === 'post' && !t.gone
         ? <Button variant="link" size="sm" to={ROUTES.postDetail(r.postId)}>{t.label}</Button>
         : <span className={t.gone ? 'muted' : ''}>{t.label}</span>;
     } },
-    { key: 'r', header: '사유', render: (r) => r.reason },
-    { key: 'w', header: '신고자', render: (r) => r.reporter ?? '-' },
+    { key: 'u', header: '작성자', width: '14%', ellipsis: true, render: (r) => authorOf(r) },
+    { key: 'r', header: '사유', width: '22%', ellipsis: true, render: (r) => r.reason },
+    { key: 'w', header: '신고자', width: '14%', ellipsis: true, render: (r) => r.reporter ?? '-' },
     withActions
-      ? { key: 'a', header: '', align: 'right', render: (r) => (
+      ? { key: 'a', header: '', width: '18%', align: 'right', render: (r) => (
         <div className="row" style={{ justifyContent: 'flex-end' }}>
           <Button size="sm" variant="danger" disabled={targetOf(r).gone} onClick={remove(r)}>삭제</Button>
           <Button size="sm" onClick={dismiss(r)}>반려</Button>
         </div>
       ) }
-      : { key: 'a', header: '결과', align: 'right', render: (r) => <Pill tone={r.result === '삭제' ? 'danger' : 'success'}>{r.result ?? r.status}</Pill> },
+      : { key: 'a', header: '결과', width: '18%', align: 'right', render: (r) => <Pill tone={r.result === '삭제' ? 'danger' : 'success'}>{r.result ?? r.status}</Pill> },
   ];
 
   return (

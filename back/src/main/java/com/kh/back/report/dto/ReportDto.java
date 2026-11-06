@@ -19,6 +19,7 @@ public class ReportDto {
     private LocalDateTime processedAt;
     private Long reporterId;
     private String reporterNickname;
+    private String targetUserNickname; // 피신고 회원(글·댓글 작성자)의 닉네임
     private LocalDateTime createdAt;
 
     // 신고 대상 표시용 조인 결과. targetType에 해당하는 쪽만 값이 채워진다.

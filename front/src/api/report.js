@@ -15,6 +15,7 @@ export function toReport(report) {
     commentId: isComment ? String(report.targetId) : undefined,
     reason: report.reasonDetail || '',
     reporter: report.reporterNickname || '-',
+    targetAuthor: report.targetUserNickname || '-',
     createdAt: report.createdAt || '',
     status: report.status === 'PENDING' ? '대기' : '처리됨',
     result: report.result === 'DELETE' ? '삭제' : report.result === 'REJECT' ? '반려' : null,

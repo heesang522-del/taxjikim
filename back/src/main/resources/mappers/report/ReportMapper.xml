@@ -14,10 +14,12 @@
             r.REASON_DETAIL, r.STATUS, r.RESULT, r.PROCESSED_BY, r.PROCESSED_AT,
             r.REPORTER_ID, r.CREATED_AT,
             u.NICKNAME AS reporterNickname,
+            tu.NICKNAME AS targetUserNickname,
             p.TITLE AS postTitle, p.DELETED_AT AS postDeletedAt, p.DELETED_BY_TYPE AS postDeletedByType,
             cm.CONTENT AS commentContent, cm.DELETED_AT AS commentDeletedAt, cm.DELETED_BY_TYPE AS commentDeletedByType
         FROM REPORTS r
         LEFT JOIN users u ON u.USER_ID = r.REPORTER_ID
+        LEFT JOIN users tu ON tu.USER_ID = r.TARGET_USER_ID
         LEFT JOIN POSTS p ON r.TARGET_TYPE = 'POST' AND p.POST_ID = r.TARGET_ID
         LEFT JOIN comments cm ON r.TARGET_TYPE = 'COMMENT' AND cm.COMMENT_ID = r.TARGET_ID
         ORDER BY r.CREATED_AT DESC
