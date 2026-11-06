@@ -4,7 +4,7 @@ const COMMON_CATEGORIES = [
 ];
 
 export const INCOME_TRANSACTION_CATEGORIES = [
-  { value: 'YOUTUBE_SETTLEMENT', label: '유튜브 플랫폼 정산' },
+  { value: 'YOUTUBE_SETTLEMENT', label: '유튜브 정산' },
   { value: 'AD_SPONSORSHIP', label: '광고·협찬' },
   { value: 'EXTERNAL_SUPPORT', label: '외부 후원' },
   ...COMMON_CATEGORIES,

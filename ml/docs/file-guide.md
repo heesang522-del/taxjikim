@@ -39,7 +39,7 @@ CSV의 `category_code`는 아래 한글 카테고리를 뜻한다. 내부 데이
 
 | 구분 | 정답 코드 | 한글 카테고리·포함 범위 |
 | --- | --- | --- |
-| 수입 | `YOUTUBE_SETTLEMENT` | 유튜브 플랫폼 정산 — 플랫폼 안의 후원 포함 |
+| 수입 | `YOUTUBE_SETTLEMENT` | 유튜브 정산 — 플랫폼 안의 후원 포함 |
 | 수입 | `AD_SPONSORSHIP` | 광고·협찬 수입 |
 | 수입 | `EXTERNAL_SUPPORT` | 유튜브 밖의 외부 후원 수입 |
 | 지출 | `SOFTWARE_LICENSE` | 소프트웨어 — 편집 프로그램·음원 라이선스·게임 이용권 등 |

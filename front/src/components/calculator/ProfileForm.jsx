@@ -77,33 +77,9 @@ const ProfileSection = styled.section`
     color: var(--primary);
     box-shadow: none;
   }
-  .followup {
-    margin-top: 20px;
-    padding-top: 18px;
-    border-top: 1px solid var(--border-soft);
-  }
-  .followup .question {
-    margin-top: 0;
-  }
-  .age-input {
-    display: flex;
-    align-items: end;
-    gap: 8px;
-  }
-  .age-input .field {
-    width: 140px;
-  }
-  .age-input > span {
-    padding-bottom: 10px;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-  .age-hint {
-    margin-top: 8px;
-  }
   .deductions {
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
   .deductions input {
@@ -115,13 +91,9 @@ const ProfileSection = styled.section`
     line-height: 1.7;
     color: var(--text-muted);
   }
-  .notice {
-    border-top: 1px solid var(--border);
-    margin-top: 18px;
-    padding-top: 12px;
-  }
   @media (max-width: 640px) {
-    .profile-columns {
+    .profile-columns,
+    .deductions {
       grid-template-columns: 1fr;
     }
     .deduction-column {
@@ -133,41 +105,10 @@ const ProfileSection = styled.section`
   }
 `;
 
-const YES_NO = [
-  { value: true, label: '예' },
-  { value: false, label: '아니요' },
-];
 const BUSINESS_STATUS = [
   { value: true, label: '등록' },
   { value: false, label: '미등록' },
 ];
-
-const BUSINESS_REGIONS = [
-  { value: 'CAPITAL_CONGESTION', label: '수도권 과밀억제권역' },
-  { value: 'CAPITAL_OTHER', label: '수도권 중 과밀억제권역 외' },
-  { value: 'NON_CAPITAL', label: '비수도권' },
-];
-
-const RegionChoices = styled.div`
-  margin-top: 18px;
-  .seg {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    width: 100%;
-  }
-  .seg button {
-    padding: 6px 10px;
-    line-height: 1.5;
-    white-space: normal;
-  }
-  @media (max-width: 640px) {
-    .seg {
-      flex-direction: column;
-      align-items: stretch;
-    }
-  }
-`;
 
 export function ProfileForm() {
   const { profile, updateProfile } = useTax();
@@ -179,7 +120,10 @@ export function ProfileForm() {
         <div className="intro">
           <div>
             <h2>기본정보</h2>
-            <p className="small muted">면세 1인 유튜버의 세금 분석에 필요한 정보예요.</p>
+            <p className="small muted">
+              이 서비스는 부가가치세 면세 대상인 1인 미디어 창작자의 예상 소득세와 지방소득세를 계산합니다.
+              사업자등록 여부는 결과 화면의 안내에만 사용됩니다.
+            </p>
           </div>
           <span className="year">{profile.taxYear}년 기준</span>
         </div>
@@ -194,80 +138,50 @@ export function ProfileForm() {
                 onChange={(value) => updateProfile({ businessRegistered: value, auto33: false })}
               />
             </div>
-            {/* 미등록자는 절세 안내용 나이만, 등록자는 감면 적용에 필요한 창업정보를 받는다. */}
-            {profile.businessRegistered === false && (
-              <div className="followup">
-                <div className="age-input">
-                  <TextField
-                    id="age"
-                    label="현재 만 나이"
-                    type="number"
-                    min="0"
-                    step="1"
-                    value={profile.age}
-                    onChange={handleChange('age')}
-                  />
-                  <span>세</span>
-                </div>
-                <p className="small muted age-hint">사업자등록 관련 혜택 안내에 사용합니다.</p>
-              </div>
-            )}
-            {profile.businessRegistered === true && (
-              <div className="followup">
-                <span className="question-title">올해 창업 세액감면을 적용받나요?</span>
-                <Segmented
-                  label="창업 세액감면 적용 여부"
-                  options={YES_NO}
-                  value={profile.startupReliefApplied}
-                  onChange={(value) => updateProfile({ startupReliefApplied: value })}
-                />
-                {profile.startupReliefApplied === true && (
-                  <RegionChoices>
-                    <span className="question-title">창업 당시 사업장 지역</span>
-                    <Segmented
-                      label="창업 당시 사업장 지역"
-                      options={BUSINESS_REGIONS}
-                      value={profile.businessRegion}
-                      onChange={(value) => updateProfile({ businessRegion: value })}
-                    />
-                  </RegionChoices>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="profile-column deduction-column">
-            <h3>기본공제·기부금</h3>
-            <div className="deductions">
-              <div>
-                <TextField
-                  id="dependentCount"
-                  label="공제 대상 가족 수 (본인 제외)"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={profile.dependentCount}
-                  onChange={handleChange('dependentCount')}
-                />
-                <p className="hint">공제 요건에 해당하는 가족만 입력하세요. 본인은 제외합니다.</p>
-              </div>
-              <div>
-                <TextField
-                  id="donationAmount"
-                  label="기부금 (원)"
-                  type="number"
-                  min="0"
-                  step="1"
-                  value={profile.donationAmount}
-                  onChange={handleChange('donationAmount')}
-                />
-                <p className="hint">영수증이 있는 공제 대상 복지단체 기부금입니다. 정치·종교 기부금은 제외합니다.</p>
-              </div>
+            <div style={{ marginTop: 20 }}>
+              <TextField
+                id="dependentCount"
+                label="공제 대상 가족 수 (본인 제외)"
+                type="number"
+                min="0"
+                step="1"
+                value={profile.dependentCount}
+                onChange={handleChange('dependentCount')}
+              />
+              <p className="hint">공제 요건에 해당하는 가족만 입력하세요. 본인은 제외합니다.</p>
             </div>
           </div>
+          <div className="profile-column deduction-column">
+            <h3>
+              기부금 <span className="small muted">선택 입력</span>
+            </h3>
+            {/* 기부금은 영수증 유형에 맞춰 나누고, 없으면 기본값 0원을 사용한다. */}
+            <div className="deductions">
+              <TextField
+                id="specialDonationAmount"
+                label="특례기부금 (원)"
+                type="number"
+                min="0"
+                step="1"
+                value={profile.specialDonationAmount}
+                onChange={handleChange('specialDonationAmount')}
+              />
+              <TextField
+                id="generalDonationAmount"
+                label="일반기부금 (원)"
+                type="number"
+                min="0"
+                step="1"
+                value={profile.generalDonationAmount}
+                onChange={handleChange('generalDonationAmount')}
+              />
+            </div>
+            <p className="hint">
+              기부금 영수증의 유형을 확인해 입력하세요. 일반기부금은 종교단체 외 기부금이며, 정치·종교 기부금은 지원하지
+              않습니다.
+            </p>
+          </div>
         </div>
-        <p className="hint notice">
-          현재는 입력 화면 구성 단계입니다. 이 공제·감면 정보는 아직 결과 계산에 반영되지 않습니다.
-        </p>
       </Card>
     </ProfileSection>
   );

@@ -307,6 +307,7 @@ async function saveParsedPdf(key) {
     fileRows: record.stagedRows ?? [],
     evidenceDocuments: [],
     taxPendingInputIdsByYear: {
+      ...(current.taxPendingInputIdsByYear ?? {}),
       ...(record.pendingInputIdsByYear ?? {}),
     },
   };

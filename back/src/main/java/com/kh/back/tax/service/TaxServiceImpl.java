@@ -1,6 +1,7 @@
 package com.kh.back.tax.service;
 
 import com.kh.back.tax.dto.TaxCalculationInputDto;
+import com.kh.back.tax.dto.CategoryAmountDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
 import com.kh.back.tax.dto.TaxCalculationResultDto;
 import com.kh.back.tax.exception.TaxCalculationException;
@@ -21,6 +22,8 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -29,6 +32,28 @@ import java.util.List;
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
+
+    // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
+    @Override
+    @Transactional
+    public void saveResult(Long taxInputId, JsonNode result) {
+        if (result == null || !result.isObject() || !result.path("breakdown").isObject()) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "저장할 분석 결과가 필요합니다.");
+        }
+        taxMapper.saveResult(taxInputId, result.toString());
+        taxMapper.markResultSaved(taxInputId);
+    }
+
+    // 저장된 JSON만 조회하며 계산 메서드나 업로드 서비스를 호출하지 않는다.
+    @Override
+    @Transactional(readOnly = true)
+    public JsonNode getSavedResult(Long taxInputId) {
+        String detail = taxMapper.findResult(taxInputId);
+        if (detail == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_RESULT_NOT_FOUND", "저장된 결과가 없습니다.");
+        }
+        return JsonMapper.builder().build().readTree(detail);
+    }
 
     // 거래 기간과 월별 목록을 한 번씩 조회해 계산과 그래프에서 함께 사용한다.
     @Override
@@ -100,12 +125,36 @@ public class TaxServiceImpl implements TaxService {
             settlementAmount = balance.abs();
         }
 
-        // 7. 산출 근거·월별 목록·정산 예상액을 함께 반환한다.
+        // 7. 실제 거래만 사용해 수입과 지출의 카테고리 비율을 각각 계산한다.
+        List<CategoryAmountDto> categories = taxMapper.findCategoryAmounts(taxInputId);
         return new TaxCalculationResultDto(breakdown, incomes, expenses,
                 input.getBusinessRegistered(), actualIncome,
                 input.getTotalIncome().subtract(actualIncome), actualExpense,
                 input.getTotalExpense().subtract(actualExpense), actualNetIncome, deductedAmount,
-                settlementType, settlementAmount);
+                settlementType, settlementAmount,
+                categoryRatios(categories, "INCOME"), categoryRatios(categories, "EXPENSE"));
+    }
+
+    // 금액이 있는 카테고리의 비율을 같은 거래 구분의 합계로 계산한다.
+    private List<CategoryAmountDto> categoryRatios(List<CategoryAmountDto> categories, String transactionType) {
+        List<CategoryAmountDto> amounts = new ArrayList<>();
+        BigDecimal total = BigDecimal.ZERO;
+
+        // 같은 거래 구분에서 금액이 있는 카테고리만 모아 합계를 구한다.
+        for (CategoryAmountDto category : categories) {
+            if (transactionType.equals(category.getTransactionType()) && category.getAmount().signum() > 0) {
+                amounts.add(category);
+                total = total.add(category.getAmount());
+            }
+        }
+
+        // 조회한 DTO에 비율만 채우므로 별도 응답 DTO로 옮겨 담지 않는다.
+        for (CategoryAmountDto category : amounts) {
+            BigDecimal percentage = category.getAmount().multiply(BigDecimal.valueOf(100))
+                    .divide(total, 2, RoundingMode.HALF_UP);
+            category.setPercentage(percentage);
+        }
+        return amounts;
     }
 
     // 준비된 입력값으로 산출 근거를 계산하며 DB 조회는 수행하지 않는다.

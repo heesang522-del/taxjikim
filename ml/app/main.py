@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import logging
 import math
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
-from threading import Event, Thread
+from threading import Event, Lock, Thread
+from typing import Literal
+
+from pydantic import BaseModel, Field
 from typing import Annotated, Any
 
 import joblib
@@ -25,13 +29,16 @@ from fastapi import (
 )
 
 from . import pdf_parser
-from .expense_classifier import classify_descriptions
+from .expense_classifier import classify_descriptions as classify_expense_descriptions
+from .income_classifier import classify_descriptions as classify_income_descriptions
 
 # 프로젝트 루트와 ml 폴더 중 어디서 서버를 실행해도 같은 스케줄러를 사용한다.
 if __package__ == "ml.app":
-    from ..scripts.retrain_scheduler import run_scheduler
+    from ..scripts.feedback_preprocessing import filter_feedback, write_feedback_review
+    from ..scripts.retrain_scheduler import read_last_training, run_scheduler
 else:
-    from scripts.retrain_scheduler import run_scheduler
+    from scripts.feedback_preprocessing import filter_feedback, write_feedback_review
+    from scripts.retrain_scheduler import read_last_training, run_scheduler
 
 
 logger = logging.getLogger("uvicorn.error")
@@ -39,18 +46,15 @@ logger = logging.getLogger("uvicorn.error")
 MAX_FILE_BYTES = 6 * 1024 * 1024
 MAX_PAGES = 50
 
-MODEL_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "models"
-    / "expense_classifier"
-)
+MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 
-def load_expense_model() -> dict:
-    """기존 지출 모델 로딩 함수를 유지한다."""
 
+# 학습 보고서에서 선택된 거래 분류 모델을 읽는다.
+def load_transaction_model(kind: str, label: str) -> dict:
+    model_dir = MODEL_DIR / f"{kind}_classifier"
     try:
         report = json.loads(
-            (MODEL_DIR / "model_report.json").read_text(
+            (model_dir / "model_report.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -66,7 +70,7 @@ def load_expense_model() -> dict:
             )
 
         return joblib.load(
-            MODEL_DIR / f"{selected}_bundle.pkl"
+            model_dir / f"{selected}_bundle.pkl"
         )
 
     except (
@@ -75,9 +79,42 @@ def load_expense_model() -> dict:
         ValueError,
     ) as exc:
         raise RuntimeError(
-            "지출 모델을 먼저 준비해주세요: "
-            "python scripts/train_expense.py"
+            f"{label} 모델을 먼저 준비해주세요: "
+            f"python scripts/train_{kind}.py"
         ) from exc
+
+
+# 성공 기록과 학습 보고서가 일치할 때만 기존 모델 종류의 새 번들을 적용한다.
+def apply_retrained_model(app: FastAPI, kind: str) -> None:
+    retraining_dir = MODEL_DIR / "retraining"
+    classifier_dir = retraining_dir / kind / "classifier"
+    try:
+        record = read_last_training(retraining_dir / f"{kind}_last_training.json")
+        trained_at = record.get("trained_at")
+        if not trained_at or trained_at == getattr(app.state, f"{kind}_trained_at", None):
+            return
+
+        report = json.loads((classifier_dir / "model_report.json").read_text(encoding="utf-8"))
+        versions = {
+            str(Path(path).relative_to(MODEL_DIR.parent)): digest
+            for path, digest in report["input_sha256"].items()
+        }
+        if versions != record["data_versions"]:
+            logger.warning("재학습 성공 기록과 모델 자료가 일치하지 않습니다: %s", kind)
+            return
+
+        current_model = getattr(app.state, f"{kind}_model")
+        selected = current_model["model_name"]
+        bundle = joblib.load(classifier_dir / f"{selected}_bundle.pkl")
+        if bundle["model_name"] != selected or not bundle["pipeline"]:
+            raise ValueError("분류 모델 번들 형식을 확인해주세요.")
+    except Exception:
+        logger.exception("재학습 모델 적용 실패. 기존 모델 사용: %s", kind)
+        return
+
+    setattr(app.state, f"{kind}_model", bundle)
+    setattr(app.state, f"{kind}_trained_at", trained_at)
+    logger.info("재학습 모델 적용 완료: 유형=%s, 모델=%s, 학습=%s", kind, selected, trained_at)
 
 
 # 서버 시작 시 모델과 스케줄러를 준비하고 종료 시 스케줄러를 정리한다.
@@ -87,12 +124,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         "사용 중인 PDF 파서: %s",
         Path(pdf_parser.__file__).resolve(),
     )
-    app.state.expense_model = load_expense_model()
+    app.state.expense_model = load_transaction_model("expense", "지출")
     logger.info("지출 분류 모델: %s", app.state.expense_model["model_name"])
+
+    app.state.income_model = load_transaction_model("income", "수입")
+    logger.info("수입 분류 모델: %s", app.state.income_model["model_name"])
+    for kind in ("income", "expense"):
+        setattr(app.state, f"{kind}_trained_at", None)
+        apply_retrained_model(app, kind)
 
     # 요청을 처리하는 서버와 별도로 스케줄러를 실행한다.
     stop_event = Event()
-    worker = Thread(target=run_scheduler, args=(stop_event,))
+    worker = Thread(target=run_scheduler, args=(stop_event, lambda kind: apply_retrained_model(app, kind)))
     worker.start()
     logger.info("재학습 스케줄러 시작")
 
@@ -325,12 +368,18 @@ def parse_ocr_pages(
     return result
 
 
-def classify_expense_transactions(transactions: list[dict]) -> None:
-    """거래 설명만 모델에 전달하고 같은 지출 거래에 예측 카테고리를 채운다."""
+# 같은 유형의 거래 설명을 모델에 전달하고 원래 거래에 카테고리를 채운다.
+def classify_transactions(
+    transactions: list[dict],
+    kind: str,
+    label: str,
+    classify_descriptions: Callable,
+) -> None:
+    transaction_type = kind.upper()
     targets = []
     descriptions = []
     for transaction in transactions:
-        if transaction.get("transactionType") != "EXPENSE":
+        if transaction.get("transactionType") != transaction_type:
             continue
         description = str(transaction.get("description") or "").strip()
         if not description:
@@ -341,11 +390,11 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
 
     if not targets:
         return
-    model = getattr(app.state, "expense_model", None)
+    model = getattr(app.state, f"{kind}_model", None)
     if model is None:
         raise HTTPException(status_code=503, detail={
-            "code": "EXPENSE_MODEL_UNAVAILABLE",
-            "message": "지출 분류 모델이 준비되지 않았습니다.",
+            "code": f"{transaction_type}_MODEL_UNAVAILABLE",
+            "message": f"{label} 분류 모델이 준비되지 않았습니다.",
         })
 
     try:
@@ -354,11 +403,79 @@ def classify_expense_transactions(transactions: list[dict]) -> None:
         for transaction, prediction in zip(targets, predictions):
             transaction["category"] = prediction["category"]
     except Exception as exc:
-        logger.exception("지출 카테고리 예측 실패")
+        logger.exception("%s 카테고리 예측 실패", label)
         raise HTTPException(status_code=503, detail={
-            "code": "EXPENSE_CLASSIFICATION_FAILED",
-            "message": "지출 카테고리를 분류하지 못했습니다.",
+            "code": f"{transaction_type}_CLASSIFICATION_FAILED",
+            "message": f"{label} 카테고리를 분류하지 못했습니다.",
         }) from exc
+
+
+class TrainingFeedback(BaseModel):
+    transactionId: int = Field(gt=0)
+    transactionType: Literal["INCOME", "EXPENSE"]
+    description: str = Field(min_length=1, max_length=255)
+    category: str = Field(pattern=r"^[A-Z][A-Z0-9_]{0,49}$")
+
+
+FEEDBACK_LOCK = Lock()
+FEEDBACK_FIELDS = ("sample_id", "description", "category_code", "group_id", "review_status")
+
+
+# 같은 거래의 최종 카테고리를 추가 학습 CSV에 반영한다.
+@app.post("/api/training-feedback", status_code=204)
+def save_training_feedback(feedback: list[TrainingFeedback]) -> None:
+    data_dir = MODEL_DIR.parent / "data"
+    with FEEDBACK_LOCK:
+        for kind in ("income", "expense"):
+            items = [item for item in feedback if item.transactionType.lower() == kind]
+            if not items:
+                continue
+            target = data_dir / kind / "user_approved" / "category_feedback.csv"
+            base = data_dir / kind / "training" / "training_data.csv"
+            with base.open(encoding="utf-8-sig", newline="") as file:
+                base_rows = list(csv.DictReader(file))
+            labels = {row["category_code"] for row in base_rows}
+            rows = {}
+            if target.exists():
+                with target.open(encoding="utf-8-sig", newline="") as file:
+                    rows = {row["sample_id"]: row for row in csv.DictReader(file)}
+            for item in items:
+                sample_id = f"user-category-{item.transactionId}"
+                description = item.description.strip()
+                if not description or item.category not in labels or item.category == "UNCLASSIFIED":
+                    rows.pop(sample_id, None)
+                    continue
+                rows[sample_id] = dict(zip(
+                    FEEDBACK_FIELDS, (sample_id, description, item.category, sample_id, "APPROVED")
+                ))
+            # 통과한 후보만 학습용 파일에 저장하고 제외 기록은 따로 보관한다.
+            accepted, excluded = filter_feedback(base_rows, list(rows.values()))
+            review_path = target.parent.parent / "user_approved_review.csv"
+            review = {}
+            if review_path.exists():
+                with review_path.open(encoding="utf-8-sig", newline="") as file:
+                    review = {row["sample_id"]: row for row in csv.DictReader(file)}
+            for item in items:
+                review.pop(f"user-category-{item.transactionId}", None)
+            for row in accepted:
+                review.pop(row["sample_id"], None)
+            review.update((row["sample_id"], row) for row in excluded)
+            rows = {row["sample_id"]: row for row in accepted}
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_suffix(".tmp")
+            with temporary.open("w", encoding="utf-8", newline="") as file:
+                writer = csv.DictWriter(file, fieldnames=FEEDBACK_FIELDS)
+                writer.writeheader()
+                writer.writerows(rows.values())
+            write_feedback_review(target.parent, list(review.values()))
+            temporary.replace(target)
+            saved_items = [
+                (item.transactionId, item.description.strip(), item.category)
+                for item in items
+                if f"user-category-{item.transactionId}" in rows
+            ]
+            logger.info("재학습 CSV 저장 완료: 유형=%s, 저장 내역(거래번호, 설명, 카테고리)=%r", kind, saved_items)
 
 
 @app.post("/api/pdf/analyze")
@@ -391,6 +508,7 @@ def analyze_pdf(
                 },
             )
 
+        # 1. PDF 원본과 OCR 결과로 거래 목록을 만든다.
         pages = parse_ocr_pages(
             ocr_pages_json
         )
@@ -405,8 +523,10 @@ def analyze_pdf(
                 "OCR 페이지 번호가 PDF 페이지 수를 초과했습니다."
             )
 
-        # 추출한 거래의 날짜·금액은 유지하고 지출 카테고리만 분류한다.
-        classify_expense_transactions(result["transactions"])
+        # 2. 지출·수입을 각각 분류해 원래 거래에 카테고리를 붙인다.
+        transactions = result["transactions"]
+        classify_transactions(transactions, "expense", "지출", classify_expense_descriptions)
+        classify_transactions(transactions, "income", "수입", classify_income_descriptions)
 
         logger.info(
             "PDF 분석 완료: pages=%s, extracted=%s, parsed=%s, review=%s",
@@ -416,6 +536,7 @@ def analyze_pdf(
             result["needsReviewCount"],
         )
 
+        # 3. 카테고리가 붙은 거래 목록과 파일명을 Java에 돌려준다.
         return {
             "fileName": file.filename,
             **result,

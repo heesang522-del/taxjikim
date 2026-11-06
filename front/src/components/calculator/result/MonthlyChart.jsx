@@ -46,7 +46,7 @@ function getYAxisScale(highestAmount) {
 }
 
 // 페이지가 전달한 월별 실제·예상 금액을 기존 SVG 막대그래프로 표시한다.
-export function MonthlyChart({ incomes = [], expenses = [], isLoading = false, errorMessage = '' }) {
+export function MonthlyChart({ incomes = [], expenses = [], isLoading = false, errorMessage = '', children }) {
   const [hoveredMonth, setHoveredMonth] = useState(null);
   const monthly = { inc: Array(12).fill(0), exp: Array(12).fill(0) };
   const incomePredicted = Array(12).fill(false);
@@ -191,6 +191,7 @@ export function MonthlyChart({ incomes = [], expenses = [], isLoading = false, e
       <p className="small muted" style={{ marginTop: 8 }}>
         예측은 자료 기간의 월평균으로 계산합니다. 월 수입 편차가 큰 경우 실제 결과와 차이가 날 수 있습니다.
       </p>
+      {children}
     </Card>
   );
 }

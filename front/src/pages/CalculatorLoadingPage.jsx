@@ -2,7 +2,7 @@
 'use no memo';
 
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, Icon } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
 import { useTax } from '../store/useTaxStore';
@@ -11,14 +11,15 @@ const STEPS = ['월별 수입·지출 집계', '연말까지 10~12월 예측', '
 
 export default function CalcLoadingPage() {
   const navigate = useNavigate();
+  const { search } = useLocation();
   const { setCalculated } = useTax();
   const [done, setDone] = useState(0);
 
   useEffect(() => {
-    if (done >= STEPS.length) { setCalculated(true); navigate(ROUTES.calcResult, { replace: true }); return; }
+    if (done >= STEPS.length) { setCalculated(true); navigate(`${ROUTES.calcResult}${search}`, { replace: true }); return; }
     const t = setTimeout(() => setDone((d) => d + 1), done === 0 ? 650 : 420);
     return () => clearTimeout(t);
-  }, [done, navigate, setCalculated]);
+  }, [done, navigate, search, setCalculated]);
 
   return (
     <Card className="load">

@@ -7,7 +7,6 @@ import json
 import os
 import shutil
 import tempfile
-import unicodedata
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -18,6 +17,12 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
+
+
+if __package__:
+    from .feedback_preprocessing import filter_feedback, normalized
+else:
+    from feedback_preprocessing import filter_feedback, normalized
 
 
 BASE_DIR = Path(__file__).resolve().parents[1]
@@ -63,11 +68,6 @@ def build_pipeline(classifier: LogisticRegression | LinearSVC) -> Pipeline:
 
 
 FIELDS = ("sample_id", "description", "category_code", "group_id", "review_status")
-
-
-# 중복 비교를 위해 공백과 문자 표현을 통일한다.
-def normalized(text: str) -> str:
-    return " ".join(unicodedata.normalize("NFKC", text).split()).casefold()
 
 
 # 학습 자료를 합치고 중복과 정답 충돌을 확인한다.
@@ -189,9 +189,14 @@ def main() -> None:
     additions = []
     for path in incoming:
         additions.extend(read_csv(path))
+    additions, excluded = filter_feedback(base_rows, additions)
     rows, counts = merge_training_rows(base_rows, additions)
+    counts["duplicates"] += sum(row["reason"] == "중복" for row in excluded)
     if any(path.read_bytes() != data for path, data in contents.items()):
         raise ValueError("읽는 중 학습 CSV가 변경됐습니다. 다시 실행해주세요.")
+    if excluded:
+        print(f"추가 학습 후보 제외 {len(excluded)}건")
+
     descriptions = [row["description"] for row in rows]
     categories = [row["category_code"] for row in rows]
     labels = sorted(set(categories))

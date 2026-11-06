@@ -291,11 +291,9 @@ export const useTaxStore = create((set, get) => ({
     auto33: false,
     taxYear: new Date().getFullYear(),
     businessRegistered: null,
-    age: '',
     dependentCount: 0,
-    donationAmount: 0,
-    startupReliefApplied: null,
-    businessRegion: '',
+    generalDonationAmount: 0,
+    specialDonationAmount: 0,
   },
 
   sim: { ...EMPTY_SIM },
