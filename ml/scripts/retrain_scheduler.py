@@ -19,7 +19,7 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 SAVE_DIR = BASE_DIR / "models/retraining"
 
 # 수입·지출 확인이 끝나면 기본 60분 후 다시 확인한다.
-CHECK_INTERVAL_MINUTES = 1
+CHECK_INTERVAL_MINUTES = 60
 
 
 # 기본 자료와 추가 자료의 CSV 경로를 모은다.
