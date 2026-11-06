@@ -10,6 +10,28 @@ import {
 } from '../api/chatbotApi';
 import '../styles/global.css';
 
+function formatDate(value, includeTime = false) {
+  if (!value) return '';
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) return '';
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    timeZone: 'Asia/Seoul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    ...(includeTime
+      ? {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: false,
+        }
+      : {}),
+  }).format(date);
+}
+
 export function ChatbotPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const parsedId = Number(searchParams.get('conversationId'));
@@ -26,16 +48,20 @@ export function ChatbotPage() {
   const [fieldError, setFieldError] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
 
+  // DB에 저장되기 전의 질문과 중간 답변은 별도 상태로 관리한다.
+  const [stream, setStream] = useState(null);
+
   const endRef = useRef(null);
   const mountedRef = useRef(false);
   const busyRef = useRef(false);
   const composingRef = useRef(false);
   const selectedIdRef = useRef(conversationId);
   const messageRequestRef = useRef(0);
+  const streamAbortRef = useRef(null);
 
   const busy = action !== '';
-
-  const selectedConversation = conversations.find((conversation) => conversation.conversationId === conversationId);
+  const selectedConversation = conversations.find((item) => item.conversationId === conversationId);
+  const visibleStream = stream?.conversationId === conversationId ? stream : null;
 
   useEffect(() => {
     mountedRef.current = true;
@@ -43,15 +69,16 @@ export function ChatbotPage() {
     return () => {
       mountedRef.current = false;
       messageRequestRef.current += 1;
+
+      // 화면을 나가면 현재 SSE 연결을 정리한다.
+      streamAbortRef.current?.abort();
     };
   }, []);
 
-  // URL 이동으로 대화가 바뀌어도 현재 선택 상태를 맞춘다.
   useEffect(() => {
     selectedIdRef.current = conversationId;
   }, [conversationId]);
 
-  // 목록과 사용량 중 조회에 성공한 결과는 유지한다.
   useEffect(() => {
     let active = true;
 
@@ -86,7 +113,6 @@ export function ChatbotPage() {
     };
   }, [reloadKey]);
 
-  // 이전 대화의 늦은 조회 응답이 현재 대화를 덮어쓰지 않게 한다.
   useEffect(() => {
     let active = true;
     const requestId = ++messageRequestRef.current;
@@ -94,6 +120,7 @@ export function ChatbotPage() {
     setMessages([]);
     setQuestion('');
     setFieldError('');
+    setStream(null);
     composingRef.current = false;
 
     if (!conversationId) {
@@ -105,6 +132,7 @@ export function ChatbotPage() {
 
     getMessages(conversationId)
       .then((result) => {
+        // 이전 대화의 늦은 응답이 현재 대화를 덮어쓰지 않게 한다.
         if (active && requestId === messageRequestRef.current) {
           setMessages(result.data);
         }
@@ -127,9 +155,8 @@ export function ChatbotPage() {
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [messages, action]);
+  }, [messages, stream, action]);
 
-  // 선택한 대화 ID를 URL에 저장한다.
   function selectConversation(nextId) {
     selectedIdRef.current = nextId;
     setErrorMessage('');
@@ -149,11 +176,9 @@ export function ChatbotPage() {
 
   function handleSelectConversation(nextId) {
     if (busyRef.current || nextId === conversationId) return;
-
     selectConversation(nextId);
   }
 
-  // 연속 클릭이나 Enter 입력으로 요청이 중복되지 않게 한다.
   function beginAction(nextAction) {
     if (busyRef.current) return false;
 
@@ -161,6 +186,7 @@ export function ChatbotPage() {
     setAction(nextAction);
     setErrorMessage('');
     setFieldError('');
+
     return true;
   }
 
@@ -203,7 +229,6 @@ export function ChatbotPage() {
 
       if (!mountedRef.current) return;
 
-      // 채팅방 전체 삭제가 성공한 경우 목록에서 제거한다.
       setConversations((previous) => previous.filter((item) => item.conversationId !== targetId));
 
       if (selectedIdRef.current === targetId) {
@@ -215,6 +240,44 @@ export function ChatbotPage() {
       }
     } finally {
       finishAction();
+    }
+  }
+
+  async function refreshAfterQuestion(targetId) {
+    if (!mountedRef.current) return;
+
+    const requestId = ++messageRequestRef.current;
+
+    // 성공과 실패 모두 DB 상태와 사용량을 다시 확인한다.
+    const results = await Promise.allSettled([getMessages(targetId), getChatbotUsage(), getConversations()]);
+
+    if (!mountedRef.current) return;
+
+    const [messageResult, usageResult, conversationResult] = results;
+
+    if (
+      messageResult.status === 'fulfilled' &&
+      selectedIdRef.current === targetId &&
+      requestId === messageRequestRef.current
+    ) {
+      setMessages(messageResult.value.data);
+
+      // DB 기록을 가져온 뒤 임시 답변을 제거해 중복 표시를 방지한다.
+      setStream((previous) => (previous?.conversationId === targetId ? null : previous));
+    }
+
+    if (usageResult.status === 'fulfilled') {
+      setUsage(usageResult.value.data);
+    }
+
+    if (conversationResult.status === 'fulfilled') {
+      setConversations(conversationResult.value.data);
+    }
+
+    const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason.message);
+
+    if (errors.length > 0) {
+      setErrorMessage((previous) => [...new Set([previous, ...errors].filter(Boolean))].join(' '));
     }
   }
 
@@ -235,13 +298,52 @@ export function ChatbotPage() {
 
     if (!beginAction('sending')) return;
 
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
+
+    // 최종 답변을 기다리는 동안 질문과 임시 답변을 바로 표시한다.
+    setStream({
+      conversationId: targetId,
+      question: message,
+      text: '',
+      status: 'PENDING',
+    });
+
     try {
-      const result = await sendMessage(targetId, message);
+      const result = await sendMessage(targetId, message, {
+        signal: controller.signal,
+        onDelta: (delta) => {
+          if (!mountedRef.current || selectedIdRef.current !== targetId) {
+            return;
+          }
+
+          // 새 조각을 같은 답변 말풍선에 순서대로 이어 붙인다.
+          setStream((previous) =>
+            previous?.conversationId === targetId
+              ? {
+                  ...previous,
+                  text: previous.text + delta,
+                }
+              : previous
+          );
+        },
+      });
 
       if (!mountedRef.current) return;
 
       if (selectedIdRef.current === targetId) {
         setQuestion('');
+
+        // 완료 이벤트의 최종 답변으로 내용을 확정한다.
+        setStream((previous) =>
+          previous?.conversationId === targetId
+            ? {
+                ...previous,
+                text: result.data.reply,
+                status: 'COMPLETED',
+              }
+            : previous
+        );
       }
 
       setUsage((previous) => (previous ? { ...previous, remaining: result.data.remaining } : previous));
@@ -252,51 +354,25 @@ export function ChatbotPage() {
 
       if (selectedIdRef.current === targetId) {
         setFieldError(cause.fields?.message ?? '');
+
+        // 일부 출력이 있어도 완료된 답변으로 표시하지 않는다.
+        setStream((previous) => (previous?.conversationId === targetId ? { ...previous, status: 'FAILED' } : previous));
       }
     } finally {
       try {
-        if (mountedRef.current) {
-          const requestId = ++messageRequestRef.current;
-
-          // 실패한 질문도 DB에 남으므로 성공 여부와 관계없이 다시 조회한다.
-          const results = await Promise.allSettled([getMessages(targetId), getChatbotUsage(), getConversations()]);
-
-          if (mountedRef.current) {
-            const [messageResult, usageResult, conversationResult] = results;
-
-            if (
-              messageResult.status === 'fulfilled' &&
-              selectedIdRef.current === targetId &&
-              requestId === messageRequestRef.current
-            ) {
-              setMessages(messageResult.value.data);
-            }
-
-            if (usageResult.status === 'fulfilled') {
-              setUsage(usageResult.value.data);
-            }
-
-            if (conversationResult.status === 'fulfilled') {
-              setConversations(conversationResult.value.data);
-            }
-
-            const errors = results
-              .filter((result) => result.status === 'rejected')
-              .map((result) => result.reason.message);
-
-            if (errors.length > 0) {
-              setErrorMessage((previous) => [...new Set([previous, ...errors].filter(Boolean))].join(' '));
-            }
-          }
-        }
+        await refreshAfterQuestion(targetId);
       } finally {
+        if (streamAbortRef.current === controller) {
+          streamAbortRef.current = null;
+        }
+
         finishAction();
       }
     }
   }
 
   function handleQuestionKeyDown(event) {
-    // 한글 조합을 확정하는 Enter는 전송으로 처리하지 않는다.
+    // 한글 조합 확정용 Enter는 질문 전송으로 처리하지 않는다.
     if (composingRef.current || event.nativeEvent.isComposing || event.keyCode === 229) {
       return;
     }
@@ -312,40 +388,7 @@ export function ChatbotPage() {
 
   function handleReload() {
     if (busyRef.current) return;
-
     setReloadKey((previous) => previous + 1);
-  }
-
-  function formatDate(value) {
-    if (!value) return '';
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-
-    return new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date);
-  }
-
-  function formatMessageTime(value) {
-    if (!value) return '';
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '';
-
-    // 서버의 시간대 포함 생성 시각을 한국 시간으로 표시한다.
-    return new Intl.DateTimeFormat('ko-KR', {
-      timeZone: 'Asia/Seoul',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    }).format(date);
   }
 
   return (
@@ -357,9 +400,11 @@ export function ChatbotPage() {
             <span className="small muted">{conversations.length}개</span>
           </div>
 
-          <button type="button" disabled={busy || loading} onClick={handleCreate}>
+          <button type="button" disabled={busy || loading || conversations.length >= 10} onClick={handleCreate}>
             {action === 'creating' ? '생성 중...' : '+ 새 대화'}
           </button>
+
+          {conversations.length >= 10 && <p className="small muted">새 대화를 만들려면 기존 대화를 삭제해주세요.</p>}
         </div>
 
         {loading ? (
@@ -380,7 +425,6 @@ export function ChatbotPage() {
                   onClick={() => handleSelectConversation(conversation.conversationId)}
                 >
                   <span className="ai-chat-conversation-title">{conversation.title || '새 대화'}</span>
-
                   <span className="small muted">{formatDate(conversation.updatedAt ?? conversation.createdAt)}</span>
                 </button>
 
@@ -442,53 +486,75 @@ export function ChatbotPage() {
           ) : !conversationId ? (
             <div className="ai-chat-empty">
               <h2>대화를 시작해보세요</h2>
-              <p className="muted">
-                새 대화를 만들거나
-                <br />
-                왼쪽 목록에서 이전 대화를 선택해주세요.
-              </p>
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="ai-chat-empty">
-              <h2>무엇이 궁금하신가요?</h2>
-              <p className="muted">아래 입력창에 첫 질문을 작성해주세요.</p>
+              <p className="muted">새 대화를 만들거나 이전 대화를 선택해주세요.</p>
             </div>
           ) : (
-            messages.map((message) => {
-              const isUser = message.role?.toUpperCase() === 'USER';
+            <>
+              {messages.length === 0 && !visibleStream && (
+                <div className="ai-chat-empty">
+                  <h2>무엇이 궁금하신가요?</h2>
+                  <p className="muted">아래 입력창에 첫 질문을 작성해주세요.</p>
+                </div>
+              )}
 
-              return (
-                <article key={message.messageId} className={`ai-chat-message${isUser ? ' is-user' : ''}`}>
-                  <strong>{isUser ? '나' : 'AI 챗봇'}</strong>
-                  <p>{message.content}</p>
+              {messages.map((message) => {
+                const isUser = message.role?.toUpperCase() === 'USER';
 
-                  {message.createdAt && (
-                    <p className="small muted">
-                      <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
+                return (
+                  <article key={message.messageId} className={`ai-chat-message${isUser ? ' is-user' : ''}`}>
+                    <strong>{isUser ? '나' : 'AI 챗봇'}</strong>
+                    <p>{message.content}</p>
+
+                    {message.createdAt && (
+                      <p className="small muted">
+                        <time dateTime={message.createdAt}>{formatDate(message.createdAt, true)}</time>
+                      </p>
+                    )}
+
+                    {isUser && message.status === 'PENDING' && (
+                      <p className="small muted" role="status">
+                        답변 처리 중입니다. 잠시 후 다시 조회해주세요.
+                      </p>
+                    )}
+
+                    {isUser && message.status === 'FAILED' && (
+                      <p className="small" role="status">
+                        답변 생성 또는 저장에 실패했습니다. 질문 기록은 보관되어 있습니다.
+                      </p>
+                    )}
+                  </article>
+                );
+              })}
+
+              {visibleStream && (
+                <>
+                  <article className="ai-chat-message is-user">
+                    <strong>나</strong>
+                    <p>{visibleStream.question}</p>
+                  </article>
+
+                  <article className="ai-chat-message">
+                    <strong>AI 챗봇</strong>
+                    <p>
+                      {visibleStream.text ||
+                        (visibleStream.status === 'FAILED' ? '답변을 받지 못했습니다.' : '답변을 준비하고 있습니다.')}
                     </p>
-                  )}
 
-                  {isUser && message.status === 'PENDING' && (
-                    <p className="small muted" role="status">
-                      답변 처리 중입니다. 잠시 후 다시 조회해주세요.
-                    </p>
-                  )}
+                    {visibleStream.status === 'PENDING' && (
+                      <p className="small muted" role="status">
+                        답변 생성 중입니다.
+                      </p>
+                    )}
 
-                  {isUser && message.status === 'FAILED' && (
-                    <p className="small" role="status">
-                      답변 생성 또는 저장에 실패했습니다. 질문 기록은 보관되어 있습니다.
-                    </p>
-                  )}
-                </article>
-              );
-            })
-          )}
-
-          {action === 'sending' && (
-            <div className="ai-chat-waiting" role="status">
-              <span className="ai-chat-waiting-dot" aria-hidden="true" />
-              답변을 기다리는 중입니다.
-            </div>
+                    {visibleStream.status === 'FAILED' && (
+                      <p className="small" role="status">
+                        완료되지 않은 답변입니다. 대화 기록을 확인해주세요.
+                      </p>
+                    )}
+                  </article>
+                </>
+              )}
+            </>
           )}
 
           <div ref={endRef} />
@@ -532,7 +598,7 @@ export function ChatbotPage() {
               type="submit"
               disabled={!conversationId || busy || messagesLoading || !question.trim() || usage?.remaining === 0}
             >
-              {action === 'sending' ? '답변 대기 중...' : '질문 보내기'}
+              {action === 'sending' ? '답변 생성 중...' : '질문 보내기'}
             </button>
           </form>
 

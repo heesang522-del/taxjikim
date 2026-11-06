@@ -19,13 +19,6 @@ public interface YearEndTaxService {
             TaxServiceRequest request
     );
 
-    // 소유권을 확인한 뒤 기본정보와 전체 거래를 함께 조회한다.
-    TaxServiceResponse getTaxData(
-            CustomUserDetails principal,
-            Set<Long> guestInputIds,
-            Long taxInputId
-    );
-
     // 기본정보와 카테고리를 한 요청에서 수정한다.
     TaxInputRequest update(
             CustomUserDetails principal,

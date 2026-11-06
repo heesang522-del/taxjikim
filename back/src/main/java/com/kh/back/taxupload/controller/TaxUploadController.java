@@ -82,25 +82,6 @@ public class TaxUploadController {
     }
 
     /**
-     * 분석 기본정보와 전체 거래를 함께 조회한다.
-     */
-    @GetMapping("/inputs/{taxInputId}")
-    public ApiResponse<TaxServiceResponse> getTaxData(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            HttpServletRequest servletRequest,
-            @PathVariable("taxInputId") Long taxInputId
-    ) {
-        // 기존 비회원 세션의 분석번호와 회원 정보를 전달해 소유권을 확인한다.
-        TaxServiceResponse response = service.getTaxData(
-                principal,
-                readGuestInputs(servletRequest.getSession(false)),
-                taxInputId
-        );
-
-        return ApiResponse.ok(response);
-    }
-
-    /**
      * 기본정보와 거래 카테고리를 한 번에 수정한다.
      */
     @PostMapping("/inputs/{taxInputId}/update")

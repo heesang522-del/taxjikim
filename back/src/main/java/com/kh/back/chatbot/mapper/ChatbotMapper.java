@@ -2,6 +2,7 @@ package com.kh.back.chatbot.mapper;
 
 import com.kh.back.chatbot.dto.ChatbotConversationDto;
 import com.kh.back.chatbot.dto.ChatbotMessageDto;
+
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -10,42 +11,53 @@ import java.util.List;
 @Mapper
 public interface ChatbotMapper {
 
-    List<ChatbotConversationDto> findConversations(@Param("userId") Long userId,
-                                                   @Param("conversationId") Long conversationId
-    ); // db에서 사용자의 채팅방 정보를 조회
+    List<ChatbotConversationDto> findConversations( @Param("userId") Long userId,
+                                                    @Param("conversationId") Long conversationId
+    ); // db에서 사용자의 대화방 목록을 조회
 
-    int insertConversation(ChatbotConversationDto conversation); // 새 채팅방 정보를 db에 저장하는 메서드
+    int insertConversation(
+            ChatbotConversationDto conversation
+    ); // 새 대화방 정보를 db에 저장
+
+
+    Long lockConversationOwner( @Param("userId") Long userId
+    ); // 대화방을 만들 사용자의 db행을 조회하고 잠금
+
+
+    int countActiveConversations( @Param("userId") Long userId
+    ); // 해당 사용자의 삭제되지 않은 대화방 개수를 조회
 
     ChatbotConversationDto lockConversation(@Param("userId") Long userId,
                                             @Param("conversationId") Long conversationId
-    ); // 사용자의 특정 채팅방을 조회하면서 해당 db행에 잠금을 거는 메서드, 같은 채팅방에 요청이 동시에 들어왔을 때, 두 요청이 모두 처리되는 것을 막기 위해서
+    ); // 사용자 소유의 특정 대화방을 조회하면서 해당 대화방의 db행을 잠금
 
     List<ChatbotMessageDto> findMessages(@Param("userId") Long userId,
                                          @Param("conversationId") Long conversationId
-    ); // 특정 사용자의 채팅방에 저장된 질문 답변 목록을 db에서 조회하는 메서드
+    ); // 해당 사용자의 특정 대화방에 저장된 질문 답변 목록을 조회
 
     int updateConversation(@Param("userId") Long userId,
                            @Param("conversationId") Long conversationId,
                            @Param("revision") Long revision,
                            @Param("title") String title
-    ); // db에 저장된 채팅방의 제목 . 버전 마지막 수정시각을 갱신하는 메서드
+    ); // 대화방의 제목 버전 마지막 수정 시각을 갱신
 
-    int insertMessage(ChatbotMessageDto message); // 메세지 한개를 db에 저장하는 메서드
+    int insertMessage(
+            ChatbotMessageDto message
+    ); // 사용자 질문이나 ai 답변한개를 db 에 저장
 
     int completeQuestion(@Param("conversationId") Long conversationId,
                          @Param("messageId") Long messageId
-    ); // 이미 저장한 질문의 상태를 변경하는 메서드, complete 완료 처리
+    ); // 특정 사용자 질문의 처리 상태를 pending 에서 completed로 변경하는 메서드
 
     int failQuestion(@Param("conversationId") Long conversationId,
                      @Param("messageId") Long messageId
-    ); // 실패처리
+    ); // 특정 사용자 질문의 상태를 pending에서 failed로 변경하는 메서드
 
     int expirePendingQuestions(@Param("conversationId") Long conversationId,
                                @Param("timeoutSeconds") int timeoutSeconds
-    ); // 너무 오래 처리중으로 남아있는 질문을 실패로 변경하는 메서드
+    );  // 특정 대화방에서 너무 오래 pending 상태로 남아 있는 질문들을 failed로 변경하는 메서드
 
     int deleteConversation(@Param("userId") Long userId,
                            @Param("conversationId") Long conversationId
-    ); // 대화 삭제
-
-}
+    );
+} // 해당 사용자의 특정 대화방을 논리 삭제하는 메서드

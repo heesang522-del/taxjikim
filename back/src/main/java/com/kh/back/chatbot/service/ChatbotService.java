@@ -6,6 +6,7 @@ import com.kh.back.chatbot.dto.ChatbotMessageDto.MessageResponse;
 import com.kh.back.chatbot.dto.ChatbotReply;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 public interface ChatbotService {
 
@@ -26,6 +27,13 @@ public interface ChatbotService {
             CustomUserDetails principal,
             Long conversationId,
             String message
+    );
+
+    ChatbotReply askStream(
+            CustomUserDetails principal,
+            Long conversationId,
+            String message,
+            Consumer<String> onDelta
     );
 
     void deleteConversation(
