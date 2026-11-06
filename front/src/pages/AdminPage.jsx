@@ -9,7 +9,7 @@ import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
 import { usePost } from '../store/usePostStore';
 import { useInquiry } from '../store/useInquiryStore';
-import { useReports } from '../utils/useReports';
+import { useAllReports } from '../utils/useAllReports';
 import { useFaq } from '../utils/useFaq';
 import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
@@ -116,7 +116,7 @@ export default function AdminPage() {
 
   const { posts, updatePost } = usePost();
   const { inquiries } = useInquiry();
-  const { reports } = useReports();
+  const { reports } = useAllReports();
   const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
   const waitingCount = useWaitingCount();
 
