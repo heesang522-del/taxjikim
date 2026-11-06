@@ -624,7 +624,9 @@ export function ChatbotPage() {
             AI 답변에는 오류가 있을 수 있으므로 중요한 내용은 근거를 확인해주세요.
           </p>
 
-          <p className="small muted">답변 생성에 실패한 질문도 사용 횟수에 포함됩니다.</p>
+          <p className="small muted">
+            서버에서 실패 또는 취소가 확정된 질문은 사용 횟수를 복구합니다. 취소가 확인되지 않으면 대화 기록과 사용량을 다시 조회해주세요.
+          </p>
         </div>
       </div>
     </section>

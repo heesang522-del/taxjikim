@@ -3,6 +3,7 @@ package com.kh.back.chatbot.service.Impl;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chatbot.dto.ChatbotReply;
 import com.kh.back.chatbot.dto.ChatbotSseEvent;
+import com.kh.back.chatbot.service.ChatbotHistoryService;
 import com.kh.back.chatbot.service.ChatbotService;
 import com.kh.back.chatbot.service.ChatbotSseService;
 import com.kh.back.common.exception.ApiException;
@@ -16,21 +17,35 @@ import org.springframework.core.task.TaskRejectedException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.FutureTask;
+
 @Slf4j
 @Service
 public class ChatbotSseServiceImpl implements ChatbotSseService {
 
+    private static final long RETENTION_MS =
+            30 * 60 * 1000L;
+
+    private static final int MAX_REQUESTS = 5000;
+
     private final ChatbotService chatbotService;
+    private final ChatbotHistoryService historyService;
     private final SseEmitterRegistry sseEmitterRegistry;
     private final TaskExecutor chatbotTaskExecutor;
 
+    private final ConcurrentHashMap<RequestKey, QuestionTask> tasks =
+            new ConcurrentHashMap<>();
+
     public ChatbotSseServiceImpl(
             ChatbotService chatbotService,
+            ChatbotHistoryService historyService,
             SseEmitterRegistry sseEmitterRegistry,
-            @Qualifier("chatbotTaskExecutor") // 질문 처리 작업을 별도 스레드에서 실행할 도구
-            TaskExecutor chatbotTaskExecutor // @Qualifier 는 여러 실행 도구중 chatbotAsyncConfig 에서 chatbotTaskExecutor 라는 이름으로 등록한 객체를 선택
+            @Qualifier("chatbotTaskExecutor")
+            TaskExecutor chatbotTaskExecutor
     ) {
-        this.chatbotService = chatbotService; // 전달받은 객체를 이 클래스의 필드에 저장
+        this.chatbotService = chatbotService;
+        this.historyService = historyService;
         this.sseEmitterRegistry = sseEmitterRegistry;
         this.chatbotTaskExecutor = chatbotTaskExecutor;
     }
@@ -41,123 +56,235 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             Long conversationId,
             String requestId,
             String message
-    ) { // 인터페이스에 선언한 질문 접수 기능을 실제로 구현하는 메서드 시작부분
+    ) {
+        // 실행 전에 로그인 사용자의 대화방 소유권을 확인한다.
+        historyService.getSnapshot(
+                principal.getUserId(),
+                conversationId
+        );
+
+        RequestKey key = new RequestKey(
+                principal.getUserId(),
+                conversationId,
+                requestId
+        );
+
+        QuestionTask task = getTask(key);
+
+        synchronized (task) {
+            if (task.submitted) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT,
+                        "CHATBOT_DUPLICATE_REQUEST",
+                        "이미 접수한 요청입니다."
+                );
+            }
+
+            // 취소가 먼저 접수된 요청은 실행하지 않는다.
+            task.control.checkActive();
+
+            task.submitted = true;
+
+            task.future = new FutureTask<>(() -> {
+                processQuestion(
+                        principal,
+                        conversationId,
+                        requestId,
+                        message,
+                        task.control
+                );
+
+                return null;
+            });
+        }
+
         try {
-            chatbotTaskExecutor.execute(() ->
-                    processQuestion(
-                            principal,
-                            conversationId,
-                            requestId,
-                            message
-                    )
-            ); // 질문처리 작업을 별도 스레드에서 실행하도록 맡기는 부분
+            chatbotTaskExecutor.execute(task.future);
 
         } catch (TaskRejectedException exception) {
+            task.control.cancel();
+            task.future.cancel(false);
+
             throw new ApiException(
                     HttpStatus.SERVICE_UNAVAILABLE,
                     "CHATBOT_BUSY",
                     "질문 요청이 많습니다. 잠시 후 다시 시도해주세요."
             );
         }
-    } // 실행 도구가 질문처리 작업을 받아주지 못햇을떄 오류로 안내하는 부분
+    }
+
+    @Override
+    public ChatbotSseEvent cancelQuestion(
+            CustomUserDetails principal,
+            Long conversationId,
+            String requestId
+    ) {
+        historyService.getSnapshot(
+                principal.getUserId(),
+                conversationId
+        );
+
+        QuestionTask task = getTask(
+                new RequestKey(
+                        principal.getUserId(),
+                        conversationId,
+                        requestId
+                )
+        );
+
+        synchronized (task) {
+            // 요청 정보를 알고 있는 경우에만 취소 확정을 안내한다.
+            boolean knownRequest = task.submitted;
+
+            ChatbotReply completed = task.control.cancel();
+
+            if (completed != null) {
+                // DB 저장이 이미 끝난 질문은 성공 결과를 반환한다.
+                return ChatbotSseEvent.builder()
+                        .requestId(requestId)
+                        .conversationId(conversationId)
+                        .cancelled(false)
+                        .reply(completed.reply())
+                        .remaining(completed.remaining())
+                        .build();
+            }
+
+            if (task.future != null) {
+                // DB 취소 처리 후 실행 중인 로컬 작업에도 중단을 요청한다.
+                task.future.cancel(true);
+            }
+
+            return ChatbotSseEvent.builder()
+                    .requestId(requestId)
+                    .conversationId(conversationId)
+                    .cancelled(knownRequest)
+                    .code(
+                            knownRequest
+                                    ? null
+                                    : "CHATBOT_CANCELLATION_UNKNOWN"
+                    )
+                    .build();
+        }
+    }
+
+    private QuestionTask getTask(RequestKey key) {
+        long oldest =
+                System.currentTimeMillis() - RETENTION_MS;
+
+        // 완료된 요청 정보를 일정 시간 보관해 늦은 취소 요청을 처리한다.
+        tasks.entrySet().removeIf(entry -> {
+            QuestionTask task = entry.getValue();
+            FutureTask<Void> future = task.future;
+
+            return task.createdAt < oldest
+                    && (future == null || future.isDone());
+        });
+
+        QuestionTask existing = tasks.get(key);
+
+        if (existing != null) {
+            return existing;
+        }
+
+        if (tasks.size() >= MAX_REQUESTS) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "CHATBOT_BUSY",
+                    "잠시 후 다시 시도해주세요."
+            );
+        }
+
+        // 취소가 접수보다 먼저 도착해도 동일한 상태 객체를 사용한다.
+        return tasks.computeIfAbsent(
+                key,
+                ignored -> new QuestionTask()
+        );
+    }
 
     private void processQuestion(
             CustomUserDetails principal,
             Long conversationId,
             String requestId,
-            String message
+            String message,
+            ChatbotService.QuestionControl control
     ) {
         try {
-            ChatbotReply reply = chatbotService.askStream(
+            ChatbotReply reply = chatbotService.ask(
                     principal,
                     conversationId,
                     message,
-                    delta -> sendDelta(
-                            principal,
-                            conversationId,
-                            requestId,
-                            delta
-                    )
-            ); // ai 답변을 스트리밍으로 생성하면서 , 중간 답변이 나올떄마다 sse로 전송하는 부분
-
-            ChatbotSseEvent completed = ChatbotSseEvent.builder()
-                    .requestId(requestId)
-                    .conversationId(conversationId)
-                    .reply(reply.reply())
-                    .remaining(reply.remaining())
-                    .build();  // 답변처리가 왈료됐다는 sse 이벤트 데이터를 만드는 부분
+                    delta -> sseEmitterRegistry.send(
+                            principal.getUserId(),
+                            "chatbot-delta",
+                            ChatbotSseEvent.builder()
+                                    .requestId(requestId)
+                                    .conversationId(conversationId)
+                                    .delta(delta)
+                                    .build()
+                    ),
+                    control
+            );
 
             sseEmitterRegistry.send(
                     principal.getUserId(),
                     "chatbot-done",
-                    completed
-            ); // 로그인한 사용자에게 답변처리가 완료됐다는 sse 이벤트를 보내는 부분
-
-        } catch (ApiException exception) {
-            sendFailure(
-                    principal,
-                    conversationId,
-                    requestId,
-                    exception.getCode(),
-                    exception.getMessage()
-            ); // 질문 처리중 오류가 발생했을떄, 실패 결과를 sse로 전달하는 부분
-               // 사용횟수초과 , 대화방 접근 불가, ai 응답 실패등
-        } catch (RuntimeException exception) {
-            log.error(
-                    "챗봇 SSE 처리 실패. 요청ID={}, 예외유형={}",
-                    requestId,
-                    exception.getClass().getSimpleName()
+                    ChatbotSseEvent.builder()
+                            .requestId(requestId)
+                            .conversationId(conversationId)
+                            .reply(reply.reply())
+                            .remaining(reply.remaining())
+                            .build()
             );
 
-            sendFailure(
-                    principal,
-                    conversationId,
-                    requestId,
-                    "CHATBOT_UNAVAILABLE",
-                    "답변 처리에 실패했습니다. 대화 기록을 확인해주세요."
+        } catch (RuntimeException exception) {
+            String code;
+
+            if (exception instanceof ApiException apiException) {
+                code = apiException.getCode();
+
+            } else {
+                code = "CHATBOT_UNAVAILABLE";
+
+                log.error(
+                        "챗봇 SSE 처리 실패. 요청ID={}, 예외유형={}",
+                        requestId,
+                        exception.getClass().getSimpleName()
+                );
+            }
+
+            sseEmitterRegistry.send(
+                    principal.getUserId(),
+                    "chatbot-failed",
+                    ChatbotSseEvent.builder()
+                            .requestId(requestId)
+                            .conversationId(conversationId)
+                            .code(code)
+                            .message(
+                                    "답변 처리가 중단되었습니다. "
+                                            + "대화 기록과 사용량을 다시 조회해주세요."
+                            )
+                            .build()
             );
         }
     }
 
-    private void sendDelta(
-            CustomUserDetails principal,
+    private record RequestKey(
+            Long userId,
             Long conversationId,
-            String requestId,
-            String delta
+            String requestId
     ) {
-        ChatbotSseEvent event = ChatbotSseEvent.builder()
-                .requestId(requestId)
-                .conversationId(conversationId)
-                .delta(delta)
-                .build();
- // 중간 답변 조각을 sse로 보내기 위해 이벤트 객체를 만드는 부분
-
-        // 새 연결 관리 코드를 만들지 않고 기존 Registry를 재사용한다.
-        sseEmitterRegistry.send(
-                principal.getUserId(),
-                "chatbot-delta",
-                event
-        );
     }
 
-    private void sendFailure(
-            CustomUserDetails principal,
-            Long conversationId,
-            String requestId,
-            String code,
-            String message
-    ) {
-        ChatbotSseEvent failed = ChatbotSseEvent.builder()
-                .requestId(requestId)
-                .conversationId(conversationId)
-                .code(code)
-                .message(message)
-                .build(); //질문 처리 실패 정보를 sse로 보내기 위해 이벤트 객체를 만드는 부분
+    private static final class QuestionTask {
 
-        sseEmitterRegistry.send(
-                principal.getUserId(),
-                "chatbot-failed",
-                failed
-        );
-    } // builder로 위 정보를 담은 객체를 만들고  failed 변수에 저장 , 여기서 message 는 사용자의 질문이 아니라 오류 안내 문구
+        private final ChatbotService.QuestionControl control =
+                new ChatbotService.QuestionControl();
+
+        private final long createdAt =
+                System.currentTimeMillis();
+
+        private volatile FutureTask<Void> future;
+
+        private boolean submitted;
+    }
 }

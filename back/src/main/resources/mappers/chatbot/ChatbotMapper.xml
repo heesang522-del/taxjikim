@@ -15,11 +15,9 @@
         FROM chatbot_conversations
         WHERE user_id = #{userId}
         AND deleted_at IS NULL
-
         <if test="conversationId != null">
             AND conversation_id = #{conversationId}
         </if>
-
         ORDER BY updated_at DESC, conversation_id DESC
     </select>
 
@@ -43,7 +41,6 @@
         )
     </insert>
 
-    <!-- 대화방이 없는 사용자도 동시 생성을 막을 수 있도록 사용자 행을 잠근다. -->
     <select id="lockConversationOwner"
             resultType="java.lang.Long">
         SELECT user_id
@@ -52,7 +49,6 @@
         FOR UPDATE
     </select>
 
-    <!-- 논리 삭제된 대화방은 생성 한도에서 제외한다. -->
     <select id="countActiveConversations"
             resultType="int">
         SELECT COUNT(*)
@@ -61,7 +57,6 @@
         AND deleted_at IS NULL
     </select>
 
-    <!-- 같은 대화방의 상태 변경을 짧은 트랜잭션 안에서 순서대로 처리한다. -->
     <select id="lockConversation"
             resultType="com.kh.back.chatbot.dto.ChatbotConversationDto">
         SELECT conversation_id,
@@ -109,7 +104,6 @@
         AND deleted_at IS NULL
     </update>
 
-    <!-- 생성된 메시지 ID를 DTO에 채워 이후 상태 변경에 사용한다. -->
     <insert id="insertMessage"
             parameterType="com.kh.back.chatbot.dto.ChatbotMessageDto"
             useGeneratedKeys="true"
@@ -126,11 +120,14 @@
         #{role},
         #{content},
         #{status},
+        COALESCE(
+        #{createdAt},
         UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        )
         )
     </insert>
 
-    <!-- 처리 중인 사용자 질문만 완료 상태로 변경한다. -->
+    <!-- 이미 취소되거나 실패한 질문은 완료로 변경할 수 없다. -->
     <update id="completeQuestion">
         UPDATE chatbot_messages
         SET processing_status = 'COMPLETED'
@@ -141,7 +138,7 @@
         AND deleted_at IS NULL
     </update>
 
-    <!-- 완료되었거나 삭제된 질문을 실패 상태로 덮어쓰지 않는다. -->
+    <!-- 최초 상태 변경에 성공한 한 번만 사용 횟수를 복구한다. -->
     <update id="failQuestion">
         UPDATE chatbot_messages
         SET processing_status = 'FAILED'
@@ -152,7 +149,6 @@
         AND deleted_at IS NULL
     </update>
 
-    <!-- 오래 남아 있는 처리 중 질문을 다음 질문 접수 시 정리한다. -->
     <update id="expirePendingQuestions">
         UPDATE chatbot_messages
         SET processing_status = 'FAILED'
@@ -167,7 +163,6 @@
         )
     </update>
 
-    <!-- 기존 대화방 논리 삭제 처리를 유지한다. -->
     <update id="deleteConversation">
         UPDATE chatbot_conversations
         SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR,
@@ -175,13 +170,6 @@
         revision = revision + 1
         WHERE conversation_id = #{conversationId}
         AND user_id = #{userId}
-        AND deleted_at IS NULL
-    </update>
-
-    <update id="deleteMessages">
-        UPDATE chatbot_messages
-        SET deleted_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
-        WHERE conversation_id = #{conversationId}
         AND deleted_at IS NULL
     </update>
 

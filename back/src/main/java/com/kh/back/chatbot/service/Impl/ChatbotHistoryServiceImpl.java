@@ -20,6 +20,8 @@ import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -28,17 +30,21 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
 
     private static final int MAX_CONVERSATIONS = 10;
 
+    private static final ZoneId KOREA_ZONE =
+            ZoneId.of("Asia/Seoul");
+
     private final ChatbotMapper chatbotMapper;
     private final ChatbotUsageService chatbotUsageService;
     private final ChatbotValidator chatbotValidator;
 
-    // 운영 정책값이며 application.yml에서 조정할 수 있다.
     @Value("${chatbot.pending-timeout-seconds:300}")
     private int pendingTimeoutSeconds;
 
     @Override
     @Transactional(readOnly = true)
-    public List<ConversationResponse> getConversations(Long userId) {
+    public List<ConversationResponse> getConversations(
+            Long userId
+    ) {
         return chatbotMapper.findConversations(userId, null)
                 .stream()
                 .map(ChatbotConversationDto::toResponse)
@@ -47,8 +53,9 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
 
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
-    public ConversationResponse createConversation(Long userId) {
-        // 같은 사용자의 생성 요청을 순서대로 처리하기 위해 사용자 행을 잠근다.
+    public ConversationResponse createConversation(
+            Long userId
+    ) {
         Long lockedUserId =
                 chatbotMapper.lockConversationOwner(userId);
 
@@ -60,11 +67,10 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             );
         }
 
-        // 잠금을 얻은 뒤 최신 활성 대화방 개수를 확인한다.
-        int conversationCount =
+        int count =
                 chatbotMapper.countActiveConversations(userId);
 
-        if (conversationCount >= MAX_CONVERSATIONS) {
+        if (count >= MAX_CONVERSATIONS) {
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "CHATBOT_CONVERSATION_LIMIT",
@@ -95,12 +101,17 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             Long userId,
             Long conversationId
     ) {
-        // 대화 버전과 메시지를 동일한 시점 기준으로 조회한다.
         ChatbotConversationDto conversation =
-                requireConversation(userId, conversationId);
+                requireConversation(
+                        userId,
+                        conversationId
+                );
 
         List<ChatbotMessageDto> messages =
-                chatbotMapper.findMessages(userId, conversationId);
+                chatbotMapper.findMessages(
+                        userId,
+                        conversationId
+                );
 
         return ConversationSnapshot.builder()
                 .revision(conversation.getRevision())
@@ -117,22 +128,47 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
     ) {
         Long userId = principal.getUserId();
 
-        // 동일 대화방의 질문 상태가 동시에 변경되지 않도록 잠근다.
         ChatbotConversationDto conversation =
-                requireLockedConversation(userId, conversationId);
+                requireLockedConversation(
+                        userId,
+                        conversationId
+                );
 
-        // 오래 남아 있는 처리 중 질문을 실패 상태로 정리한다.
-        chatbotMapper.expirePendingQuestions(
-                conversationId,
-                Math.max(1, pendingTimeoutSeconds)
-        );
+        LocalDateTime questionTime =
+                LocalDateTime.now(KOREA_ZONE);
+
+        LocalDateTime cutoff =
+                questionTime.minusSeconds(
+                        Math.max(1, pendingTimeoutSeconds)
+                );
 
         List<ChatbotMessageDto> messages =
-                chatbotMapper.findMessages(userId, conversationId);
+                chatbotMapper.findMessages(
+                        userId,
+                        conversationId
+                );
+
+        // 서버 중단 등으로 오래 남은 예약도 실패 확정과 함께 복구한다.
+        for (ChatbotMessageDto item : messages) {
+            if ("PENDING".equals(item.getStatus())
+                    && item.getCreatedAt().isBefore(cutoff)) {
+                failAndRelease(
+                        userId,
+                        conversationId,
+                        item.getMessageId()
+                );
+            }
+        }
+
+        // 상태 정리 후 최신 메시지로 진행 중인 질문을 확인한다.
+        messages = chatbotMapper.findMessages(
+                userId,
+                conversationId
+        );
 
         boolean hasPending = messages.stream()
-                .anyMatch(message ->
-                        "PENDING".equals(message.getStatus())
+                .anyMatch(item ->
+                        "PENDING".equals(item.getStatus())
                 );
 
         if (hasPending) {
@@ -143,20 +179,21 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             );
         }
 
-        // 질문 저장과 사용량 차감을 같은 트랜잭션에서 처리한다.
+        // 메시지 날짜와 사용량 예약 날짜를 일치시킨다.
         ChatbotUsageDto usage =
-                chatbotUsageService.reserveUsage(principal);
+                chatbotUsageService.reserveUsage(
+                        principal,
+                        questionTime.toLocalDate()
+                );
 
-        String title = buildTitle(question);
-
-        int updated = chatbotMapper.updateConversation(
-                userId,
-                conversationId,
-                conversation.getRevision(),
-                title
+        requireUpdated(
+                chatbotMapper.updateConversation(
+                        userId,
+                        conversationId,
+                        conversation.getRevision(),
+                        buildTitle(question)
+                )
         );
-
-        requireUpdated(updated);
 
         ChatbotMessageDto pendingQuestion =
                 ChatbotMessageDto.builder()
@@ -164,6 +201,7 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
                         .role("USER")
                         .content(question)
                         .status("PENDING")
+                        .createdAt(questionTime)
                         .build();
 
         if (chatbotMapper.insertMessage(pendingQuestion) != 1) {
@@ -174,11 +212,10 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             );
         }
 
-        // 실패하거나 처리 중인 질문은 AI의 이전 대화에서 제외한다.
         List<ChatbotMessageDto> completedHistory =
                 messages.stream()
-                        .filter(message ->
-                                "COMPLETED".equals(message.getStatus())
+                        .filter(item ->
+                                "COMPLETED".equals(item.getStatus())
                         )
                         .toList();
 
@@ -198,15 +235,19 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             String reply
     ) {
         ChatbotConversationDto conversation =
-                requireLockedConversation(userId, conversationId);
+                requireLockedConversation(
+                        userId,
+                        conversationId
+                );
 
-        // 질문 완료 처리와 답변 저장은 함께 성공하거나 함께 롤백된다.
-        int completed = chatbotMapper.completeQuestion(
-                conversationId,
-                questionId
-        );
+        int completed =
+                chatbotMapper.completeQuestion(
+                        conversationId,
+                        questionId
+                );
 
         if (completed != 1) {
+            // 취소 또는 실패한 질문에는 늦게 도착한 답변을 저장하지 않는다.
             throw new ApiException(
                     HttpStatus.CONFLICT,
                     "CHATBOT_QUESTION_CHANGED",
@@ -247,7 +288,6 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             Long conversationId,
             Long questionId
     ) {
-        // 실패한 작업과 별도 트랜잭션으로 질문 상태를 기록한다.
         ChatbotConversationDto conversation =
                 chatbotMapper.lockConversation(
                         userId,
@@ -258,13 +298,13 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             return;
         }
 
-        int failed = chatbotMapper.failQuestion(
+        boolean changed = failAndRelease(
+                userId,
                 conversationId,
                 questionId
         );
 
-        // 실제로 실패 상태가 변경된 경우에만 대화방 버전을 갱신한다.
-        if (failed == 1) {
+        if (changed) {
             requireUpdated(
                     chatbotMapper.updateConversation(
                             userId,
@@ -282,31 +322,76 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             Long userId,
             Long conversationId
     ) {
-        requireLockedConversation(userId, conversationId);
-
-        // 기존 SQL에 따라 대화방을 논리 삭제한다.
-        int updated = chatbotMapper.deleteConversation(
+        requireLockedConversation(
                 userId,
                 conversationId
         );
+
+        List<ChatbotMessageDto> messages =
+                chatbotMapper.findMessages(
+                        userId,
+                        conversationId
+                );
+
+        // 진행 중인 질문을 먼저 실패 확정하고 예약 횟수를 복구한다.
+        for (ChatbotMessageDto item : messages) {
+            if ("PENDING".equals(item.getStatus())) {
+                failAndRelease(
+                        userId,
+                        conversationId,
+                        item.getMessageId()
+                );
+            }
+        }
+
+        int updated =
+                chatbotMapper.deleteConversation(
+                        userId,
+                        conversationId
+                );
 
         if (updated < 1) {
             throw conversationNotFound();
         }
     }
 
-    private String buildTitle(String question) {
-        // 마스킹된 첫 질문의 앞 40글자를 제목으로 사용한다.
-        String title = question.replaceAll("\\s+", " ").strip();
+    private boolean failAndRelease(
+            Long userId,
+            Long conversationId,
+            Long questionId
+    ) {
+        int changed =
+                chatbotMapper.failQuestion(
+                        conversationId,
+                        questionId
+                );
 
-        int titleLength = Math.min(
+        if (changed != 1) {
+            return false;
+        }
+
+        // 상태 변경과 사용량 복구는 호출한 메서드의 동일 트랜잭션에 참여한다.
+        chatbotUsageService.releaseQuestionUsage(
+                userId,
+                conversationId,
+                questionId
+        );
+
+        return true;
+    }
+
+    private String buildTitle(String question) {
+        String title =
+                question.replaceAll("\\s+", " ").strip();
+
+        int length = Math.min(
                 40,
                 title.codePointCount(0, title.length())
         );
 
         return title.substring(
                 0,
-                title.offsetByCodePoints(0, titleLength)
+                title.offsetByCodePoints(0, length)
         );
     }
 
@@ -314,7 +399,9 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             Long userId,
             Long conversationId
     ) {
-        chatbotValidator.validateConversationId(conversationId);
+        chatbotValidator.validateConversationId(
+                conversationId
+        );
 
         List<ChatbotConversationDto> conversations =
                 chatbotMapper.findConversations(
@@ -333,9 +420,10 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
             Long userId,
             Long conversationId
     ) {
-        chatbotValidator.validateConversationId(conversationId);
+        chatbotValidator.validateConversationId(
+                conversationId
+        );
 
-        // 사용자 번호와 대화방 번호를 함께 확인해 소유권을 검사한다.
         ChatbotConversationDto conversation =
                 chatbotMapper.lockConversation(
                         userId,

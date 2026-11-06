@@ -13,7 +13,9 @@ public class ChatbotSseEvent {
 
     private String requestId;
     private Long conversationId;
+
     private Boolean accepted;
+    private Boolean cancelled;
 
     private String delta;
     private String reply;
