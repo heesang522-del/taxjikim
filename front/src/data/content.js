@@ -36,12 +36,10 @@ export const ADMIN_STATS = {
   region: [['서울', 38], ['경기', 29], ['부산', 8], ['기타', 25]],
 };
 
-// 신고된 글·댓글. targetType: 'post' | 'comment'. 관리자가 삭제 또는 반려하면 status가 '처리됨', result가 '삭제'|'반려'가 된다.
-export const REPORT_SEED = [
-  { id: 'r1', targetType: 'post', postId: 'p9', commentId: null, reason: '광고성 링크 반복', reporter: '세무초보', createdAt: '2025-09-23', status: '대기', result: null },
-  { id: 'r2', targetType: 'comment', postId: 'p1', commentId: 'c2', reason: '욕설', reporter: '절세몬', createdAt: '2025-09-24', status: '대기', result: null },
-  { id: 'r3', targetType: 'post', postId: 'p5', commentId: null, reason: '허위 정보', reporter: '작업중', createdAt: '2025-09-10', status: '처리됨', result: '반려' },
-];
+// 신고된 글. targetType: 'post'. 관리자가 삭제 또는 반려하면 status가 '처리됨', result가 '삭제'|'반려'가 된다.
+// 게시글·댓글 신고는 백엔드로 연동되어 여기서 더 이상 예시 데이터를 쓰지 않는다.
+// 이 mock은 백엔드에 없는 postId를 가진 브라우저 전용 예시 글을 신고할 때만 쓰인다.
+export const REPORT_SEED = [];
 
 // 모델·처리 현황: 사용 지표
 export const USAGE_METRICS = { calcRuns: 482, uploadAttempts: 96, avgCalcMs: 340 };

@@ -85,4 +85,23 @@
         VALUES (#{userId}, 'REPLY', 'POST', #{targetId}, #{title}, #{message}, FALSE)
     </insert>
 
+    <!-- 활성 상태인 ADMIN role 전체의 USER_ID 조회. 작성자 본인이 관리자여도 자기 글 알림은 받지 않는다. -->
+    <select id="findAdminUserIds" resultType="Long">
+        SELECT USER_ID
+        FROM `users`
+        WHERE USER_ROLE = 'ADMIN'
+          AND USER_STATUS = 'ACTIVE'
+          AND USER_ID &lt;&gt; #{excludeUserId}
+        ORDER BY USER_ID
+    </select>
+
+    <!-- QNA 글이 새로 등록됐을 때 관리자 전원에게 알림 생성 -->
+    <insert id="insertQnaPostNotifications">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES
+        <foreach collection="userIds" item="userId" separator=",">
+            (#{userId}, 'QNA_NEW', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+        </foreach>
+    </insert>
+
 </mapper>

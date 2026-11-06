@@ -9,7 +9,7 @@ import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
 import { usePost } from '../store/usePostStore';
 import { useInquiry } from '../store/useInquiryStore';
-import { useReports } from '../utils/useReports';
+import { useAllReports } from '../utils/useAllReports';
 import { useFaq } from '../utils/useFaq';
 import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
@@ -116,7 +116,7 @@ export default function AdminPage() {
 
   const { posts, updatePost } = usePost();
   const { inquiries } = useInquiry();
-  const { reports } = useReports();
+  const { reports } = useAllReports();
   const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
   const waitingCount = useWaitingCount();
 
@@ -155,9 +155,10 @@ export default function AdminPage() {
             <Card title="Q&A 답변 대기 (최신 5)" icon="messageSquare" aside={<Pill tone="warn">{pendingQna.length}건</Pill>}>
               {pendingQna.length
                 ? <DataTable columns={[
-                  { key: 'q', header: '문의', render: (q) => <>{q.title} {q.visibility === 'private' && <Pill>비공개</Pill>}</> },
-                  { key: 'a', header: '작성자', render: (q) => q.author },
-                  { key: 'd', header: '등록일', align: 'right', render: (q) => q.createdAt },
+                  // 문의 제목 길이에 따라 작성자 칸이 움직이지 않도록 열 폭을 고정한다.
+                  { key: 'q', header: '문의', width: '55%', ellipsis: true, render: (q) => <>{q.title} {q.visibility === 'private' && <Pill>비공개</Pill>}</> },
+                  { key: 'a', header: '작성자', width: '25%', ellipsis: true, render: (q) => q.author },
+                  { key: 'd', header: '등록일', width: '20%', align: 'right', render: (q) => q.createdAt },
                 ]} rows={pendingQna} rowKey={(q) => q.id} />
                 : <p className="state-msg">답변 대기 중인 Q&A가 없습니다</p>}
               <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminInquiries}?tab=support`}>전체보기</Button></div>
@@ -182,10 +183,11 @@ export default function AdminPage() {
           </div>
           <Card title="업로드·계산 실패 이력" icon="uploadCloud">
             <DataTable columns={[
-              { key: 't', header: '종류', render: (f) => <Pill tone={f.type === '업로드' ? 'primary' : 'warn'}>{f.type}</Pill> },
-              { key: 'r', header: '사유', render: (f) => f.reason },
-              { key: 'u', header: '사용자', render: (f) => f.user },
-              { key: 'd', header: '발생 시각', align: 'right', render: (f) => f.occurredAt },
+              // 사유 길이에 따라 사용자 칸이 움직이지 않도록 열 폭을 고정한다.
+              { key: 't', header: '종류', width: '15%', render: (f) => <Pill tone={f.type === '업로드' ? 'primary' : 'warn'}>{f.type}</Pill> },
+              { key: 'r', header: '사유', width: '45%', ellipsis: true, render: (f) => f.reason },
+              { key: 'u', header: '사용자', width: '20%', ellipsis: true, render: (f) => f.user },
+              { key: 'd', header: '발생 시각', width: '20%', align: 'right', render: (f) => f.occurredAt },
             ]} rows={FAILURE_LOG_SEED} rowKey={(f) => f.id} />
           </Card>
         </div>

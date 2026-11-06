@@ -124,6 +124,25 @@ public class PostValidator {
     }
 
     /**
+     * 로그인한 회원의 닉네임을 반환한다. 알림 메시지에 작성자 이름을 표시할 때 쓴다.
+     * (호출 전에 로그인 여부를 이미 확인했다고 가정하며, 비로그인이면 null을 반환한다.)
+     */
+    public String currentNickname() {
+
+        Authentication authentication =
+                SecurityContextHolder.getContext()
+                        .getAuthentication();
+
+        if (authentication == null
+                || !(authentication.getPrincipal()
+                instanceof CustomUserDetails details)) {
+            return null;
+        }
+
+        return details.getUserDto().getNickname();
+    }
+
+    /**
      * 비로그인도 허용하는 목록 조회에서 쓴다. 로그인하지 않았거나 관리자가 아니면 false를 반환한다.
      */
     public boolean hasAdminRole() {

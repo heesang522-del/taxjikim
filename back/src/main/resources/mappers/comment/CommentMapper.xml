@@ -61,6 +61,12 @@
             AND USER_ID = #{userId} AND DELETED_AT IS NULL
     </update>
 
+    <!-- 신고 처리로 관리자가 지울 때만 쓴다. "관리자에 의해 삭제됨" 표시용으로 DELETED_BY_TYPE을 남긴다. -->
+    <update id="deleteByAdmin">
+        UPDATE comments SET DELETED_AT = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP, DELETED_BY_TYPE = 'ADMIN'
+        WHERE COMMENT_ID = #{commentId} AND DELETED_AT IS NULL
+    </update>
+
     <!-- 본인 댓글만 내용을 수정하며 수정 시각을 갱신한다. -->
     <update id="update">
         UPDATE comments SET CONTENT = #{content}, UPDATED_AT = CURRENT_TIMESTAMP

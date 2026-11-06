@@ -6,9 +6,9 @@ import { Button, Card } from '../common/index';
 import { ROUTES } from '../../utils/routes';
 import { useAuth } from '../../store/useAuthStore';
 import { useToast } from '../../store/useToastStore';
-import { useReports } from '../../utils/useReports';
 import ReportModal from './ReportModal';
 import { getComments, createComment, updateComment, deleteComment } from '../../api/comment';
+import { createCommentReport } from '../../api/report';
 
 // 댓글 시각은 분 단위까지만 "00:00" 형식으로 표시한다.
 const formatCommentTime = (value) => {
@@ -27,7 +27,6 @@ const formatCommentTime = (value) => {
 export default function CommentSection({ postId }) {
   const toast = useToast();
   const { loggedIn, user } = useAuth();
-  const { addReport, hasReported } = useReports();
   const [text, setText] = useState('');
   const [reporting, setReporting] = useState(null); // 신고하려는 댓글
   const [replyingTo, setReplyingTo] = useState(null); // 답글 입력창을 연 댓글 id
@@ -162,14 +161,16 @@ export default function CommentSection({ postId }) {
     }
   };
 
-  const report = (reason) => {
-    if (hasReported(user.nickname, { targetType: 'comment', postId, commentId: reporting.id })) {
-      toast('이미 신고한 댓글입니다');
-    } else {
-      addReport({ targetType: 'comment', postId, commentId: reporting.id, reason, reporter: user.nickname });
+  // 댓글은 항상 서버 댓글이라(목록을 API로만 불러옴) 바로 백엔드 신고 API를 호출한다.
+  const report = async (reason) => {
+    try {
+      await createCommentReport(postId, reporting.id, reason);
       toast('신고를 접수했습니다');
+    } catch (error) {
+      toast(error.message || '신고 접수에 실패했습니다.');
+    } finally {
+      setReporting(null);
     }
-    setReporting(null);
   };
 
   // 댓글 한 개(최상위 또는 답글)를 그린다. 삭제된 댓글은 답글 보존을 위해 자리를 유지한 채 안내문만,
