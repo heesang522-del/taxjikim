@@ -10,7 +10,7 @@ import { useAuth } from '../store/useAuthStore';
 import { ProfileSettings } from '../components/mypage/ProfileSettings';
 import { useTaxResult } from '../utils/useTaxResult';
 import { useHistory } from '../utils/useHistory';
-import ScenarioTable from '../components/calculator/ScenarioTable';
+import { ScenarioTable } from '../components/calculator/ScenarioTable';
 import { useChat } from '../store/useChatStore';
 
 const CHART_W = 640,

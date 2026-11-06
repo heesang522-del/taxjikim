@@ -119,7 +119,7 @@ export default function CalcResultPage() {
         <Button onClick={handleSaveResult} disabled={isSaving}>
           {isSaving ? '저장 중…' : '결과 저장'}
         </Button>
-        <Button variant="primary" to={ROUTES.calcSim}>
+        <Button variant="primary" to={`${ROUTES.calcSim}${search}`} state={{ taxResult: result }}>
           <Icon name="sliders" size={16} /> 시뮬레이션으로 줄여보기
         </Button>
       </div>

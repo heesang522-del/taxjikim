@@ -21,7 +21,7 @@ import AdminChatsPage from './pages/AdminChatsPage';
 import CalculatorInputPage from './pages/CalculatorInputPage';
 import CalculatorLoadingPage from './pages/CalculatorLoadingPage';
 import CalculatorResultPage from './pages/CalculatorResultPage';
-import CalculatorSimPage from './pages/CalculatorSimPage';
+import { CalculatorSimPage } from './pages/CalculatorSimPage';
 
 // 주소에 맞는 화면을 연결한다. BrowserRouter는 main.jsx에서 한 번만 적용한다.
 // 로그인·회원가입·계정 찾기는 같은 AuthPage를 쓰고, key로 주소가 바뀔 때 탭을 새로 시작한다.

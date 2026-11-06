@@ -229,3 +229,11 @@ ALTER TABLE TAX_TRANSACTIONS
 - 저장과 함께 `SAVE_STATUS`만 `SAVED`로 변경한다. `USER_ID`는 변경하지 않는다. JSON은 `tax_results.RESULT_DETAIL`, 저장 시각은 기존 `CALCULATED_AT`에 기록한다.
 - 결과 다시 보기 주소: `/calculator/result?taxInputId={분석번호}&saved=true`. 마이페이지 목록 UI 연결은 별도 작업이다.
 - 기존 입력·거래 수정 시 결과를 삭제하는 무효화 동작은 유지한다. 저장 내용은 클라이언트가 보낸 당시 화면 값이며 서버 검증 계산 결과로 취급하지 않는다.
+# 시뮬레이션 재계산
+
+- `POST /api/v1/tax/inputs/simulation`
+- 본문: `{ input, extraInc, extraExp, extraDonation }`. `input`에는 결과의 귀속연도·가족 수·총수입·총지출·특례기부금·일반기부금을 전달한다.
+- 추가 수입은 세전 총수입에, 추가 지출은 총지출에, 추가 기부금은 일반기부금 입력액에 더한다.
+- 기존 `TaxBreakdownDto` 계산 체인을 사용하며 기부금 인정 한도도 동일하게 적용한다.
+- 응답: `ApiResponse.data`에 변경 후 `TaxBreakdownDto`. DB 조회·수정과 Python 호출은 하지 않는다.
+- 기준 결과는 결과 페이지의 이동 state로 전달한다. 분석번호로 직접 접근하면 기존 결과 API에서 한 번 조회한다.

@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.List;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import com.kh.back.tax.dto.TaxSimulationDto;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -32,6 +33,33 @@ import tools.jackson.databind.json.JsonMapper;
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
+
+    // 기존 결과에 가정만 더한 뒤 동일한 계산 체인을 호출한다. DB 조회·저장은 하지 않는다.
+    @Override
+    public TaxBreakdownDto simulate(TaxSimulationDto request) {
+        if (request == null || request.getInput() == null) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "기준 계산 결과가 필요합니다.");
+        }
+        TaxCalculationInputDto source = request.getInput();
+        BigDecimal[] amounts = {source.getTotalIncome(), source.getTotalExpense(),
+                source.getSpecialDonationAmount(), source.getGeneralDonationAmount(),
+                request.getExtraInc(), request.getExtraExp(), request.getExtraDonation()};
+        for (BigDecimal amount : amounts) {
+            if (amount == null || amount.signum() < 0) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "금액은 0 이상으로 입력해주세요.");
+            }
+        }
+        // 기준 결과를 변경하지 않도록 새로운 입력 객체에 복사한다.
+        TaxCalculationInputDto input = new TaxCalculationInputDto();
+        input.setTaxYear(source.getTaxYear());
+        input.setBusinessRegistered(source.getBusinessRegistered());
+        input.setDependentCount(source.getDependentCount());
+        input.setTotalIncome(source.getTotalIncome().add(request.getExtraInc()));
+        input.setTotalExpense(source.getTotalExpense().add(request.getExtraExp()));
+        input.setSpecialDonationAmount(source.getSpecialDonationAmount());
+        input.setGeneralDonationAmount(source.getGeneralDonationAmount().add(request.getExtraDonation()));
+        return calculateBreakdown(input);
+    }
 
     // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
     @Override
