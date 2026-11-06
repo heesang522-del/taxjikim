@@ -5,10 +5,14 @@ import tools.jackson.databind.JsonNode;
 import com.kh.back.tax.dto.TaxSimulationDto;
 import com.kh.back.tax.dto.TaxBreakdownDto;
 import com.kh.back.tax.dto.SimulationScenarioDto;
+import com.kh.back.tax.dto.SavedTaxResultDto;
 import java.util.List;
 
 // 세금 분석 결과 처리 기능을 선언한다.
 public interface TaxService {
+    // 재계산 없이 본인의 저장 결과 목록을 조회한다.
+    List<SavedTaxResultDto> getSavedResults(Long userId);
+
     // 로그인 회원의 시나리오 목록을 DB에서 조회한다.
     List<SimulationScenarioDto> getScenarios(Long userId);
 

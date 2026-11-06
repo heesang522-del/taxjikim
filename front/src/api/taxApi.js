@@ -1,5 +1,10 @@
 import { client } from './client';
 
+// 마이페이지는 본인의 저장 결과 번호·귀속연도·저장 시각만 받는다.
+export async function getSavedTaxResults({ signal } = {}) {
+  return request({ url: '/tax/inputs/saved-results', method: 'GET', signal });
+}
+
 // 시나리오는 브라우저 저장소 대신 기존 SIMULATION 테이블에서 관리한다.
 export async function getSimulationScenarios() {
   return request({ url: '/tax/simulations', method: 'GET' });

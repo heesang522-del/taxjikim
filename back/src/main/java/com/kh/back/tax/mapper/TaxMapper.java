@@ -5,6 +5,7 @@ import com.kh.back.tax.dto.CategoryAmountDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
 import com.kh.back.tax.dto.SimulationScenarioDto;
+import com.kh.back.tax.dto.SavedTaxResultDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
@@ -15,6 +16,9 @@ import java.util.List;
 @Mapper
 @Repository("taxCalculationMapper")
 public interface TaxMapper {
+
+    // 로그인 회원이 저장한 결과의 목록 정보만 조회한다.
+    List<SavedTaxResultDto> findSavedResults(@Param("userId") Long userId);
 
     List<SimulationScenarioDto> findScenarios(@Param("userId") Long userId);
 

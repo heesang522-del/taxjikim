@@ -26,6 +26,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import com.kh.back.tax.dto.TaxSimulationDto;
 import com.kh.back.tax.dto.SimulationScenarioDto;
+import com.kh.back.tax.dto.SavedTaxResultDto;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -34,6 +35,13 @@ import com.kh.back.tax.dto.SimulationScenarioDto;
 public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
+
+    // 회원번호를 SQL 조건으로 전달하며 저장된 결과를 다시 계산하지 않는다.
+    @Override
+    @Transactional(readOnly = true)
+    public List<SavedTaxResultDto> getSavedResults(Long userId) {
+        return taxMapper.findSavedResults(userId);
+    }
 
     // 소유자 필터링은 Mapper의 USER_ID 조건으로 처리한다.
     @Override

@@ -17,6 +17,8 @@ import com.kh.back.tax.dto.TaxBreakdownDto;
 import org.springframework.web.bind.annotation.PostMapping;
 import com.kh.back.auth.security.CustomUserDetails;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.kh.back.tax.dto.SavedTaxResultDto;
+import java.util.List;
 
 
 // 세금 분석 결과 요청을 받는다.
@@ -26,6 +28,13 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 public class TaxApiController {
 
     private final TaxService taxService;
+
+    // 인증은 SecurityConfig에서 처리하고, 인증된 회원번호로 본인 목록을 조회한다.
+    @GetMapping("/saved-results")
+    public ApiResponse<List<SavedTaxResultDto>> getSavedResults(
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        return ApiResponse.ok(taxService.getSavedResults(principal.getUserId()));
+    }
 
     // 결과 데이터에 추가 가정을 반영해 계산하며 DB에는 저장하지 않는다.
     @PostMapping("/simulation")
