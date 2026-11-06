@@ -147,7 +147,7 @@ function CategoryPie({ title, basis, categories }) {
             >
               <PieCenter>
                 <span>실제 합계</span>
-                <strong title={`${formatNumber.format(total)}원`}>${compactNumber.format(total)}원</strong>
+                <strong title={`${formatNumber.format(total)}원`}>{compactNumber.format(total)}원</strong>
               </PieCenter>
             </Pie>
             {hovered && (
