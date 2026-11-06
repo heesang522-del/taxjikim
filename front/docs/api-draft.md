@@ -1,5 +1,24 @@
 # 프론트 API 연결 안내
 
+## 댓글 신고 백엔드 연동 (2026-11-06)
+
+- `src/api/report.js`에 `createCommentReport(postId, commentId, reasonDetail)`을 추가했다: POST `/api/v1/posts/{postId}/comments/{commentId}/reports`.
+- 백엔드 `com.kh.back.report.service.ReportServiceImpl`에 `createCommentReport`를 추가하고, `resolveReport`가 `targetType='COMMENT'`일 때도 처리(`DELETE`)되면 `CommentMapper.deleteByAdmin`으로 관리자 삭제(`COMMENTS.DELETED_BY_TYPE='ADMIN'`)하도록 분기했다. 본인 댓글 신고는 400 `CANNOT_REPORT_OWN_COMMENT`, 중복 신고는 409 `ALREADY_REPORTED`(게시글과 동일하게 DB 유니크 제약을 변환).
+- `GET /api/v1/admin/reports` 응답에 `commentContent`·`commentDeletedAt`·`commentDeletedByType`을 추가했다(`REPORTS`를 `comments`에 LEFT JOIN). 게시글 신고 응답의 `postTitle` 등과 같은 방식이다.
+- `CommentSection`은 이제 모든 댓글이 서버 댓글이라(목록을 항상 API로 불러옴) 바로 이 API를 호출한다. 게시글과 달리 "브라우저 전용 예시 댓글" 같은 mock 경로가 없어 분기가 필요 없었다.
+- **댓글 신고의 mock(`useReports`의 `targetType==='comment'` 경로)은 이제 어디서도 쓰지 않는다.** `REPORT_SEED`를 빈 배열로 비웠고, `usePostStore`의 `comments`·`adminDeleteComment`(신고 댓글 mock 처리 전용으로 남겨뒀던 것)도 삭제했다. `useReports`/`REPORT_SEED` 자체는 남겨뒀다 — 브라우저에만 있는 예시 글(서버에 없는 postId) 신고가 여전히 이걸 쓴다.
+- `AdminReportsPage`·`AdminPage`(`useAllReports`)는 이제 백엔드 신고(게시글+댓글)와 "브라우저 예시 글" mock만 합친다. mock 쪽은 `targetType==='post'`만 남았다.
+- 진행 중 발견: 작업 중간에 `CommentApiController`·`SecurityConfig`·`src/api/comment.js`의 댓글 경로가 기존 `/api/posts/...`(버전 없음)에서 `/api/v1/posts/...`로 이미 바뀌어 있었다(이 작업에서 만든 변경이 아니다). 새로 추가한 `CommentReportApiController`와 `SecurityConfig`의 신고 경로 규칙은 바뀐 `/api/v1/posts/{postId}/comments/{commentId}/reports` 기준으로 맞췄다.
+
+## 게시글 신고 백엔드 연동 (2026-11-06)
+
+- `src/api/report.js`를 새로 추가했다. `createPostReport(postId, reasonDetail)`: POST `/api/v1/posts/community/{postId}/reports`. `getAdminReports()`: GET `/api/v1/admin/reports`(ADMIN 전용). `resolveReport(reportId, result)`: PATCH `/api/v1/admin/reports/{reportId}`, result는 `DELETE`\|`REJECT`.
+- 백엔드는 이미 설계돼 있던 `REPORTS`·`USER_SANCTIONS` 테이블 중 `REPORTS`만 이번에 연결했다(`com.kh.back.report` 패키지 신규). `TARGET_USER_ID`는 신고 시점의 글 작성자를 그대로 남긴다.
+- 본인 글 신고는 400 `CANNOT_REPORT_OWN_POST`, 중복 신고는 DB의 `UNIQUE(REPORTER_ID, TARGET_TYPE, TARGET_ID)` 위반을 409 `ALREADY_REPORTED`로 변환해 응답한다.
+- 처리(`DELETE`)하면 게시글을 관리자 삭제로 내리고(`POSTS.DELETED_BY_TYPE='ADMIN'`), 같은 글에 대기 중인 다른 신고도 함께 처리됨으로 바꾼다. 기존 자기 삭제(`deleteById`)는 `DELETED_BY_TYPE`을 기록하지 않아 그대로 두었다 — 자기 삭제한 글과 신고 전 삭제된 글은 관리자 화면에서 "삭제된 글"로만 구분되고 "관리자 삭제됨"과는 다르게 표시된다.
+- `CommunityPostPage`의 신고 버튼은 `post.source === 'server'`(실제 서버 글)일 때만 이 API를 호출한다. 브라우저에만 있는 예시 글은 여전히 mock 경로를 쓴다(실제 DB에 없는 postId라 API가 통하지 않기 때문).
+- 알려진 제한: 관리자가 삭제한 **서버** 게시글을 다시 열면, `PostMapper.findById`가 `DELETED_AT IS NULL`로 걸러내 그냥 "게시글을 찾을 수 없습니다"(404)로 보인다. 로컬 mock 글에서 보이는 "관리자에 의해 삭제된 게시글입니다" 안내 화면은 서버 글에는 아직 연결되지 않았다 — 하려면 `findById`의 삭제글 필터링 방식을 바꿔야 해서(목록·다른 조회에도 영향) 이번 범위에는 넣지 않았다.
+
 - 2026-11-03 월별 조회 통합: `findMonthlyTransactions`가 월·거래 구분별 합계를 한 번 조회한다. 수입은 세전 금액, 지출은 실제 금액을 합산한다. 서비스에서 기존 수입·지출 응답 목록으로 나누므로 화면 형식은 유지한다. 전체 DB 조회는 기본정보·기간·월별 합계 총 3회이며 아래 4회 조회 기록을 대체한다.
 - 2026-11-03 정리: 기존 breakdown·월별 개별 API와 전용 서비스 메서드·TaxDto·프론트 월별 API 함수를 제거했다. 결과 조회는 calculation-result 하나만 사용한다. 아래 과거 개별 API 유지 기록은 더 이상 적용하지 않는다.
 ## 총세금·산출 근거 연결 (2026-11-02)
@@ -229,6 +248,24 @@ ALTER TABLE TAX_TRANSACTIONS
 - 저장과 함께 `SAVE_STATUS`만 `SAVED`로 변경한다. `USER_ID`는 변경하지 않는다. JSON은 `tax_results.RESULT_DETAIL`, 저장 시각은 기존 `CALCULATED_AT`에 기록한다.
 - 결과 다시 보기 주소: `/calculator/result?taxInputId={분석번호}&saved=true`. 마이페이지 목록 UI 연결은 별도 작업이다.
 - 기존 입력·거래 수정 시 결과를 삭제하는 무효화 동작은 유지한다. 저장 내용은 클라이언트가 보낸 당시 화면 값이며 서버 검증 계산 결과로 취급하지 않는다.
+# 시뮬레이션 재계산
+
+- `POST /api/v1/tax/inputs/simulation`
+- 본문: `{ input, extraInc, extraExp, extraDonation }`. `input`에는 결과의 귀속연도·가족 수·총수입·총지출·특례기부금·일반기부금을 전달한다.
+- 추가 수입은 세전 총수입에, 추가 지출은 총지출에, 추가 기부금은 일반기부금 입력액에 더한다.
+- 기존 `TaxBreakdownDto` 계산 체인을 사용하며 기부금 인정 한도도 동일하게 적용한다.
+- 응답: `ApiResponse.data`에 변경 후 `TaxBreakdownDto`. DB 조회·수정과 Python 호출은 하지 않는다.
+- 기준 결과는 결과 페이지의 이동 state로 전달한다. 분석번호로 직접 접근하면 기존 결과 API에서 한 번 조회한다.
+# 시나리오 DB 보관
+
+- `GET /api/v1/tax/simulations`: 인증 회원의 저장 목록. 응답은 `ApiResponse.data` 배열이다.
+- `POST /api/v1/tax/simulations`: `{ extraInc, extraExp, extraDonation, totalTax, totalIncome, totalExpense }`를 기존 `SIMULATION`에 저장한다. 응답은 생성한 `simulationId`와 이름을 포함한 시나리오다.
+- `DELETE /api/v1/tax/simulations/{simulationId}`: 본인 회원번호와 함께 일치하는 시나리오 삭제. 성공 시 204.
+- 로그인 접근은 `SecurityConfig`에서 관리한다. 회원번호는 인증 정보에서 가져와 Mapper에 전달하며 요청 본문에서 받지 않는다.
+- 기존 A/B/C 이름과 최대 세 개 정책을 유지한다. 한도 초과는 409 `SCENARIO_LIMIT_REACHED`로 반환한다.
+- `INPUT_DATA_SNAPSHOT`에는 추가 수입·지출·기부금 JSON, 결과 금액 세 컬럼에는 저장 당시 계산값을 기록한다. 스키마 변경은 없다.
+- localStorage·sessionStorage·JSESSIONID 사용이나 데이터 이관은 추가하지 않는다.
+- 시뮬레이션 계산 API `POST /api/v1/tax/inputs/simulation`도 로그인 필수이며 `SecurityConfig`에서 접근을 관리한다.
 
 ## 이메일 인증번호 발송 대기 시간 (2026-11-02)
 

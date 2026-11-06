@@ -171,6 +171,12 @@ public class PostServiceImpl implements PostService {
         if ("NOTICE".equals(post.getPostType())) {
             notificationService.broadcastNoticePost(post.getPostId(), post.getTitle());
         }
+
+        // QNA 글을 새로 등록하면 담당 관리자에게 알림을 보낸다.
+        if ("QNA".equals(post.getPostType())) {
+            notificationService.notifyNewQnaPost(post.getPostId(), userId, postValidator.currentNickname(),
+                    post.getTitle(), post.getContent());
+        }
     }
 
     @Override

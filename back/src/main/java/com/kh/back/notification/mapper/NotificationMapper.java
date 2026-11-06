@@ -32,4 +32,11 @@ public interface NotificationMapper {
     // 답글 알림 1건 생성 (수신자: 답글이 달린 부모 댓글의 작성자)
     int insertReplyNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
                                  @Param("title") String title, @Param("message") String message);
+
+    // 활성 상태인 ADMIN role 전체의 USER_ID 조회 (작성자 본인은 제외)
+    List<Long> findAdminUserIds(@Param("excludeUserId") Long excludeUserId);
+
+    // QNA 글 등록 알림 생성 (수신자: ADMIN role 전체)
+    int insertQnaPostNotifications(@Param("userIds") List<Long> userIds, @Param("targetId") Long targetId,
+                                    @Param("title") String title, @Param("message") String message);
 }

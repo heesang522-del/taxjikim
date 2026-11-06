@@ -245,6 +245,18 @@
 
     </update>
 
+    <!-- 신고 처리로 관리자가 지울 때만 쓴다. "관리자에 의해 삭제됨" 표시용으로 DELETED_BY_TYPE을 남긴다. -->
+    <update id="deleteByAdmin">
+
+        UPDATE POSTS
+        SET
+        DELETED_AT = CURRENT_TIMESTAMP,
+        DELETED_BY_TYPE = 'ADMIN'
+        WHERE POST_ID = #{postId}
+        AND DELETED_AT IS NULL
+
+    </update>
+
     <select id="findFilesByPostId" resultMap="fileMapping">
 
         SELECT f.*

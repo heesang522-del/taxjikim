@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.kh.back.report.mapper.ReportMapper">
+
+    <insert id="insert" parameterType="com.kh.back.report.dto.ReportDto" useGeneratedKeys="true" keyProperty="reportId">
+        INSERT INTO REPORTS (TARGET_TYPE, TARGET_ID, TARGET_USER_ID, REASON_DETAIL, REPORTER_ID)
+        VALUES (#{targetType}, #{targetId}, #{targetUserId}, #{reasonDetail}, #{reporterId})
+    </insert>
+
+    <!-- 관리자 신고 목록. 신고 대상이 게시글/댓글이면 현재 내용·삭제 상태를 함께 보여준다. -->
+    <select id="findAll" resultType="com.kh.back.report.dto.ReportDto">
+        SELECT
+            r.REPORT_ID, r.TARGET_TYPE, r.TARGET_ID, r.TARGET_USER_ID,
+            r.REASON_DETAIL, r.STATUS, r.RESULT, r.PROCESSED_BY, r.PROCESSED_AT,
+            r.REPORTER_ID, r.CREATED_AT,
+            u.NICKNAME AS reporterNickname,
+            tu.NICKNAME AS targetUserNickname,
+            p.TITLE AS postTitle, p.DELETED_AT AS postDeletedAt, p.DELETED_BY_TYPE AS postDeletedByType,
+            cm.CONTENT AS commentContent, cm.DELETED_AT AS commentDeletedAt, cm.DELETED_BY_TYPE AS commentDeletedByType
+        FROM REPORTS r
+        LEFT JOIN users u ON u.USER_ID = r.REPORTER_ID
+        LEFT JOIN users tu ON tu.USER_ID = r.TARGET_USER_ID
+        LEFT JOIN POSTS p ON r.TARGET_TYPE = 'POST' AND p.POST_ID = r.TARGET_ID
+        LEFT JOIN comments cm ON r.TARGET_TYPE = 'COMMENT' AND cm.COMMENT_ID = r.TARGET_ID
+        ORDER BY r.CREATED_AT DESC
+    </select>
+
+    <select id="findById" resultType="com.kh.back.report.dto.ReportDto">
+        SELECT REPORT_ID, TARGET_TYPE, TARGET_ID, TARGET_USER_ID, REASON_DETAIL,
+               STATUS, RESULT, PROCESSED_BY, PROCESSED_AT, REPORTER_ID, CREATED_AT
+        FROM REPORTS
+        WHERE REPORT_ID = #{reportId}
+    </select>
+
+    <update id="resolve">
+        UPDATE REPORTS
+        SET STATUS = 'DONE', RESULT = #{result}, PROCESSED_BY = #{processedBy},
+            PROCESSED_AT = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE REPORT_ID = #{reportId}
+        AND STATUS = 'PENDING'
+    </update>
+
+    <update id="resolveOthersForTarget">
+        UPDATE REPORTS
+        SET STATUS = 'DONE', RESULT = #{result}, PROCESSED_BY = #{processedBy},
+            PROCESSED_AT = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TARGET_TYPE = #{targetType}
+        AND TARGET_ID = #{targetId}
+        AND STATUS = 'PENDING'
+    </update>
+
+</mapper>

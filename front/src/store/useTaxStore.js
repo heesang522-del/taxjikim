@@ -5,7 +5,7 @@ import { create } from 'zustand';
 export const EMPTY_SIM = {
   extraExp: 0,
   extraInc: 0,
-  yellow: 0,
+  extraDonation: 0,
 };
 
 function makeId(prefix = 'row') {

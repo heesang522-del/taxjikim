@@ -11,6 +11,7 @@ import com.kh.back.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -58,8 +59,23 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
                         // 결과 JSON 저장·조회는 로그인 사용자만 접근한다.
                         .requestMatchers("/api/v1/tax/inputs/*/result").authenticated()
+                        .requestMatchers("/api/v1/tax/simulations", "/api/v1/tax/simulations/**").authenticated()
+                        .requestMatchers("/api/v1/tax/inputs/simulation").authenticated()
                         .requestMatchers("/ws/chat/**").authenticated()
                         .requestMatchers("/api/v1/chatbot/**").authenticated() // 챗봇 API는 로그인한 사용자만 접근할 수 있게 한다.
+                        // 알림·1:1 상담 채팅은 본인 로그인 없이는 의미가 없는 API라 전부 인증을 요구한다.
+                        .requestMatchers("/api/v1/notifications/**").authenticated()
+                        .requestMatchers("/api/v1/chat/**").authenticated()
+                        .requestMatchers("/api/v1/auth/session").authenticated()
+                        // 댓글 목록 조회는 비로그인도 허용하고, 쓰기 동작만 인증을 요구한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts/*/comments").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/posts/*/comments/*").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/*/comments/*").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts/*/comments/*/reports").authenticated()
+                        // 게시글 목록·조회는 비로그인도 허용하고(비공개 QNA 필터링은 PostValidator가 처리),
+                        // 업로드·작성·수정·삭제만 인증을 요구한다.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/posts/community/**").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/api/v1/posts/community/**").authenticated()
                         .anyRequest().permitAll())
                 .exceptionHandling(errors -> errors
                         .authenticationEntryPoint((request, response, exception) -> apiResponseWriter.write(response, 401,

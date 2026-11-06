@@ -21,8 +21,9 @@ import AdminChatsPage from './pages/AdminChatsPage';
 import CalculatorInputPage from './pages/CalculatorInputPage';
 import CalculatorLoadingPage from './pages/CalculatorLoadingPage';
 import CalculatorResultPage from './pages/CalculatorResultPage';
-import CalculatorSimPage from './pages/CalculatorSimPage';
 import { ChatbotPage } from './pages/ChatbotPage';
+import { CalculatorSimPage } from './pages/CalculatorSimPage';
+
 // 주소에 맞는 화면을 연결한다. BrowserRouter는 main.jsx에서 한 번만 적용한다.
 // 로그인·회원가입·계정 찾기는 같은 AuthPage를 쓰고, key로 주소가 바뀔 때 탭을 새로 시작한다.
 function App() {
@@ -48,38 +49,10 @@ function App() {
         <Route path="support" element={<SupportPage />} />
         <Route path="chatbot" element={<ChatbotPage />} />
         <Route path="support/qna/:id" element={<SupportQnaPostPage />} />
-        <Route
-          path="admin"
-          element={
-            <RequireAdmin>
-              <AdminPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="admin/reports"
-          element={
-            <RequireAdmin>
-              <AdminReportsPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="admin/inquiries"
-          element={
-            <RequireAdmin>
-              <AdminInquiriesPage />
-            </RequireAdmin>
-          }
-        />
-        <Route
-          path="admin/chats"
-          element={
-            <RequireAdmin>
-              <AdminChatsPage />
-            </RequireAdmin>
-          }
-        />
+        <Route path="admin" element={<RequireAdmin><AdminPage /></RequireAdmin>} />
+        <Route path="admin/reports" element={<RequireAdmin><AdminReportsPage /></RequireAdmin>} />
+        <Route path="admin/inquiries" element={<RequireAdmin><AdminInquiriesPage /></RequireAdmin>} />
+        <Route path="admin/chats" element={<RequireAdmin><AdminChatsPage /></RequireAdmin>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

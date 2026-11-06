@@ -1,8 +1,8 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getTaxCalculationResult, getSavedTaxResult, saveTaxResult } from '../api/taxApi';
 import { Button, Icon, Note } from '../components/common/index';
 import { SummaryCards } from '../components/calculator/result/SummaryCards';
@@ -17,19 +17,27 @@ import { useToast } from '../store/useToastStore';
 
 export default function CalcResultPage() {
   const [searchParams] = useSearchParams();
-  const { search } = useLocation();
+  const { search, state } = useLocation();
+  const navigate = useNavigate();
   const taxInputId = Number(searchParams.get('taxInputId'));
   const validTaxInputId = Number.isSafeInteger(taxInputId) && taxInputId > 0;
   const savedResult = searchParams.get('saved') === 'true';
   const { calculated } = useTax();
-  const [result, setResult] = useState(null);
+  const [result, setResult] = useState(state?.taxResult ?? null);
   const breakdown = result?.breakdown;
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!state?.taxResult);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const autoSaveStarted = useRef(false);
 
   // 결과를 한 번 조회하고 산출 근거와 월별 목록을 각 컴포넌트에 나눠 전달한다.
   useEffect(() => {
+    // 로그인 후 돌아온 경우 당시 화면 데이터를 유지하고 다시 계산하지 않는다.
+    if (state?.taxResult) {
+      setResult(state.taxResult);
+      setIsLoading(false);
+      return;
+    }
     if ((!calculated && !savedResult) || !validTaxInputId) return;
     let cancelled = false;
     const controller = new AbortController();
@@ -57,36 +65,50 @@ export default function CalcResultPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [calculated, savedResult, taxInputId, validTaxInputId]);
+  }, [calculated, savedResult, taxInputId, validTaxInputId, state]);
   const { loggedIn } = useAuth();
   const toast = useToast();
   // 페이지의 결과 전체를 저장하며 브라우저의 요약 기록으로 대체하지 않는다.
-  const handleSaveResult = async () => {
+  const handleSaveResult = useCallback(async () => {
     if (isSaving) return;
-    if (!loggedIn) {
-      toast('저장하려면 로그인하세요');
-      return;
-    }
     if (!breakdown || isLoading || errorMessage) {
       toast('계산 결과를 확인한 뒤 저장해주세요');
+      return;
+    }
+    if (!loggedIn) {
+      navigate(ROUTES.auth, {
+        state: {
+          returnTo: `${ROUTES.calcResult}${search}`,
+          returnState: { taxResult: result, saveAfterLogin: true },
+        },
+      });
       return;
     }
     setIsSaving(true);
     try {
       await saveTaxResult(taxInputId, result);
-      toast(`${breakdown.taxYear}년 결과를 저장했습니다`);
+      toast('저장되었습니다');
     } catch (error) {
       toast(error.message || '결과를 저장하지 못했습니다');
     } finally {
       setIsSaving(false);
     }
-  };
+  }, [isSaving, breakdown, isLoading, errorMessage, loggedIn, navigate, search, result, taxInputId, toast]);
+
+  // 비회원이 선택한 저장 동작은 로그인 후 한 번만 이어서 실행하고 현재 결과창에 머문다.
+  useEffect(() => {
+    if (!state?.saveAfterLogin || !loggedIn || !result || isLoading || autoSaveStarted.current) return;
+    autoSaveStarted.current = true;
+    void handleSaveResult();
+    navigate(`${ROUTES.calcResult}${search}`, { replace: true, state: { taxResult: result } });
+  }, [state, loggedIn, result, isLoading, handleSaveResult, navigate, search]);
 
   if (!validTaxInputId) {
     return <p role="alert">분석번호가 없습니다. 입력 화면에서 분석 결과 보기를 눌러주세요.</p>;
   }
 
-  if (!calculated && !savedResult) return <Navigate to={`${ROUTES.calcLoading}${search}`} replace />;
+  if (!calculated && !savedResult && !state?.taxResult)
+    return <Navigate to={`${ROUTES.calcLoading}${search}`} replace />;
 
   return (
     <div className="grid">
@@ -108,19 +130,25 @@ export default function CalcResultPage() {
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         {!loggedIn && (
           <span className="small muted" style={{ alignSelf: 'center' }}>
-            결과 저장은 로그인 후 이용할 수 있어요.
+            결과 저장과 시뮬레이션은 회원 전용입니다. 로그인 후 이용해주세요.
           </span>
         )}
-        {!loggedIn && (
-          <Button variant="soft" to={ROUTES.auth}>
-            로그인
-          </Button>
-        )}
         <Button onClick={handleSaveResult} disabled={isSaving}>
-          {isSaving ? '저장 중…' : '결과 저장'}
+          {isSaving ? '저장 중…' : '결과 저장만 하기'}
         </Button>
-        <Button variant="primary" to={ROUTES.calcSim}>
-          <Icon name="sliders" size={16} /> 시뮬레이션으로 줄여보기
+        <Button
+          variant="primary"
+          to={loggedIn ? `${ROUTES.calcSim}${search}` : ROUTES.auth}
+          state={
+            loggedIn
+              ? { taxResult: result }
+              : {
+                  returnTo: `${ROUTES.calcSim}${search}`,
+                  returnState: { taxResult: result },
+                }
+          }
+        >
+          <Icon name="sliders" size={16} /> 시뮬레이션으로 이동
         </Button>
       </div>
       <div className="grid g2">

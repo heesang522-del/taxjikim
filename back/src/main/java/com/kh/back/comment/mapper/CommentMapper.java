@@ -21,6 +21,9 @@ public interface CommentMapper {
     int softDelete(@Param("postId") Long postId, @Param("commentId") Long commentId,
                    @Param("userId") Long userId);
 
+    // 신고 처리로 관리자가 지울 때만 쓴다. 작성자 제한 없이 지운다.
+    int deleteByAdmin(@Param("commentId") Long commentId);
+
     //댓글 수정
     int update(@Param("postId") Long postId, @Param("commentId") Long commentId,
                @Param("userId") Long userId, @Param("content") String content);
