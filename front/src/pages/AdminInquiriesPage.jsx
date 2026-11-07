@@ -6,6 +6,7 @@ import { Button, Card, Pill } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
 import { useInquiry } from '../store/useInquiryStore';
 import { useToast } from '../store/useToastStore';
+import { toDateLabel } from '../utils/format';
 
 function ReplyBox({ onSubmit, disabled }) {
   const [text, setText] = useState('');
@@ -77,7 +78,7 @@ export default function AdminInquiriesPage() {
                     <summary>{q.title} <Pill tone={q.visibility === 'public' ? 'primary' : 'neutral'}>{q.visibility === 'public' ? '공개' : '비공개'}</Pill></summary>
                     <p>{q.body}</p>
                     {q.files?.length > 0 && <p className="small muted">첨부: {q.files.join(', ')}</p>}
-                    <p className="small muted">{q.author} · {q.createdAt} · <Button variant="link" size="sm" to={ROUTES.qnaPost(q.id)}>Q&A 상세 보기</Button></p>
+                    <p className="small muted">{q.author} · {toDateLabel(q.createdAt)} · <Button variant="link" size="sm" to={ROUTES.qnaPost(q.id)}>Q&A 상세 보기</Button></p>
                     <ReplyBox onSubmit={(text) => submitAnswer(q.id, text)} disabled={submittingId === q.id} />
                   </details>
                 ))
@@ -89,7 +90,7 @@ export default function AdminInquiriesPage() {
                   <details key={q.id}>
                     <summary>{q.title} <Pill tone={q.visibility === 'public' ? 'primary' : 'neutral'}>{q.visibility === 'public' ? '공개' : '비공개'}</Pill></summary>
                     <p>{q.body}</p>
-                    <p className="small muted">{q.author} · {q.createdAt} · <Button variant="link" size="sm" to={ROUTES.qnaPost(q.id)}>Q&A 상세 보기</Button></p>
+                    <p className="small muted">{q.author} · {toDateLabel(q.createdAt)} · <Button variant="link" size="sm" to={ROUTES.qnaPost(q.id)}>Q&A 상세 보기</Button></p>
                     {q.answer
                       ? <p style={{ marginTop: 6 }}><b>답변</b> {q.answer}</p>
                       : <p className="small muted" style={{ marginTop: 6 }}>답변 내용은 상세 보기에서 확인할 수 있습니다.</p>}
