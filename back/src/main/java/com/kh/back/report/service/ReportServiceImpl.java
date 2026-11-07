@@ -3,6 +3,7 @@ package com.kh.back.report.service;
 import com.kh.back.comment.dto.CommentDto;
 import com.kh.back.comment.mapper.CommentMapper;
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.notification.service.NotificationService;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.mapper.PostMapper;
 import com.kh.back.report.dto.ReportDto;
@@ -27,6 +28,7 @@ public class ReportServiceImpl implements ReportService {
     private final ReportMapper reportMapper;
     private final PostMapper postMapper;
     private final CommentMapper commentMapper;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -96,10 +98,17 @@ public class ReportServiceImpl implements ReportService {
             throw new ApiException(HttpStatus.CONFLICT, "REPORT_ALREADY_PROCESSED", "이미 처리된 신고입니다.");
         }
 
+        boolean isComment = TARGET_TYPE_COMMENT.equals(report.getTargetType());
+        // 신고자 알림에 쓸 게시글 ID·제목은 삭제되기 전에 미리 구해둔다. 댓글 신고면 소속 게시글을 찾는다
+        // (삭제돼도 POST_ID는 그대로 조회되지만, 게시글 제목은 그 사이 사라졌을 수 있어 null을 허용한다).
+        Long notifyPostId = isComment ? commentMapper.findPostIdById(report.getTargetId()) : report.getTargetId();
+        PostDto notifyPost = notifyPostId != null ? postMapper.findById(notifyPostId) : null;
+        String notifyTitle = notifyPost != null ? notifyPost.getTitle() : "신고하신 내용";
+
         if (RESULT_DELETE.equals(result)) {
             if (TARGET_TYPE_POST.equals(report.getTargetType())) {
                 postMapper.deleteByAdmin(report.getTargetId());
-            } else if (TARGET_TYPE_COMMENT.equals(report.getTargetType())) {
+            } else if (isComment) {
                 commentMapper.deleteByAdmin(report.getTargetId());
             }
         }
@@ -110,6 +119,9 @@ public class ReportServiceImpl implements ReportService {
         if (RESULT_DELETE.equals(result)) {
             reportMapper.resolveOthersForTarget(report.getTargetType(), report.getTargetId(), result, adminId);
         }
+
+        notificationService.notifyReportResolved(report.getReporterId(), notifyPostId, notifyTitle,
+                report.getTargetType(), result);
     }
 
     private String requireReasonDetail(String reasonDetail) {

@@ -49,6 +49,13 @@
         WHERE COMMENT_ID = #{commentId} AND DELETED_AT IS NULL
     </select>
 
+    <!-- 삭제 여부와 무관하게 소속 게시글 ID만 조회한다. -->
+    <select id="findPostIdById" resultType="Long">
+        SELECT POST_ID
+        FROM comments
+        WHERE COMMENT_ID = #{commentId}
+    </select>
+
     <insert id="insert" useGeneratedKeys="true" keyProperty="commentId">
         INSERT INTO comments (POST_ID, USER_ID, PARENT_COMMENT_ID, CONTENT, CREATED_AT, UPDATED_AT)
         VALUES (#{postId}, #{userId}, #{parentCommentId}, #{content}, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)

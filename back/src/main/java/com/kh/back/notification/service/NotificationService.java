@@ -33,4 +33,7 @@ public interface NotificationService {
 
     // QNA 게시글이 새로 등록됐을 때 고정 담당 관리자 1명에게 알림 발송 (관리자 본인이 작성한 경우 제외)
     void notifyNewQnaPost(Long postId, Long authorId, String authorNickname, String postTitle, String postContent);
+
+    // 신고 처리 결과(삭제/반려)를 신고자에게 알린다. postId는 알림 클릭 시 이동할 게시글(댓글이면 소속 게시글) ID다.
+    void notifyReportResolved(Long reporterId, Long postId, String postTitle, String targetType, String result);
 }

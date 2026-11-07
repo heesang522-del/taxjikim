@@ -104,4 +104,10 @@
         </foreach>
     </insert>
 
+    <!-- 신고 처리 결과를 신고자에게 알린다 -->
+    <insert id="insertReportResultNotification">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES (#{userId}, 'REPORT_RESULT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+    </insert>
+
 </mapper>
