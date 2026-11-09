@@ -49,29 +49,11 @@ MAX_PAGES = 50
 MODEL_DIR = Path(__file__).resolve().parent.parent / "models"
 
 
-# 학습 보고서에서 선택된 거래 분류 모델을 읽는다.
+# 수입·지출 모두 확정한 LinearSVC 번들만 읽는다.
 def load_transaction_model(kind: str, label: str) -> dict:
     model_dir = MODEL_DIR / f"{kind}_classifier"
     try:
-        report = json.loads(
-            (model_dir / "model_report.json").read_text(
-                encoding="utf-8"
-            )
-        )
-
-        selected = report["selected_model"]
-
-        if selected not in (
-            "logistic_regression",
-            "linear_svc",
-        ):
-            raise ValueError(
-                "선택한 모델 이름이 올바르지 않습니다."
-            )
-
-        return joblib.load(
-            model_dir / f"{selected}_bundle.pkl"
-        )
+        return joblib.load(model_dir / "linear_svc_bundle.pkl")
 
     except (
         FileNotFoundError,
@@ -84,7 +66,7 @@ def load_transaction_model(kind: str, label: str) -> dict:
         ) from exc
 
 
-# 성공 기록과 학습 보고서가 일치할 때만 기존 모델 종류의 새 번들을 적용한다.
+# 성공 기록과 학습 보고서가 일치할 때만 새 LinearSVC 번들을 적용한다.
 def apply_retrained_model(app: FastAPI, kind: str) -> None:
     retraining_dir = MODEL_DIR / "retraining"
     classifier_dir = retraining_dir / kind / "classifier"
@@ -399,7 +381,7 @@ def classify_transactions(
 
     try:
         # 설명 배열과 원래 거래 참조를 같은 순서로 보관하므로 날짜·금액을 다시 조합하지 않는다.
-        predictions = classify_descriptions(model["pipeline"], model["model_name"], descriptions)
+        predictions = classify_descriptions(model["pipeline"], descriptions)
         for transaction, prediction in zip(targets, predictions):
             transaction["category"] = prediction["category"]
     except Exception as exc:
