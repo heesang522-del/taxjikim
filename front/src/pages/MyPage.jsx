@@ -7,6 +7,7 @@ import { getSavedTaxResults } from '../api/taxApi';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
 import { ProfileSettings } from '../components/mypage/ProfileSettings';
+import { AnnualTaxComparison } from '../components/mypage/AnnualTaxComparison';
 import { useChat } from '../store/useChatStore';
 
 export default function MyPage() {
@@ -82,6 +83,7 @@ export default function MyPage() {
   return (
     <div className="grid g-side" style={{ alignItems: 'start' }}>
       <div className="grid" style={{ minWidth: 0 }}>
+        <AnnualTaxComparison savedResults={savedResults} isLoading={isLoading} errorMessage={errorMessage} />
         <Card title="저장한 분석 결과" icon="calculator">
           {isLoading ? (
             <p className="state-msg">저장한 분석 결과를 불러오고 있습니다.</p>
