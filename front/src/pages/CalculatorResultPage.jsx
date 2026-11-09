@@ -23,17 +23,18 @@ export default function CalcResultPage() {
   const validTaxInputId = Number.isSafeInteger(taxInputId) && taxInputId > 0;
   const savedResult = searchParams.get('saved') === 'true';
   const { calculated } = useTax();
-  const [result, setResult] = useState(state?.taxResult ?? null);
+  const [result, setResult] = useState(savedResult ? null : state?.taxResult ?? null);
   const breakdown = result?.breakdown;
-  const [isLoading, setIsLoading] = useState(!state?.taxResult);
+  const [isLoading, setIsLoading] = useState(savedResult || !state?.taxResult);
   const [errorMessage, setErrorMessage] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const autoSaveStarted = useRef(false);
+  const toast = useToast();
 
   // 결과를 한 번 조회하고 산출 근거와 월별 목록을 각 컴포넌트에 나눠 전달한다.
   useEffect(() => {
     // 로그인 후 돌아온 경우 당시 화면 데이터를 유지하고 다시 계산하지 않는다.
-    if (state?.taxResult) {
+    if (!savedResult && state?.taxResult) {
       setResult(state.taxResult);
       setIsLoading(false);
       return;
@@ -54,6 +55,8 @@ export default function CalcResultPage() {
           : await getTaxCalculationResult(taxInputId, { signal: controller.signal });
         if (!cancelled) setResult(response.data);
       } catch (error) {
+        // 소유자가 아닌 저장 결과 URL은 결과를 표시하지 않고 마이페이지로 보낸다.
+        if (!cancelled && error.status === 403) { toast('접근할 수 없는 분석입니다.'); navigate(ROUTES.mypage, { replace: true }); return; }
         if (!cancelled) setErrorMessage(error.message || '계산 결과를 불러오지 못했습니다.');
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -65,9 +68,8 @@ export default function CalcResultPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [calculated, savedResult, taxInputId, validTaxInputId, state]);
+  }, [calculated, savedResult, taxInputId, validTaxInputId, state, navigate, toast]);
   const { loggedIn } = useAuth();
-  const toast = useToast();
   // 페이지의 결과 전체를 저장하며 브라우저의 요약 기록으로 대체하지 않는다.
   const handleSaveResult = useCallback(async () => {
     if (isSaving) return;

@@ -28,8 +28,8 @@ public interface TaxService {
     // 화면의 결과 JSON과 해당 분석의 회원번호를 함께 보관한다.
     void saveResult(Long taxInputId, Long userId, JsonNode result);
 
-    // 저장한 결과 JSON을 조회한다.
-    JsonNode getSavedResult(Long taxInputId);
+    // 분석 소유자를 확인한 뒤 저장 결과 JSON을 조회한다.
+    JsonNode getSavedResult(Long taxInputId, Long userId);
 
     // 한 번 조회한 월별 목록으로 총액·세금을 계산하고 페이지 데이터를 모은다.
     TaxCalculationResultDto getCalculationResult(Long taxInputId);

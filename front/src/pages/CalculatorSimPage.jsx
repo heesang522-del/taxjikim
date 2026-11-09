@@ -2,7 +2,7 @@
 'use no memo';
 
 import { useEffect, useState } from 'react';
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { SimSliders } from '../components/calculator/SimSliders';
 import { SimCompare } from '../components/calculator/SimCompare';
 import { getTaxCalculationResult, getSavedTaxResult, simulateTax } from '../api/taxApi';
@@ -10,6 +10,7 @@ import { EMPTY_SIM } from '../store/useTaxStore';
 import { ScenarioTable } from '../components/calculator/ScenarioTable';
 import { useAuth } from '../store/useAuthStore';
 import { ROUTES } from '../utils/routes';
+import { useToast } from '../store/useToastStore';
 
 export function CalculatorSimPage() {
   const { user } = useAuth();
@@ -21,13 +22,15 @@ export function CalculatorSimPage() {
 }
 
 function SimulationContent() {
+  const navigate = useNavigate();
+  const toast = useToast();
   const { loggedIn, authStatus } = useAuth();
   const { state } = useLocation();
   const [params] = useSearchParams();
   const taxInputId = Number(params.get('taxInputId'));
   const saved = params.get('saved') === 'true';
   const [sim, setSim] = useState({ ...EMPTY_SIM });
-  const [result, setResult] = useState(state?.taxResult ?? null);
+  const [result, setResult] = useState(saved ? null : state?.taxResult ?? null);
   const [scenario, setScenario] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -42,7 +45,7 @@ function SimulationContent() {
     if (!loggedIn || authStatus === 'checking') return;
     const controller = new AbortController();
     setErrorMessage('');
-    if (state?.taxResult) {
+    if (!saved && state?.taxResult) {
       setResult(state.taxResult);
       return () => controller.abort();
     }
@@ -59,6 +62,8 @@ function SimulationContent() {
           : await getTaxCalculationResult(taxInputId, { signal: controller.signal });
         if (!controller.signal.aborted) setResult(response.data);
       } catch (error) {
+        // 저장 시뮬레이션도 같은 소유권 검사 결과에 따라 접근을 차단한다.
+        if (!controller.signal.aborted && error.status === 403) { toast('접근할 수 없는 분석입니다.'); navigate(ROUTES.mypage, { replace: true }); return; }
         if (!controller.signal.aborted) {
           setErrorMessage(error.message || '기준 결과를 불러오지 못했습니다.');
           setIsLoading(false);
@@ -67,7 +72,7 @@ function SimulationContent() {
     }
     loadResult();
     return () => controller.abort();
-  }, [state, taxInputId, saved, loggedIn, authStatus]);
+  }, [state, taxInputId, saved, loggedIn, authStatus, navigate, toast]);
 
   // 추가 금액만 서버에 전달한다. 입력을 멈춘 뒤 요청하고 이전 응답은 반영하지 않는다.
   useEffect(() => {
@@ -125,6 +130,8 @@ function SimulationContent() {
 
   return (
     <div className="grid g-side">
+      {/* 현재 조회한 기준 결과의 귀속연도를 화면 제목에 표시한다. */}
+      <h2 style={{ gridColumn: '1 / -1', margin: 0 }}>{result?.breakdown?.taxYear ? `${result.breakdown.taxYear}년 귀속 시뮬레이션` : '시뮬레이션'}</h2>
       <div className="grid" style={{ minWidth: 0 }}>
         <SimSliders
           taxInputId={taxInputId}

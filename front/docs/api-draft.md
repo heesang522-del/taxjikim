@@ -250,7 +250,7 @@ ALTER TABLE TAX_TRANSACTIONS
 # 결과 JSON 보관 (TJK-202)
 
 - `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.
-- `GET /api/v1/tax/inputs/{taxInputId}/result`: 저장 JSON을 `ApiResponse.data`로 반환한다. 세금 재계산은 하지 않는다.
+- `GET /api/v1/tax/inputs/{taxInputId}/result`: 분석번호와 인증 회원번호를 JOIN 조회 조건으로 함께 사용해 본인의 저장 JSON만 `ApiResponse.data`로 반환한다. DB 조회는 한 번이며, 결과 미존재와 소유자 불일치를 구분하지 않고 403 `TAX_INPUT_FORBIDDEN`을 반환한다. 세금 재계산은 하지 않는다.
 - 로그인 접근은 `SecurityConfig`에서 관리한다. 컨트롤러는 인증 정보의 회원번호를 전달하며 서비스에 로그인 검사나 세션 조회를 추가하지 않는다.
 - 결과 저장 시 기존 `tax_inputs.USER_ID`에 인증 회원번호를 기록하고 `SAVE_STATUS`를 `SAVED`로 변경한다. 다른 회원에게 연결된 분석은 덮어쓰지 않는다. JSON 저장과 회원번호 기록은 같은 트랜잭션으로 처리한다.
 - `tax_results` 컬럼은 추가하지 않는다. JSON은 기존 `RESULT_DETAIL`, 저장 시각은 `CALCULATED_AT`에 기록한다. 비회원 분석 소유권 증명 방식은 별도 작업이다.

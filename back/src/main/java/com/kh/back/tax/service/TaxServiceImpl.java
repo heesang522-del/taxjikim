@@ -129,10 +129,11 @@ public class TaxServiceImpl implements TaxService {
     // 저장된 JSON만 조회하며 계산 메서드나 업로드 서비스를 호출하지 않는다.
     @Override
     @Transactional(readOnly = true)
-    public JsonNode getSavedResult(Long taxInputId) {
-        String detail = taxMapper.findResult(taxInputId);
+    public JsonNode getSavedResult(Long taxInputId, Long userId) {
+        // 소유자 확인과 결과 조회를 한 번에 처리하고, 미존재와 권한 없음을 구분해 노출하지 않는다.
+        String detail = taxMapper.findResult(taxInputId, userId);
         if (detail == null) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_RESULT_NOT_FOUND", "저장된 결과가 없습니다.");
+            throw new ApiException(HttpStatus.FORBIDDEN, "TAX_INPUT_FORBIDDEN", "조회할 수 없는 저장 결과입니다.");
         }
         return JsonMapper.builder().build().readTree(detail);
     }

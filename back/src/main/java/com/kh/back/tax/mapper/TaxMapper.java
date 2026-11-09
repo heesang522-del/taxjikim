@@ -35,8 +35,8 @@ public interface TaxMapper {
     // 분석의 회원번호와 저장 상태를 함께 기록한다.
     int markResultSaved(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
-    // 저장한 JSON 원문을 조회한다.
-    String findResult(@Param("taxInputId") Long taxInputId);
+    // 분석번호와 소유자 회원번호가 모두 일치하는 저장 JSON을 조회한다.
+    String findResult(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
     // 같은 분석의 귀속연도·가족 수·기부금액을 조회한다.
     TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId);

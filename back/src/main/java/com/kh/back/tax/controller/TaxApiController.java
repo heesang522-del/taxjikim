@@ -52,10 +52,10 @@ public class TaxApiController {
         return ResponseEntity.noContent().build();
     }
 
-    // 재계산 없이 저장 당시의 JSON을 반환한다.
+    // 인증된 회원번호를 전달해 본인의 저장 결과만 조회한다.
     @GetMapping("/{taxInputId}/result")
-    public ApiResponse<JsonNode> getSavedResult(@PathVariable("taxInputId") Long taxInputId) {
-        return ApiResponse.ok(taxService.getSavedResult(taxInputId));
+    public ApiResponse<JsonNode> getSavedResult(@AuthenticationPrincipal CustomUserDetails principal, @PathVariable("taxInputId") Long taxInputId) {
+        return ApiResponse.ok(taxService.getSavedResult(taxInputId, principal.getUserId()));
     }
 
     // 결과 페이지에 필요한 산출 근거·월별 금액·사업자등록 여부를 함께 반환한다.
