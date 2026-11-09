@@ -83,6 +83,7 @@
                GENERAL_DONATION_AMOUNT AS generalDonationAmount
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
+          AND (USER_ID = #{userId} OR USER_ID IS NULL)
     </select>
 
     <!-- 수입·지출을 포함한 전체 자료 기간을 한 번에 조회한다. -->

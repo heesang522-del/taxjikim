@@ -60,8 +60,8 @@ public class TaxApiController {
 
     // 결과 페이지에 필요한 산출 근거·월별 금액·사업자등록 여부를 함께 반환한다.
     @GetMapping("/{taxInputId}/calculation-result")
-    public ApiResponse<TaxCalculationResultDto> getCalculationResult(@PathVariable("taxInputId") Long taxInputId) {
-        return ApiResponse.ok(taxService.getCalculationResult(taxInputId));
+    public ApiResponse<TaxCalculationResultDto> getCalculationResult(@AuthenticationPrincipal CustomUserDetails principal, @PathVariable("taxInputId") Long taxInputId) {
+        return ApiResponse.ok(taxService.getCalculationResult(taxInputId, principal == null ? null : principal.getUserId()));
     }
 
 }

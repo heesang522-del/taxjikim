@@ -32,5 +32,5 @@ public interface TaxService {
     JsonNode getSavedResult(Long taxInputId, Long userId);
 
     // 한 번 조회한 월별 목록으로 총액·세금을 계산하고 페이지 데이터를 모은다.
-    TaxCalculationResultDto getCalculationResult(Long taxInputId);
+    TaxCalculationResultDto getCalculationResult(Long taxInputId, Long userId);
 }

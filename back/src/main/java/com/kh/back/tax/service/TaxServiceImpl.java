@@ -141,11 +141,11 @@ public class TaxServiceImpl implements TaxService {
     // 거래 기간과 월별 목록을 한 번씩 조회해 계산과 그래프에서 함께 사용한다.
     @Override
     @Transactional(readOnly = true)
-    public TaxCalculationResultDto getCalculationResult(Long taxInputId) {
-        // 1. 분석 기본정보와 공제 조건을 조회한다.
-        TaxCalculationInputDto input = taxMapper.findCalculationInput(taxInputId);
+    public TaxCalculationResultDto getCalculationResult(Long taxInputId, Long userId) {
+        // 1. 회원 소유 분석은 본인만, 비회원 분석은 기존처럼 조회하며 추가 DB 요청은 하지 않는다.
+        TaxCalculationInputDto input = taxMapper.findCalculationInput(taxInputId, userId);
         if (input == null) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "분석 정보를 찾을 수 없습니다.");
+            throw new ApiException(HttpStatus.FORBIDDEN, "TAX_INPUT_FORBIDDEN", "조회할 수 없는 분석입니다.");
         }
 
         // 2. 첫·마지막 거래 날짜가 있고, 두 날짜의 연도가 같은지 확인한다.

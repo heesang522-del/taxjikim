@@ -222,6 +222,7 @@ ALTER TABLE TAX_TRANSACTIONS
 - 추가 응답 필드: `actualNetIncome: number | null`(실제 세후 수입 합계), `deductedAmount: number | null`(실제 세전 합계 − 실제 세후 합계). 수입 입금액 누락 시 둘 다 null이다. 추가 납부액이나 국내 기납부세액으로 확정한 값이 아니다. 최신 화면 합의에 따라 둘 다 카드에서 별도 표시하지 않으며, 추가 납부·환급 정산 연결은 후속 작업이다.
 
 - `GET /api/v1/tax/inputs/{taxInputId}/calculation-result`
+- 기본정보 조회 SQL에서 인증 회원번호와 `USER_ID`가 같거나 `USER_ID IS NULL`인 분석만 조회한다. 비회원 호출은 회원번호를 null로 전달하며 기존 비회원 계산을 유지한다. 조회되지 않으면 403 `TAX_INPUT_FORBIDDEN`을 반환하고 거래 조회·계산은 진행하지 않는다. 별도 소유자 조회는 추가하지 않는다.
 - 공통 응답 `data`: `{ breakdown: TaxBreakdownDto, monthlyIncomes: MonthlyAmountDto[], monthlyExpenses: MonthlyAmountDto[], businessRegistered: boolean | null, actualIncome: number, predictedIncome: number, actualExpense: number, predictedExpense: number }`
 - `actualIncome`·`actualExpense`는 실제 월별 금액 합계, `predictedIncome`·`predictedExpense`는 남은 달 예상 금액 합계다. 수입은 모두 세전 기준이다. 실제·예상 합계는 breakdown의 각 총액과 일치한다.
 - 월별 항목: `{ month: number, amount: number, predicted: boolean }`. 실제·예상 금액을 서버에서 계산한다.

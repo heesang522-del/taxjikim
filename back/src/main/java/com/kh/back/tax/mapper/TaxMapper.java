@@ -39,7 +39,7 @@ public interface TaxMapper {
     String findResult(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
     // 같은 분석의 귀속연도·가족 수·기부금액을 조회한다.
-    TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId);
+    TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
     // 분석에 저장된 전체 거래의 첫 날짜와 마지막 날짜를 함께 조회한다.
     TransactionPeriodDto findTransactionPeriod(@Param("taxInputId") Long taxInputId);
