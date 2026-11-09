@@ -27,11 +27,11 @@ public interface ChatbotService {
             Long conversationId
     );
 
-    // 일반 응답과 SSE 응답이 동일한 질문 처리 로직을 사용한다.
+    // SSE 작업에서 검증된 질문을 받고 답변 조각을 onDelta로 전달한다.
     ChatbotReply ask(
             CustomUserDetails principal,
             Long conversationId,
-            String message,
+            String question,
             Consumer<String> onDelta,
             QuestionControl control
     );

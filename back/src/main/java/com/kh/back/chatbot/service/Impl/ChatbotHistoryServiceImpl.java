@@ -93,6 +93,16 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public void requireConversationOwnership(
+            Long userId,
+            Long conversationId
+    ) {
+        // 접수와 취소 단계에서는 대화방 소유권만 확인한다.
+        requireConversation(userId, conversationId);
+    }
+
+    @Override
     @Transactional(
             readOnly = true,
             isolation = Isolation.REPEATABLE_READ

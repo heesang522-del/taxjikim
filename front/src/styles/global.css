@@ -286,27 +286,6 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
   margin-top: 6px;
 }
 
-.ai-chat-waiting {
-  display: flex;
-  align-items: center;
-  align-self: flex-start;
-  flex-shrink: 0;
-  gap: 8px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: var(--fill);
-  color: var(--text-muted);
-  font-size: 13px;
-}
-
-.ai-chat-waiting-dot {
-  flex-shrink: 0;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--primary);
-}
-
 .ai-chat-error {
   flex-shrink: 0;
   padding: 12px;

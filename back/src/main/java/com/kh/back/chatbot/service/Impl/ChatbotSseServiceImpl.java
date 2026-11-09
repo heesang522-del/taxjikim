@@ -2,7 +2,9 @@ package com.kh.back.chatbot.service.Impl;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chatbot.dto.ChatbotReply;
+import com.kh.back.chatbot.dto.ChatbotRequestKeyDto;
 import com.kh.back.chatbot.dto.ChatbotSseEvent;
+import com.kh.back.chatbot.dto.QuestionTaskDto;
 import com.kh.back.chatbot.service.ChatbotHistoryService;
 import com.kh.back.chatbot.service.ChatbotService;
 import com.kh.back.chatbot.service.ChatbotSseService;
@@ -34,7 +36,7 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
     private final SseEmitterRegistry sseEmitterRegistry;
     private final TaskExecutor chatbotTaskExecutor;
 
-    private final ConcurrentHashMap<RequestKey, QuestionTask> tasks =
+    private final ConcurrentHashMap<ChatbotRequestKeyDto, QuestionTaskDto> tasks =
             new ConcurrentHashMap<>();
 
     public ChatbotSseServiceImpl(
@@ -55,24 +57,16 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             CustomUserDetails principal,
             Long conversationId,
             String requestId,
-            String message
+            String question
     ) {
-        // 실행 전에 로그인 사용자의 대화방 소유권을 확인한다.
-        historyService.getSnapshot(
-                principal.getUserId(),
-                conversationId
-        );
+        Long userId = principal.getUserId();
+        historyService.requireConversationOwnership(userId, conversationId);
 
-        RequestKey key = new RequestKey(
-                principal.getUserId(),
-                conversationId,
-                requestId
-        );
-
-        QuestionTask task = getTask(key);
+        QuestionTaskDto task = getTask(userId, conversationId, requestId);
+        FutureTask<Void> future;
 
         synchronized (task) {
-            if (task.submitted) {
+            if (task.isSubmitted()) {
                 throw new ApiException(
                         HttpStatus.CONFLICT,
                         "CHATBOT_DUPLICATE_REQUEST",
@@ -81,29 +75,30 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             }
 
             // 취소가 먼저 접수된 요청은 실행하지 않는다.
-            task.control.checkActive();
+            task.getControl().checkActive();
+            task.setSubmitted(true);
 
-            task.submitted = true;
-
-            task.future = new FutureTask<>(() -> {
+            future = new FutureTask<>(() -> {
                 processQuestion(
                         principal,
                         conversationId,
                         requestId,
-                        message,
-                        task.control
+                        question,
+                        task.getControl()
                 );
 
                 return null;
             });
+
+            // 취소 요청에서도 같은 작업을 찾을 수 있게 등록한다.
+            task.setFuture(future);
         }
 
         try {
-            chatbotTaskExecutor.execute(task.future);
-
+            chatbotTaskExecutor.execute(future);
         } catch (TaskRejectedException exception) {
-            task.control.cancel();
-            task.future.cancel(false);
+            task.getControl().cancel();
+            future.cancel(false);
 
             throw new ApiException(
                     HttpStatus.SERVICE_UNAVAILABLE,
@@ -119,24 +114,16 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             Long conversationId,
             String requestId
     ) {
-        historyService.getSnapshot(
-                principal.getUserId(),
-                conversationId
-        );
+        Long userId = principal.getUserId();
+        historyService.requireConversationOwnership(userId, conversationId);
 
-        QuestionTask task = getTask(
-                new RequestKey(
-                        principal.getUserId(),
-                        conversationId,
-                        requestId
-                )
-        );
+        QuestionTaskDto task = getTask(userId, conversationId, requestId);
 
         synchronized (task) {
             // 요청 정보를 알고 있는 경우에만 취소 확정을 안내한다.
-            boolean knownRequest = task.submitted;
+            boolean knownRequest = task.isSubmitted();
 
-            ChatbotReply completed = task.control.cancel();
+            ChatbotReply completed = task.getControl().cancel();
 
             if (completed != null) {
                 // DB 저장이 이미 끝난 질문은 성공 결과를 반환한다.
@@ -149,9 +136,11 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
                         .build();
             }
 
-            if (task.future != null) {
+            FutureTask<Void> future = task.getFuture();
+
+            if (future != null) {
                 // DB 취소 처리 후 실행 중인 로컬 작업에도 중단을 요청한다.
-                task.future.cancel(true);
+                future.cancel(true);
             }
 
             return ChatbotSseEvent.builder()
@@ -167,20 +156,30 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
         }
     }
 
-    private QuestionTask getTask(RequestKey key) {
-        long oldest =
-                System.currentTimeMillis() - RETENTION_MS;
+    private QuestionTaskDto getTask(
+            Long userId,
+            Long conversationId,
+            String requestId
+    ) {
+        // 접수와 취소는 같은 세 값으로 같은 작업을 찾는다.
+        ChatbotRequestKeyDto key = ChatbotRequestKeyDto.builder()
+                .userId(userId)
+                .conversationId(conversationId)
+                .requestId(requestId)
+                .build();
 
-        // 완료된 요청 정보를 일정 시간 보관해 늦은 취소 요청을 처리한다.
+        long oldest = System.currentTimeMillis() - RETENTION_MS;
+
+        // 오래됐고 실행 중인 작업이 없는 항목만 정리한다.
         tasks.entrySet().removeIf(entry -> {
-            QuestionTask task = entry.getValue();
-            FutureTask<Void> future = task.future;
+            QuestionTaskDto task = entry.getValue();
+            FutureTask<Void> future = task.getFuture();
 
-            return task.createdAt < oldest
+            return task.getCreatedAt() < oldest
                     && (future == null || future.isDone());
         });
 
-        QuestionTask existing = tasks.get(key);
+        QuestionTaskDto existing = tasks.get(key);
 
         if (existing != null) {
             return existing;
@@ -194,10 +193,10 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             );
         }
 
-        // 취소가 접수보다 먼저 도착해도 동일한 상태 객체를 사용한다.
+        // 같은 요청의 작업이 없을 때만 빌더로 새 작업을 만든다.
         return tasks.computeIfAbsent(
                 key,
-                ignored -> new QuestionTask()
+                ignored -> QuestionTaskDto.builder().build()
         );
     }
 
@@ -205,14 +204,15 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             CustomUserDetails principal,
             Long conversationId,
             String requestId,
-            String message,
+            String question,
             ChatbotService.QuestionControl control
     ) {
         try {
+            // 답변 조각이 만들어지면 SSE로 전달한다.
             ChatbotReply reply = chatbotService.ask(
                     principal,
                     conversationId,
-                    message,
+                    question,
                     delta -> sseEmitterRegistry.send(
                             principal.getUserId(),
                             "chatbot-delta",
@@ -241,7 +241,6 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
 
             if (exception instanceof ApiException apiException) {
                 code = apiException.getCode();
-
             } else {
                 code = "CHATBOT_UNAVAILABLE";
 
@@ -266,25 +265,5 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
                             .build()
             );
         }
-    }
-
-    private record RequestKey(
-            Long userId,
-            Long conversationId,
-            String requestId
-    ) {
-    }
-
-    private static final class QuestionTask {
-
-        private final ChatbotService.QuestionControl control =
-                new ChatbotService.QuestionControl();
-
-        private final long createdAt =
-                System.currentTimeMillis();
-
-        private volatile FutureTask<Void> future;
-
-        private boolean submitted;
     }
 }

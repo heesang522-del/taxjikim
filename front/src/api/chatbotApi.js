@@ -9,9 +9,7 @@ async function requestChatbot(config) {
     const result = response.data;
 
     if (!result?.success) {
-      const error = new Error(
-        result?.error?.message ?? '챗봇 요청을 처리하지 못했습니다.'
-      );
+      const error = new Error(result?.error?.message ?? '챗봇 요청을 처리하지 못했습니다.');
 
       error.code = result?.error?.code;
       error.fields = result?.error?.fields;
@@ -25,11 +23,10 @@ async function requestChatbot(config) {
 
     const error = new Error(
       detail?.message ??
-      (cause.isAxiosError
-        ? '서버 응답을 확인하지 못했습니다. 대화 기록을 확인해주세요.'
-        : cause.message)
+        (cause.isAxiosError ? '서버 응답을 확인하지 못했습니다. 대화 기록을 확인해주세요.' : cause.message)
     );
 
+    error.status = cause.response?.status;
     error.code = detail?.code ?? cause.code;
     error.fields = detail?.fields ?? cause.fields;
 
@@ -69,11 +66,7 @@ export function getChatbotUsage() {
   });
 }
 
-export function sendMessage(
-  conversationId,
-  message,
-  { onDelta, signal } = {}
-) {
+export function sendMessage(conversationId, message, { onDelta, signal } = {}) {
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
 
@@ -143,7 +136,7 @@ export function sendMessage(
           finishFailure(
             new Error(
               `${reason} 서버 취소가 확인되어 예약한 질문 횟수가 해제되었습니다. ` +
-              '대화 기록과 사용량을 다시 조회해주세요.'
+                '대화 기록과 사용량을 다시 조회해주세요.'
             )
           );
 
@@ -163,14 +156,14 @@ export function sendMessage(
         finishFailure(
           new Error(
             `${reason} 서버의 취소 상태를 확인하지 못했습니다. ` +
-            '횟수가 차감될 수 있으니 대화 기록과 사용량을 다시 조회해주세요.'
+              '횟수가 차감될 수 있으니 대화 기록과 사용량을 다시 조회해주세요.'
           )
         );
       } catch {
         finishFailure(
           new Error(
             `${reason} 서버 취소를 확인하지 못했습니다. ` +
-            '횟수가 차감될 수 있으니 대화 기록과 사용량을 다시 조회해주세요.'
+              '횟수가 차감될 수 있으니 대화 기록과 사용량을 다시 조회해주세요.'
           )
         );
       }
@@ -190,10 +183,7 @@ export function sendMessage(
     }
 
     function isCurrentRequest(data) {
-      return (
-        data?.requestId === requestId &&
-        data.conversationId === conversationId
-      );
+      return data?.requestId === requestId && data.conversationId === conversationId;
     }
 
     if (signal?.aborted) {
@@ -217,20 +207,27 @@ export function sendMessage(
       eventSource.addEventListener('chatbot-ready', () => {
         if (settled || submitted || cancelling) return;
 
-        // 준비 완료 이벤트가 반복되어도 질문은 한 번만 접수한다.
+        // 연결이 준비되면 질문을 한 번만 보낸다.
         submitted = true;
 
         requestChatbot({
-          url: `/chatbot/conversations/${conversationId}/messages/async`,
+          url: `/chatbot/conversations/${conversationId}/messages`,
           method: 'POST',
           data: {
             requestId,
             message,
           },
-        }).catch(() => {
-          void cancelOnServer(
-            '질문 접수 응답을 확인하지 못했습니다.'
-          );
+        }).catch((error) => {
+          if (settled || cancelling) return;
+
+          // 접수 거절이 확인되면 서버 오류와 입력란 오류 정보를 그대로 전달한다.
+          if ([400, 401, 403, 404, 409].includes(error.status) || error.code === 'CHATBOT_BUSY') {
+            finishFailure(error);
+            return;
+          }
+
+          // 접수 여부가 불확실하면 서버에서 같은 요청을 확인하고 취소한다.
+          void cancelOnServer('질문 접수 응답을 확인하지 못했습니다.');
         });
       });
 
@@ -242,18 +239,14 @@ export function sendMessage(
         if (!isCurrentRequest(data)) return;
 
         if (typeof data.delta !== 'string') {
-          void cancelOnServer(
-            '중간 답변 형식이 올바르지 않습니다.'
-          );
+          void cancelOnServer('중간 답변 형식이 올바르지 않습니다.');
           return;
         }
 
         try {
           onDelta?.(data.delta);
         } catch {
-          void cancelOnServer(
-            '중간 답변 표시를 중단했습니다.'
-          );
+          void cancelOnServer('중간 답변 표시를 중단했습니다.');
         }
       });
 
@@ -265,9 +258,7 @@ export function sendMessage(
         if (!isCurrentRequest(data)) return;
 
         if (typeof data.reply !== 'string') {
-          void cancelOnServer(
-            '최종 답변 형식이 올바르지 않습니다.'
-          );
+          void cancelOnServer('최종 답변 형식이 올바르지 않습니다.');
           return;
         }
 
@@ -284,10 +275,7 @@ export function sendMessage(
 
         if (!isCurrentRequest(data)) return;
 
-        const error = new Error(
-          data.message ??
-          '답변 처리가 중단되었습니다. 대화 기록과 사용량을 다시 조회해주세요.'
-        );
+        const error = new Error(data.message ?? '답변 처리가 중단되었습니다. 대화 기록과 사용량을 다시 조회해주세요.');
 
         error.code = data.code;
 

@@ -9,7 +9,6 @@ import com.kh.back.chatbot.service.ChatbotHistoryService;
 import com.kh.back.chatbot.service.ChatbotService;
 import com.kh.back.chatbot.service.UserContextProvider;
 import com.kh.back.chatbot.util.PiiMasker;
-import com.kh.back.chatbot.validator.ChatbotValidator;
 import com.kh.back.common.exception.ApiException;
 
 import lombok.extern.slf4j.Slf4j;
@@ -44,14 +43,12 @@ public class ChatbotServiceImpl implements ChatbotService {
     private final ChatClient chatClient;
     private final ChatbotHistoryService historyService;
     private final UserContextProvider userContextProvider;
-    private final ChatbotValidator chatbotValidator;
     private final boolean enabled;
 
     public ChatbotServiceImpl(
             ChatClient.Builder builder,
             ChatbotHistoryService historyService,
             UserContextProvider userContextProvider,
-            ChatbotValidator chatbotValidator,
             @Value("classpath:prompts/Chatbot-System.st")
             Resource systemPrompt,
             @Value("${spring.ai.openai.api-key:no-key}")
@@ -59,7 +56,6 @@ public class ChatbotServiceImpl implements ChatbotService {
     ) {
         this.historyService = historyService;
         this.userContextProvider = userContextProvider;
-        this.chatbotValidator = chatbotValidator;
 
         this.chatClient = builder
                 .defaultSystem(
@@ -125,7 +121,7 @@ public class ChatbotServiceImpl implements ChatbotService {
     public ChatbotReply ask(
             CustomUserDetails principal,
             Long conversationId,
-            String message,
+            String question,
             Consumer<String> onDelta,
             QuestionControl control
     ) {
@@ -136,12 +132,6 @@ public class ChatbotServiceImpl implements ChatbotService {
                     "챗봇이 설정되지 않은 서버입니다."
             );
         }
-
-        String question = message == null
-                ? ""
-                : message.strip();
-
-        chatbotValidator.validateQuestion(question);
 
         Long userId = principal.getUserId();
 
@@ -210,9 +200,7 @@ public class ChatbotServiceImpl implements ChatbotService {
 
                 return ChatbotReply.builder()
                         .reply(maskedReply)
-                        .remaining(
-                                reservation.usage().remaining()
-                        )
+                        .remaining(reservation.usage().remaining())
                         .build();
             });
 
@@ -254,14 +242,10 @@ public class ChatbotServiceImpl implements ChatbotService {
 
         for (int index = start; index < history.size(); index++) {
             ChatbotMessageDto item = history.get(index);
-
-            String content = PiiMasker.mask(
-                    item.getContent()
-            );
+            String content = PiiMasker.mask(item.getContent());
 
             if ("USER".equals(item.getRole())) {
                 context.add(new UserMessage(content));
-
             } else if ("ASSISTANT".equals(item.getRole())) {
                 context.add(new AssistantMessage(content));
             }
@@ -284,7 +268,6 @@ public class ChatbotServiceImpl implements ChatbotService {
                     conversationId,
                     questionId
             );
-
         } catch (RuntimeException exception) {
             // 복구 실패를 성공으로 안내하지 않고 재조회할 수 있게 기록한다.
             log.error(
@@ -295,45 +278,39 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
     }
 
-    private static final class StreamingPiiBuffer {
+    private static final class StreamingPiiBuffer { // 이 대화방에서 이 질문의 답변 생성을 멈춰 달라는 요청을 처리하는 부분
 
-        private static final int MAX_PENDING_LENGTH = 8192;
+        private static final int MAX_PENDING_LENGTH = 8192; // 개인정보 검사를 위해 잠시 모아두는 답변 조각의 길이 제한
 
-        private final StringBuilder pending =
-                new StringBuilder();
-
-        private final StringBuilder answer =
-                new StringBuilder();
-
+        private final StringBuilder pending = new StringBuilder(); // ai 답변을 조금씩 받아 처리하는데 쓰는 변수
+        private final StringBuilder answer = new StringBuilder();
         private final Consumer<String> onDelta;
 
-        private StreamingPiiBuffer(
-                Consumer<String> onDelta
-        ) {
+        private StreamingPiiBuffer(Consumer<String> onDelta) {
             this.onDelta = onDelta;
-        }
+        } // streamingpiibuffer 를 만들떄 답변 조각을 어디로 보낼지 정해주는 생성자
 
         private void append(String chunk) {
-            if (chunk == null || chunk.isEmpty()) {
+            if (chunk == null || chunk.isEmpty()) { // 답변조각이 아예 없는경우, 답변조각이 빈 문자열 ""인 경우
                 return;
-            }
+            } // append() 는 ai 가 보낸 답변 조각을 버퍼에 추가하는 메서드, 맨처음에 처리할 내용이 있는지 확인
 
-            pending.append(chunk);
+            pending.append(chunk); // 새 답변 조각을 모아두고, 어디까지 검사해서 내보낼수 있는지 찾을 준비
 
-            int cutoff = 0;
-            int previous = -1;
+            int cutoff = 0; // 이벤에 내보낼 부분의 끝 위치, 처음에는 내보낼 위치를 아직 못찾았으므로 0으로 시작
+            int previous = -1; // 앞에서 마지막으로 본 공백이 아닌 문자를 기억하는 변수 , -1 은 아직 그런 문자를 읽지 않았다는 표시
 
             for (int index = 0; index < pending.length(); index++) {
-                char current = pending.charAt(index);
+                char current = pending.charAt(index); // pending에 모아둔 글을 맨 앞부터 한칸씩 읽는 반복문 부분
 
-                if (Character.isWhitespace(current)) {
-                    // 숫자 개인정보가 다음 조각과 이어질 수 있어 보류한다.
+                if (Character.isWhitespace(current)) { // 공백을 만났을때, 그 지접까지 개인정보를 검사해서 내보내도 될지 판단하는 부분
                     if (previous >= 0
                             && !Character.isDigit(previous)
                             && previous != '-') {
                         cutoff = index + 1;
-                    }
-
+                    } // 현재 문자가 공백이 아니면 , previous = current 로 마지막 글자를 기억하고,
+                    //   현재 문자가 공백이면 , 마지막 글자를 확인, previous >=0은 앞에서 글자를 하나라도 일었다는 뜻이며,
+                    //  그 글자가 숫자도 아니고 - 도 아니면 , cutoff = index +1 로 공백까지 포함해서 내보낼 위치를 기록.
                 } else {
                     previous = current;
                 }
@@ -356,7 +333,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             return answer.toString();
-        }
+        } // ai가 답변을 다 보내면 호출하는 마무리 메서드
 
         private void emit(int end) {
             String masked = PiiMasker.mask(

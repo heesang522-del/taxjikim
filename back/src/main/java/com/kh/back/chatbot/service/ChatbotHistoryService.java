@@ -4,6 +4,7 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
 import com.kh.back.chatbot.dto.ChatbotMessageDto;
 import com.kh.back.chatbot.dto.ChatbotUsageDto;
+
 import lombok.Builder;
 
 import java.util.List;
@@ -13,6 +14,11 @@ public interface ChatbotHistoryService {
     List<ConversationResponse> getConversations(Long userId);
 
     ConversationResponse createConversation(Long userId);
+
+    void requireConversationOwnership(
+            Long userId,
+            Long conversationId
+    );
 
     ConversationSnapshot getSnapshot(
             Long userId,

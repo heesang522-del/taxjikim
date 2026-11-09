@@ -450,6 +450,7 @@ export function ChatbotPage() {
                 남은 질문 <strong>{usage.remaining}회</strong>
                 {' / '}일일 한도 {usage.dailyLimit}회
               </p>
+              {usage.remaining === 0 && <p className="small muted">오늘 질문 횟수를 모두 사용했습니다.</p>}
             </>
           ) : (
             <p className="small muted">사용량 정보를 확인해주세요.</p>
@@ -612,12 +613,6 @@ export function ChatbotPage() {
             <span id="ai-chat-question-help" className="small muted">
               Enter 전송 · Shift+Enter 줄바꿈 · 최대 500자
             </span>
-
-            {usage && (
-              <span className="small muted">
-                {usage.remaining === 0 ? '오늘 질문 횟수를 모두 사용했습니다.' : `오늘 남은 질문 ${usage.remaining}회`}
-              </span>
-            )}
           </div>
 
           <p className="ai-chat-disclaimer small muted">
@@ -625,7 +620,8 @@ export function ChatbotPage() {
           </p>
 
           <p className="small muted">
-            서버에서 실패 또는 취소가 확정된 질문은 사용 횟수를 복구합니다. 취소가 확인되지 않으면 대화 기록과 사용량을 다시 조회해주세요.
+            서버에서 실패 또는 취소가 확정된 질문은 사용 횟수를 복구합니다. 취소가 확인되지 않으면 대화 기록과 사용량을
+            다시 조회해주세요.
           </p>
         </div>
       </div>
