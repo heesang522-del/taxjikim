@@ -39,4 +39,8 @@ public interface NotificationMapper {
     // QNA 글 등록 알림 생성 (수신자: ADMIN role 전체)
     int insertQnaPostNotifications(@Param("userIds") List<Long> userIds, @Param("targetId") Long targetId,
                                     @Param("title") String title, @Param("message") String message);
+
+    // 신고 처리 결과 알림 1건 생성 (수신자: 신고자)
+    int insertReportResultNotification(@Param("userId") Long userId, @Param("targetId") Long targetId,
+                                        @Param("title") String title, @Param("message") String message);
 }

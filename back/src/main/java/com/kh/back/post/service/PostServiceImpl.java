@@ -142,11 +142,11 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String postType) {
+    public ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String postType, boolean excludeNotice) {
         page = Math.max(page, 1);
 
-        int totalCount = countAll(keyword, postType);
-        List<PostDto> posts = findPage(sort, keyword, page, postType);
+        int totalCount = countAll(keyword, postType, excludeNotice);
+        List<PostDto> posts = findPage(sort, keyword, page, postType, excludeNotice);
 
         return ApiResponse.ok(posts, PageMeta.of(page, PAGE_SIZE, totalCount));
     }
@@ -220,7 +220,7 @@ public class PostServiceImpl implements PostService {
         postMapper.deleteById(postId);
     }
 
-    private List<PostDto> findPage(String sort, String keyword, int page, String postType) {
+    private List<PostDto> findPage(String sort, String keyword, int page, String postType, boolean excludeNotice) {
         long offsetValue = ((long) page - 1) * PAGE_SIZE;
         if (offsetValue > Integer.MAX_VALUE) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "페이지 범위를 초과했습니다.");
@@ -232,15 +232,16 @@ public class PostServiceImpl implements PostService {
         List<PostDto> posts = postMapper.findPage(sort, keyword, offset, PAGE_SIZE,
                 postValidator.normalizePostTypeFilter(postType),
                 postValidator.currentUserIdOrNull(),
-                postValidator.hasAdminRole());
+                postValidator.hasAdminRole(),
+                excludeNotice);
 
         loadFileLists(posts);
         return posts;
     }
 
-    private int countAll(String keyword, String postType) {
+    private int countAll(String keyword, String postType, boolean excludeNotice) {
         return postMapper.countAll(keyword, postValidator.normalizePostTypeFilter(postType),
-                postValidator.currentUserIdOrNull(), postValidator.hasAdminRole());
+                postValidator.currentUserIdOrNull(), postValidator.hasAdminRole(), excludeNotice);
     }
 
     private void loadFileLists(List<PostDto> posts) {

@@ -62,7 +62,7 @@ def read_last_training(path: Path) -> dict:
     return record
 
 
-# 머신러닝 두 모델과 SetFit을 차례로 학습하고 종료를 기다린다.
+# LinearSVC를 학습하고 종료를 기다린다.
 def run_training(transaction_type: str, output_dir: Path) -> None:
     script = BASE_DIR / "scripts" / f"train_{transaction_type}.py"
     # 실행할 명령: python train_income.py(또는 train_expense.py) --output-dir 저장폴더 --overwrite
@@ -77,20 +77,6 @@ def run_training(transaction_type: str, output_dir: Path) -> None:
     # 기존 학습 명령을 실행하고 실패하면 예외로 처리한다.
     subprocess.run(command, cwd=BASE_DIR.parent, check=True)
 
-    # 실행할 명령: python 학습파일 --setfit --output-dir SetFit저장폴더 --overwrite
-    setfit_dir = output_dir.parent / "setfit"
-    setfit_command = [
-        sys.executable,  # 현재 가상환경의 Python 실행 파일
-        str(script),     # 앞에서 사용한 동일한 학습 파일
-        "--setfit",      # 머신러닝 대신 SetFit을 학습하는 옵션
-        "--output-dir",  # SetFit 모델의 저장 폴더를 지정하는 옵션
-        str(setfit_dir), # 머신러닝 모델과 구분한 저장 폴더
-        "--overwrite",   # 기존 SetFit을 새 학습 결과로 교체
-    ]
-
-    # 머신러닝 학습이 끝난 뒤 SetFit을 학습하고, 실패하면 예외로 처리한다.
-    subprocess.run(setfit_command, cwd=BASE_DIR.parent, check=True)
-
 
 # 데이터가 바뀐 경우 학습하고 성공 기록을 저장한다.
 def check_and_train(transaction_type: str) -> bool:
@@ -104,14 +90,8 @@ def check_and_train(transaction_type: str) -> bool:
 
         # 이전 모델 파일이 모두 남아 있는지 확인한다.
         model_files_exist = True
-        for name in ["logistic_regression_bundle.pkl", "linear_svc_bundle.pkl", "model_report.json"]:
+        for name in ["linear_svc_bundle.pkl", "model_report.json"]:
             if not (output_dir / name).is_file():
-                model_files_exist = False
-
-        # SetFit 결과도 남아 있어야 전체 학습을 생략한다.
-        setfit_dir = output_dir.parent / "setfit"
-        for name in ["config_setfit.json", "model_head.pkl", "model.safetensors", "model_report.json"]:
-            if not (setfit_dir / name).is_file():
                 model_files_exist = False
 
         # 자료가 같고 모델도 있으면 재학습을 생략한다.

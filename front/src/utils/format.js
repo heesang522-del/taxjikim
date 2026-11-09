@@ -15,3 +15,10 @@ export const maskEmail = (email) => {
 };
 
 export const signedMan =(n) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(Math.round(n / 1e4)).toLocaleString('ko-KR') + '만원';
+
+/** 서버가 내려주는 ISO 8601 시각을 YYYY-MM-DD로 표시한다. 정렬 등에는 원본 createdAt 문자열을 그대로 쓴다. */
+export const toDateLabel = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('sv-SE');
+};
