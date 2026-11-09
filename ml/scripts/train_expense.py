@@ -1,11 +1,9 @@
-"""정답이 있는 전체 지출 데이터로 두 모델을 학습한다. 시험 입력은 별도로 받는다."""
+"""정답이 있는 전체 지출 데이터로 LinearSVC를 학습한다. 시험 입력은 별도로 받는다."""
 
 import argparse
 import csv
 import hashlib
 import json
-import os
-import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -14,7 +12,6 @@ from zoneinfo import ZoneInfo
 import joblib
 import sklearn
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
 from sklearn.svm import LinearSVC
 
@@ -28,12 +25,8 @@ else:
 BASE_DIR = Path(__file__).resolve().parents[1]
 DATA_DIR = BASE_DIR / "data/expense/training"
 OUTPUT_DIR = BASE_DIR / "models/expense_classifier"
-SETFIT_DIR = BASE_DIR / "models/expense_setfit"
 SIMPLE_OUTPUT_DIR = BASE_DIR / "models/expense_classifier_simple"
-SIMPLE_SETFIT_DIR = BASE_DIR / "models/expense_setfit_simple"
 COMBINED_OUTPUT_DIR = BASE_DIR / "models/expense_classifier_combined"
-COMBINED_SETFIT_DIR = BASE_DIR / "models/expense_setfit_combined"
-SETFIT_BASE_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
 
 
 # CSV 파일을 읽어 행 목록으로 반환한다.
@@ -63,10 +56,10 @@ def read_rows(path: Path) -> list[dict[str, str]]:
 
 
 # 문자 전처리와 분류 모델을 하나로 묶는다.
-def build_pipeline(classifier: LogisticRegression | LinearSVC) -> Pipeline:
+def build_pipeline() -> Pipeline:
     return Pipeline([
         ("tfidf", TfidfVectorizer(analyzer="char", ngram_range=(2, 5), sublinear_tf=True)),
-        ("classifier", classifier),
+        ("classifier", LinearSVC(max_iter=5000, random_state=42)),
     ])
 
 
@@ -115,50 +108,6 @@ def merge_training_rows(
     return merged, counts
 
 
-# SetFit 모델을 학습하고 파일로 저장한다.
-def train_setfit(rows: list[dict[str, str]], output_dir: Path,
-                 steps: int, report: dict) -> None:
-    os.environ.setdefault("HF_HOME", str(BASE_DIR / "models/.hf_cache"))
-    from datasets import Dataset
-    from setfit import SetFitModel, Trainer, TrainingArguments
-    import torch
-
-    # CPU 시험이 다른 작업을 지나치게 점유하지 않도록 스레드를 제한한다.
-    torch.set_num_threads(min(4, os.cpu_count() or 1))
-    labels = sorted({row["category_code"] for row in rows})
-    dataset = Dataset.from_dict({
-        "text": [row["description"] for row in rows],
-        "label": [labels.index(row["category_code"]) for row in rows],
-    })
-    output_dir.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="setfit-trial-", dir=output_dir.parent) as temp:
-        model = SetFitModel.from_pretrained(SETFIT_BASE_MODEL, labels=labels, device="cpu")
-        arguments = TrainingArguments(
-            output_dir=str(Path(temp) / "checkpoints"),
-            batch_size=(8, 16), num_epochs=(1, 1), num_iterations=2,
-            max_steps=steps, max_length=64,
-            report_to="none", save_strategy="no", eval_strategy="no",
-            logging_steps=5, seed=42,
-        )
-        limit = "전체 1에포크" if steps == -1 else f"최대 {steps}단계"
-        print(f"SetFit 시험 학습: {len(rows)}건 / 언어 모델 {limit}", flush=True)
-        Trainer(model=model, args=arguments, train_dataset=dataset).train()
-        saved = Path(temp) / "model"
-        model.save_pretrained(str(saved))
-        restored = SetFitModel.from_pretrained(str(saved), device="cpu")
-        probe = [rows[0]["description"]]
-        if list(restored.predict(probe)) != list(model.predict(probe)):
-            raise ValueError("SetFit 저장 전후 예측 결과가 다릅니다.")
-        report.update({"selected_model": "setfit", "base_model": SETFIT_BASE_MODEL,
-                       "trial_max_steps": steps, "service_model_replaced": False})
-        (saved / "model_report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
-        )
-        # 서비스 모델 폴더와 분리된 시험 결과만 반영한다.
-        shutil.copytree(saved, output_dir, dirs_exist_ok=True)
-    print(f"SetFit 시험 모델 저장: {output_dir}")
-
-
 # 명령 옵션에 맞게 학습 자료를 읽고 모델을 학습한다.
 def main() -> None:
     # 터미널에서 실행할 때 사용할 옵션을 설정한다.
@@ -169,28 +118,18 @@ def main() -> None:
     datasets.add_argument("--simple", action="store_true", help="단순화 CSV로 별도 비교 모델 학습")
     datasets.add_argument("--combined", action="store_true", help="기존·단순화 CSV를 합쳐 별도 모델 학습")
     parser.add_argument("--output-dir", type=Path)
-    parser.add_argument("--setfit", action="store_true", help="기존 모델 대신 SetFit 별도 시험 학습")
-    parser.add_argument("--setfit-steps", type=int, default=-1, help="-1: 전체 1에포크, 양수: 최대 학습 단계")
     parser.add_argument("--incoming-dir", type=Path,
                         default=BASE_DIR / "data/expense/user_approved",
                         help="추가 CSV 폴더. 없거나 비어 있으면 기본 자료만 학습")
-    parser.add_argument("--selected-model", choices=("logistic_regression", "linear_svc"),
-                        default="logistic_regression", help="서버에서 사용할 모델 (자동 비교 선택 아님)")
     args = parser.parse_args()
-    default_output = (SIMPLE_SETFIT_DIR if args.setfit else SIMPLE_OUTPUT_DIR) if args.simple else (
-        SETFIT_DIR if args.setfit else OUTPUT_DIR
-    )
-    if args.combined:
-        default_output = COMBINED_SETFIT_DIR if args.setfit else COMBINED_OUTPUT_DIR
+    default_output = OUTPUT_DIR
+    if args.simple:
+        default_output = SIMPLE_OUTPUT_DIR
+    elif args.combined:
+        default_output = COMBINED_OUTPUT_DIR
     args.output_dir = args.output_dir or default_output
-    if (args.simple or args.combined) and args.output_dir.resolve() in (
-        OUTPUT_DIR.resolve(), SETFIT_DIR.resolve(),
-    ):
+    if (args.simple or args.combined) and args.output_dir.resolve() == OUTPUT_DIR.resolve():
         parser.error("단순화 데이터 비교는 기존 모델 폴더에 저장할 수 없습니다.")
-    if args.setfit and args.output_dir.resolve() == OUTPUT_DIR.resolve():
-        parser.error("SetFit 시험은 서비스 모델 폴더에 저장할 수 없습니다.")
-    if args.setfit_steps == 0 or args.setfit_steps < -1:
-        parser.error("--setfit-steps는 -1 또는 1 이상이어야 합니다.")
     if args.output_dir.exists() and not args.overwrite:
         parser.error("결과 폴더가 이미 있습니다. 다시 학습하려면 --overwrite를 지정하세요.")
 
@@ -239,46 +178,33 @@ def main() -> None:
         "dataset_review_status": sorted({row.get("review_status", "UNKNOWN") for row in rows}),
         "training_mode": "all_labeled_rows",
         "evaluation": "not_evaluated_use_separate_manual_inputs",
-        "selection_rule": "explicit_selection_not_test_score",
-        "selected_model": args.selected_model,
-    }
-    if args.setfit:
-        train_setfit(rows, args.output_dir, args.setfit_steps, report)
-        return
-
-    candidates = {
-        "logistic_regression": LogisticRegression(max_iter=2000, random_state=42),
-        "linear_svc": LinearSVC(max_iter=5000, random_state=42),
+        "selection_rule": "fixed_linear_svc",
+        "selected_model": "linear_svc",
     }
     print(f"기본 {len(base_rows)}건 + 추가 {counts['added']}건 / 중복 제외 {counts['duplicates']}건")
     args.output_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="expense-training-", dir=args.output_dir.parent) as temp:
         staging_dir = Path(temp)
-        for name, classifier in candidates.items():
-            pipeline = build_pipeline(classifier)
-            pipeline.fit(descriptions, categories)
-            path = staging_dir / f"{name}_bundle.pkl"
-            joblib.dump({
-                "pipeline": pipeline, "model_name": name,
-                "transaction_type": "EXPENSE", "input_fields": ["description"],
-                "labels": labels, "sklearn_version": sklearn.__version__,
-                "dataset_review_status": report["dataset_review_status"],
-            }, path)
-            restored = joblib.load(path)["pipeline"]
-            if list(restored.predict(descriptions)) != list(pipeline.predict(descriptions)):
-                raise ValueError("모델 저장 전후 예측 결과가 다릅니다.")
-            print(f"{name}: 전체 {len(rows)}건 학습·저장 완료", flush=True)
-
+        pipeline = build_pipeline()
+        pipeline.fit(descriptions, categories)
+        model_path = staging_dir / "linear_svc_bundle.pkl"
+        joblib.dump({
+            "pipeline": pipeline, "model_name": "linear_svc",
+            "transaction_type": "EXPENSE", "input_fields": ["description"],
+            "labels": labels, "sklearn_version": sklearn.__version__,
+            "dataset_review_status": report["dataset_review_status"],
+        }, model_path)
+        restored = joblib.load(model_path)["pipeline"]
+        if list(restored.predict(descriptions)) != list(pipeline.predict(descriptions)):
+            raise ValueError("모델 저장 전후 예측 결과가 다릅니다.")
         # 학습 자료를 다시 맞힌 점수를 시험 정확도처럼 기록하지 않는다.
-        (staging_dir / "model_report.json").write_text(
-            json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8",
-        )
-        # 두 모델 학습이 모두 성공한 뒤에만 결과를 반영한다.
+        report_path = staging_dir / "model_report.json"
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        # 학습과 저장 검증이 끝난 결과만 서비스 또는 재학습 폴더에 반영한다.
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        for name in candidates:
-            (staging_dir / f"{name}_bundle.pkl").replace(args.output_dir / f"{name}_bundle.pkl")
-        (staging_dir / "model_report.json").replace(args.output_dir / "model_report.json")
-    print(f"서버 선택 모델: {args.selected_model} (새 시험 점수로 선택한 결과 아님)")
+        model_path.replace(args.output_dir / model_path.name)
+        report_path.replace(args.output_dir / report_path.name)
+    print(f"LinearSVC: 전체 {len(rows)}건 학습·저장 완료", flush=True)
 
 
 if __name__ == "__main__":

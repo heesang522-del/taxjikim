@@ -39,19 +39,17 @@
 /ml/data/income/reference/*
 !/ml/data/income/reference/categories.md
 
-# 서버 실행에 필요한 현재 모델과 두 모델 비교 결과만 공유한다.
+# 서버 실행에 필요한 LinearSVC 모델과 이전 LinearSVC 시험 기록만 공유한다.
 /ml/models/*
 !/ml/models/.gitkeep
 !/ml/models/expense_classifier/
 /ml/models/expense_classifier/*
-!/ml/models/expense_classifier/logistic_regression_bundle.pkl
 !/ml/models/expense_classifier/linear_svc_bundle.pkl
 !/ml/models/expense_classifier/model_report.json
 !/ml/models/expense_classifier/previous_test_report.json
 !/ml/models/expense_classifier/previous_test_predictions.csv
 !/ml/models/income_classifier/
 /ml/models/income_classifier/*
-!/ml/models/income_classifier/logistic_regression_bundle.pkl
 !/ml/models/income_classifier/linear_svc_bundle.pkl
 !/ml/models/income_classifier/model_report.json
 

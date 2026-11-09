@@ -24,6 +24,6 @@
   ],
   "training_mode": "all_labeled_rows",
   "evaluation": "not_evaluated_use_separate_manual_inputs",
-  "selection_rule": "explicit_selection_not_test_score",
+  "selection_rule": "fixed_linear_svc",
   "selected_model": "linear_svc"
 }
