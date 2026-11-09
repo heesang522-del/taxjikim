@@ -8,6 +8,7 @@ import NoticeCard from '../components/community/NoticeCard';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
 import { useInquiry } from '../store/useInquiryStore';
+import { toDateLabel } from '../utils/format';
 import { getInquiryDetail } from '../api/post.js';
 import { getComments } from '../api/comment.js';
 
@@ -72,7 +73,7 @@ export default function QnaPostPage() {
         <Pill tone={q.status === '답변 완료' ? 'success' : 'warn'}>{q.status}</Pill>
       </div>
       <h2 className="post-title">{q.title}</h2>
-      <p className="small muted">{q.author} · {q.createdAt}</p>
+      <p className="small muted">{q.author} · {toDateLabel(q.createdAt)}</p>
       <div className="post-body">{q.body}</div>
       {q.files?.length > 0 && <p className="small muted" style={{ marginTop: 8 }}>첨부: {q.files.join(', ')}</p>}
       <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--border)' }}>

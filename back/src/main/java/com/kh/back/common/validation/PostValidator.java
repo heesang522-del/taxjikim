@@ -2,6 +2,7 @@ package com.kh.back.common.validation;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.util.FileValidationUtil;
 
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.FileMetadataDto;
@@ -14,14 +15,11 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.io.InputStream;
 
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -318,33 +316,14 @@ public class PostValidator {
             }
         }
 
-        String uploadId = dto.getUploadId();
+        FileValidationUtil.validateUploadId(dto.getUploadId());
 
-        if (uploadId == null
-                || !uploadId.matches("[A-Za-z0-9_-]{1,80}")) {
+        FileValidationUtil.validateChunkIndex(
+                dto.getChunkIndex(),
+                dto.getTotalChunks()
+        );
 
-            throw invalid(
-                    "uploadId",
-                    "업로드 ID 형식이 올바르지 않습니다."
-            );
-        }
-
-        if (dto.getTotalChunks() < 1
-                || dto.getChunkIndex() < 0
-                || dto.getChunkIndex() >= dto.getTotalChunks()) {
-
-            throw invalid(
-                    "chunkIndex",
-                    "청크 번호와 전체 청크 수를 확인해주세요."
-            );
-        }
-
-        if (dto.getFile() == null || dto.getFile().isEmpty()) {
-            throw invalid(
-                    "file",
-                    "업로드 파일이 비어 있습니다."
-            );
-        }
+        FileValidationUtil.requireNonEmpty(dto.getFile());
 
         validateOriginalFileName(dto.getOriginalName());
 
@@ -359,12 +338,7 @@ public class PostValidator {
             String requested
     ) {
 
-        if (!Objects.equals(existing, requested)) {
-            throw invalid(
-                    "uploadId",
-                    "같은 업로드 ID의 파일명·청크 수·대상 글을 변경할 수 없습니다."
-            );
-        }
+        FileValidationUtil.validateUploadMetadata(existing, requested);
     }
 
     /**
@@ -457,32 +431,10 @@ public class PostValidator {
             List<String> names
     ) {
 
-        if (names == null || names.isEmpty()) {
-            return List.of();
-        }
-
-        Set<String> uniqueNames = new HashSet<>();
-
-        for (String name : names) {
-
-            if (name == null
-                    || !name.matches(SAVED_FILE_NAME_PATTERN)) {
-
-                throw invalid(
-                        "savedFileNames",
-                        "첨부파일명을 확인해주세요."
-                );
-            }
-
-            if (!uniqueNames.add(name)) {
-                throw invalid(
-                        "savedFileNames",
-                        "같은 파일을 중복 첨부할 수 없습니다."
-                );
-            }
-        }
-
-        return new ArrayList<>(names);
+        return FileValidationUtil.validateSavedFileNames(
+                names,
+                SAVED_FILE_NAME_PATTERN
+        );
     }
 
     /**
@@ -490,14 +442,7 @@ public class PostValidator {
      */
     public void validateFileCount(int count) {
 
-        if (count < 0 || count > MAX_FILE_COUNT) {
-            throw invalid(
-                    "files",
-                    "첨부파일은 최대 "
-                            + MAX_FILE_COUNT
-                            + "개까지 등록할 수 있습니다."
-            );
-        }
+        FileValidationUtil.validateFileCount(count, MAX_FILE_COUNT);
     }
 
     /**
@@ -518,84 +463,7 @@ public class PostValidator {
             String extension
     ) throws IOException {
 
-        if (file == null || extension == null) {
-            throw invalid("파일 정보가 없습니다.");
-        }
-
-        byte[] header;
-
-        try (InputStream input = Files.newInputStream(file)) {
-            header = input.readNBytes(16);
-        }
-
-        String signature = new String(
-                header,
-                StandardCharsets.ISO_8859_1
-        );
-
-        String normalizedExtension =
-                extension.toLowerCase(Locale.ROOT);
-
-        boolean valid = switch (normalizedExtension) {
-
-            case ".jpg", ".jpeg" ->
-                    header.length >= 3
-                            && (header[0] & 255) == 255
-                            && (header[1] & 255) == 216
-                            && (header[2] & 255) == 255;
-
-            case ".png" ->
-                    header.length >= 8
-                            && Arrays.equals(
-                            Arrays.copyOf(header, 8),
-                            new byte[]{
-                                    (byte) 137,
-                                    80,
-                                    78,
-                                    71,
-                                    13,
-                                    10,
-                                    26,
-                                    10
-                            }
-                    );
-
-            case ".gif" ->
-                    signature.startsWith("GIF87a")
-                            || signature.startsWith("GIF89a");
-
-            case ".webp" ->
-                    signature.startsWith("RIFF")
-                            && signature.length() >= 12
-                            && signature.substring(8, 12)
-                            .equals("WEBP");
-
-            case ".mp4", ".mov" ->
-                    signature.length() >= 12
-                            && signature.substring(4, 8)
-                            .equals("ftyp");
-
-            case ".webm" ->
-                    header.length >= 4
-                            && Arrays.equals(
-                            Arrays.copyOf(header, 4),
-                            new byte[]{
-                                    26,
-                                    69,
-                                    (byte) 223,
-                                    (byte) 163
-                            }
-                    );
-
-            default -> false;
-        };
-
-        if (!valid) {
-            throw invalid(
-                    "file",
-                    "파일 내용이 허용된 사진·동영상 형식과 일치하지 않습니다."
-            );
-        }
+        FileValidationUtil.validateMediaSignature(file, extension);
     }
 
     /**
@@ -705,31 +573,7 @@ public class PostValidator {
 
     private void validateOriginalFileName(String filename) {
 
-        if (filename == null
-                || filename.isBlank()
-                || filename.length() > 500) {
-
-            throw invalid(
-                    "file",
-                    "원본 파일명을 확인해주세요."
-            );
-        }
-
-        if (filename.contains("/") || filename.contains("\\")) {
-            throw invalid(
-                    "file",
-                    "파일명에 경로를 포함할 수 없습니다."
-            );
-        }
-
-        if (!filename.toLowerCase(Locale.ROOT)
-                .matches(MEDIA_NAME_PATTERN)) {
-
-            throw invalid(
-                    "file",
-                    "사진·동영상만 업로드할 수 있습니다."
-            );
-        }
+        FileValidationUtil.validateFileName(filename, MEDIA_NAME_PATTERN);
     }
 
     private void checkFileLimit(
@@ -737,66 +581,18 @@ public class PostValidator {
             List<MultipartFile> files
     ) {
 
-        if (baseCount < 0) {
-            throw invalid(
-                    "files",
-                    "기존 첨부파일 개수가 올바르지 않습니다."
-            );
-        }
-
-        long newFileCount = 0;
-
-        if (files != null) {
-            for (MultipartFile file : files) {
-
-                if (file == null) {
-                    throw invalid(
-                            "files",
-                            "첨부파일 입력값을 확인해주세요."
-                    );
-                }
-
-                if (!file.isEmpty()) {
-                    newFileCount++;
-                }
-            }
-        }
-
-        if (baseCount + newFileCount > MAX_FILE_COUNT) {
-            throw invalid(
-                    "files",
-                    "첨부파일은 최대 "
-                            + MAX_FILE_COUNT
-                            + "개까지 등록할 수 있습니다."
-            );
-        }
+        FileValidationUtil.validateFileCountWithNewFiles(
+                baseCount,
+                files,
+                MAX_FILE_COUNT
+        );
     }
 
     private void checkFileExtensions(
             List<MultipartFile> files
     ) {
 
-        if (files == null) {
-            return;
-        }
-
-        for (MultipartFile file : files) {
-
-            if (file == null) {
-                throw invalid(
-                        "files",
-                        "첨부파일 입력값을 확인해주세요."
-                );
-            }
-
-            if (file.isEmpty()) {
-                continue;
-            }
-
-            validateOriginalFileName(
-                    file.getOriginalFilename()
-            );
-        }
+        FileValidationUtil.validateFileExtensions(files, MEDIA_NAME_PATTERN);
     }
 
     private ApiException invalid(String message) {

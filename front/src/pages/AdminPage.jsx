@@ -13,6 +13,7 @@ import { useAllReports } from '../utils/useAllReports';
 import { useFaq } from '../utils/useFaq';
 import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
+import { toDateLabel } from '../utils/format';
 
 const ADMIN_TABS = [['usage', '모델·처리 현황'], ['members', '회원·게시판 관리'], ['support', '고객 지원']];
 const StatCard = ({ title, data }) => <Card title={title}>{data.map(([l, v]) => <HBar key={l} label={l} value={v} display={`${v}%`} scale={2} />)}</Card>;
@@ -158,7 +159,7 @@ export default function AdminPage() {
                   // 문의 제목 길이에 따라 작성자 칸이 움직이지 않도록 열 폭을 고정한다.
                   { key: 'q', header: '문의', width: '55%', ellipsis: true, render: (q) => <>{q.title} {q.visibility === 'private' && <Pill>비공개</Pill>}</> },
                   { key: 'a', header: '작성자', width: '25%', ellipsis: true, render: (q) => q.author },
-                  { key: 'd', header: '등록일', width: '20%', align: 'right', render: (q) => q.createdAt },
+                  { key: 'd', header: '등록일', width: '20%', align: 'right', render: (q) => toDateLabel(q.createdAt) },
                 ]} rows={pendingQna} rowKey={(q) => q.id} />
                 : <p className="state-msg">답변 대기 중인 Q&A가 없습니다</p>}
               <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminInquiries}?tab=support`}>전체보기</Button></div>

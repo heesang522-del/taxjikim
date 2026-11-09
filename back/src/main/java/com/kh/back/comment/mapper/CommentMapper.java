@@ -24,6 +24,10 @@ public interface CommentMapper {
     // 신고 처리로 관리자가 지울 때만 쓴다. 작성자 제한 없이 지운다.
     int deleteByAdmin(@Param("commentId") Long commentId);
 
+    // 댓글이 삭제됐어도 소속 게시글 ID는 그대로 조회한다(POST_ID는 삭제와 무관하게 유지됨).
+    // 신고 처리 결과 알림에서 어느 게시글로 이동시킬지 정할 때 쓴다.
+    Long findPostIdById(@Param("commentId") Long commentId);
+
     //댓글 수정
     int update(@Param("postId") Long postId, @Param("commentId") Long commentId,
                @Param("userId") Long userId, @Param("content") String content);

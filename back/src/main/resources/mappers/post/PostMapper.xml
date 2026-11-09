@@ -103,6 +103,13 @@
 
         </if>
 
+        <!-- "전체" 탭에서 상위 공지를 별도로 고정 노출할 때, 일반 피드에서는 공지를 빼고 보여준다. -->
+        <if test="excludeNotice">
+
+            AND p.BOARD_TYPE != 'NOTICE'
+
+        </if>
+
     </sql>
 
     <sql id="sort">

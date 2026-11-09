@@ -67,10 +67,11 @@ export async function getPosts() {
 
 // 게시판 목록을 한 페이지만 받아온다. 탭(postType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,
 // 페이지 번호 UI에 쓸 meta(page/size/total/totalPages)도 함께 돌려준다.
-export async function getPostsPage({ page = 1, postType, keyword, sort = 'latest' } = {}) {
+// excludeNotice: true면 공지를 뺀 결과만 받는다("전체" 탭에서 공지를 상단에 따로 고정 노출할 때 쓴다).
+export async function getPostsPage({ page = 1, postType, keyword, sort = 'latest', excludeNotice } = {}) {
   const response = await client.get('', {
     baseURL: POST_API_BASE,
-    params: { page, sort, postType: postType || undefined, keyword: keyword || undefined },
+    params: { page, sort, postType: postType || undefined, keyword: keyword || undefined, excludeNotice: excludeNotice || undefined },
   });
 
   const result = response.data;
