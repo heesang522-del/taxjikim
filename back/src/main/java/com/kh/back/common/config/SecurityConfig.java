@@ -58,7 +58,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                         .requestMatchers("/api/v1/users/me", "/api/v1/users/me/**").authenticated()
                         // 결과 JSON 저장·조회는 로그인 사용자만 접근한다.
-                        .requestMatchers("/api/v1/tax/inputs/*/result").authenticated()
+                        .requestMatchers("/api/v1/tax/inputs/*/result", "/api/v1/tax/inputs/saved-results").authenticated()
                         .requestMatchers("/api/v1/tax/simulations", "/api/v1/tax/simulations/**").authenticated()
                         .requestMatchers("/api/v1/tax/inputs/simulation").authenticated()
                         .requestMatchers("/ws/chat/**").authenticated()

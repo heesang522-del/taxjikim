@@ -3,30 +3,55 @@
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
 <mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <!-- 실제 결과가 저장된 본인 분석만 최신 귀속연도부터 표시한다. -->
+    <select id="findSavedResults" resultType="com.kh.back.tax.dto.SavedTaxResultDto">
+        SELECT i.TAX_INPUT_ID AS taxInputId, i.TAX_YEAR AS taxYear,
+               r.CALCULATED_AT AS savedAt
+        FROM tax_inputs i
+        JOIN tax_results r ON r.TAX_INPUT_ID = i.TAX_INPUT_ID
+        WHERE i.USER_ID = #{userId} AND i.SAVE_STATUS = 'SAVED'
+        ORDER BY i.TAX_YEAR DESC, r.CALCULATED_AT DESC
+    </select>
+
     <!-- 기존 JSON 컬럼에는 추가 가정을, 금액 컬럼에는 저장 당시 결과 합계를 기록한다. -->
     <insert id="insertScenario" useGeneratedKeys="true" keyProperty="scenario.simulationId" keyColumn="SIMULATION_ID">
-        INSERT INTO SIMULATION (USER_ID, TITLE, INPUT_DATA_SNAPSHOT,
+        INSERT INTO SIMULATION (USER_ID, TAX_INPUT_ID, TITLE, INPUT_DATA_SNAPSHOT,
                                 RESULT_EXPECTED_TAX, RESULT_TOTAL_INCOME, RESULT_TOTAL_EXPENSE)
-        VALUES (#{userId}, #{scenario.name},
+        SELECT #{userId}, TAX_INPUT_ID, #{scenario.name},
                 JSON_OBJECT('extraInc', #{scenario.extraInc}, 'extraExp', #{scenario.extraExp},
                             'extraDonation', #{scenario.extraDonation}),
-                #{scenario.totalTax}, #{scenario.totalIncome}, #{scenario.totalExpense})
+                #{scenario.totalTax}, #{scenario.totalIncome}, #{scenario.totalExpense}
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{scenario.taxInputId}
+          AND (USER_ID IS NULL OR USER_ID = #{userId})
     </insert>
 
     <select id="findScenarios" resultType="com.kh.back.tax.dto.SimulationScenarioDto">
-        SELECT SIMULATION_ID AS simulationId, TITLE AS name,
+        SELECT SIMULATION_ID AS simulationId, TAX_INPUT_ID AS taxInputId, TITLE AS name,
                CAST(INPUT_DATA_SNAPSHOT->>'$.extraInc' AS DECIMAL(15,2)) AS extraInc,
                CAST(INPUT_DATA_SNAPSHOT->>'$.extraExp' AS DECIMAL(15,2)) AS extraExp,
                CAST(INPUT_DATA_SNAPSHOT->>'$.extraDonation' AS DECIMAL(15,2)) AS extraDonation,
                RESULT_EXPECTED_TAX AS totalTax, RESULT_TOTAL_INCOME AS totalIncome,
                RESULT_TOTAL_EXPENSE AS totalExpense
         FROM SIMULATION
-        WHERE USER_ID = #{userId} AND DELETED_AT IS NULL
+        WHERE USER_ID = #{userId}
+          AND TAX_INPUT_ID = #{taxInputId}
         ORDER BY SIMULATION_ID
     </select>
 
     <delete id="deleteScenario">
         DELETE FROM SIMULATION WHERE SIMULATION_ID = #{simulationId} AND USER_ID = #{userId}
+    </delete>
+
+    <!-- 현재 분석과 귀속연도가 같은 이전 저장본만 삭제하고, 다른 연도와 TEMP 분석은 유지한다. -->
+    <delete id="deletePreviousSavedInputs">
+        DELETE previousInput
+        FROM tax_inputs previousInput
+        JOIN tax_inputs currentInput ON currentInput.TAX_INPUT_ID = #{taxInputId}
+                                   AND previousInput.TAX_YEAR = currentInput.TAX_YEAR
+        WHERE previousInput.USER_ID = #{userId}
+          AND previousInput.SAVE_STATUS = 'SAVED'
+          AND previousInput.TAX_INPUT_ID != #{taxInputId}
     </delete>
 
     <!-- 같은 분석번호의 결과는 화면에서 보낸 JSON으로 덮어쓴다. -->
@@ -37,12 +62,16 @@
     </insert>
 
     <update id="markResultSaved">
-        UPDATE tax_inputs SET SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
+        UPDATE tax_inputs SET USER_ID = #{userId}, SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
         WHERE TAX_INPUT_ID = #{taxInputId}
+          AND (USER_ID IS NULL OR USER_ID = #{userId})
     </update>
 
     <select id="findResult" resultType="java.lang.String">
-        SELECT RESULT_DETAIL FROM tax_results WHERE TAX_INPUT_ID = #{taxInputId}
+        SELECT r.RESULT_DETAIL
+            FROM tax_results r
+            JOIN tax_inputs i ON i.TAX_INPUT_ID = r.TAX_INPUT_ID
+            WHERE r.TAX_INPUT_ID = #{taxInputId} AND i.USER_ID = #{userId}
     </select>
 
     <!-- 거래 합계와 별도로 입력한 계산 조건을 같은 분석번호로 조회한다. -->
@@ -54,6 +83,7 @@
                GENERAL_DONATION_AMOUNT AS generalDonationAmount
         FROM tax_inputs
         WHERE TAX_INPUT_ID = #{taxInputId}
+          AND (USER_ID = #{userId} OR USER_ID IS NULL)
     </select>
 
     <!-- 수입·지출을 포함한 전체 자료 기간을 한 번에 조회한다. -->
