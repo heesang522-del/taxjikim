@@ -2,11 +2,13 @@ package com.kh.back.report.dto;
 
 import com.fasterxml.jackson.annotation.JsonGetter;
 import com.kh.back.common.util.DateTimeUtil;
+import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
 
 @Data
+@Builder
 public class ReportDto {
     private Long reportId;
     private String targetType; // POST / COMMENT

@@ -40,12 +40,13 @@ public class ReportServiceImpl implements ReportService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CANNOT_REPORT_OWN_POST", "본인 글은 신고할 수 없습니다.");
         }
 
-        ReportDto report = new ReportDto();
-        report.setTargetType(TARGET_TYPE_POST);
-        report.setTargetId(postId);
-        report.setTargetUserId(post.getUserId());
-        report.setReasonDetail(reason);
-        report.setReporterId(reporterId);
+        ReportDto report = ReportDto.builder()
+                                    .targetType(TARGET_TYPE_POST)
+                                    .targetId(postId)
+                                    .targetUserId(post.getUserId())
+                                    .reasonDetail(reason)
+                                    .reporterId(reporterId)
+                                    .build();
 
         try {
             reportMapper.insert(report);
@@ -64,12 +65,14 @@ public class ReportServiceImpl implements ReportService {
             throw new ApiException(HttpStatus.BAD_REQUEST, "CANNOT_REPORT_OWN_COMMENT", "본인 댓글은 신고할 수 없습니다.");
         }
 
-        ReportDto report = new ReportDto();
-        report.setTargetType(TARGET_TYPE_COMMENT);
-        report.setTargetId(commentId);
-        report.setTargetUserId(comment.getUserId());
-        report.setReasonDetail(reason);
-        report.setReporterId(reporterId);
+        ReportDto report = ReportDto.builder()
+                                    .targetType(TARGET_TYPE_COMMENT)
+                                    .targetId(commentId)
+                                    .targetUserId(comment.getUserId())
+                                    .reasonDetail(reason)
+                                    .reporterId(reporterId)
+                                    .build();
+
 
         try {
             reportMapper.insert(report);
