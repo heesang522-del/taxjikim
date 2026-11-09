@@ -15,7 +15,7 @@ export async function saveSimulationScenario(scenario) {
 }
 
 export async function deleteSimulationScenario(simulationId) {
-  return request({ url: `/tax/simulations/${validateId(simulationId)}`, method: 'DELETE' });
+  return request({ url: `/tax/simulations/${simulationId}`, method: 'DELETE' });
 }
 
 // 결과 데이터와 추가 가정만 보내 기존 백엔드 계산을 재사용한다.
@@ -66,14 +66,6 @@ async function request(config) {
 
     throw error;
   }
-}
-
-function validateId(value, label = '번호') {
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`${label}를 확인해주세요.`);
-  }
-
-  return value;
 }
 
 function validateYear(value) {
@@ -141,8 +133,6 @@ export async function getTaxCalculationResult(taxInputId, { signal } = {}) {
 }
 
 function inputPath(taxInputId) {
-  validateId(taxInputId, '분석번호');
-
   return `/tax/inputs/${taxInputId}`;
 }
 
@@ -227,7 +217,7 @@ export async function saveTaxData({ input, taxInputId, transactions, expectedTra
   if (taxInputId == null) {
     data.input = normalizeTaxInput(input);
   } else {
-    data.taxInputId = validateId(taxInputId, '분석번호');
+    data.taxInputId = taxInputId;
 
     if (input != null) {
       throw new Error('기존 분석의 기본정보는 수정 API를 이용해주세요.');
@@ -307,7 +297,7 @@ export async function updateTaxData(taxInputId, { input, changes } = {}) {
 
   if (hasCategoryChange) {
     data.changes = changes.map(({ transactionId, category }) => ({
-      transactionId: validateId(transactionId, '거래번호'),
+      transactionId,
       category: validateCategory(category),
     }));
   }
@@ -342,7 +332,7 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
 
   // 전체 삭제를 명시하지 않았다면 거래번호가 반드시 필요하다.
   if (!deleteAll) {
-    data.transactionId = validateId(transactionId, '거래번호');
+    data.transactionId = transactionId;
   }
 
   return request({
@@ -381,8 +371,6 @@ export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   formData.append('file', file);
 
   if (taxInputId !== null) {
-    validateId(taxInputId, '분석번호');
-
     formData.append('taxInputId', String(taxInputId));
   }
 
@@ -577,10 +565,6 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
     }
 
     if (persisted) {
-      validateId(transactionId, '기존 거래번호');
-
-      validateId(taxInputId, '기존 분석번호');
-
       const target = `${taxInputId}:${transactionId}`;
 
       if (serverTargets.has(target)) {
@@ -777,14 +761,10 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
 
       taxInputId = response?.data?.taxInputId;
 
-      validateId(taxInputId, '생성된 분석번호');
-
       await onInputCreated({
         taxYear: year,
         taxInputId,
       });
-    } else {
-      validateId(taxInputId, '저장 분석번호');
     }
 
     const response = await saveTransactions(
@@ -803,8 +783,6 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
     const seenIds = new Set();
 
     for (const row of savedRows) {
-      validateId(row.transactionId, '저장된 거래번호');
-
       if (row.taxInputId !== taxInputId || seenIds.has(row.transactionId)) {
         throw new Error('저장 결과의 식별자가 올바르지 않습니다.');
       }

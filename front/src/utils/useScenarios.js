@@ -69,15 +69,7 @@ const useScenarioStore = create((set, get) => ({
   },
 
   // 로그아웃 시 화면 메모리만 정리한다. 저장소나 쿠키를 읽거나 삭제하지 않는다.
-  clear: () =>
-    set((state) => ({
-      userId: null,
-      taxInputId: null,
-      requestId: state.requestId + 1,
-      scenarios: [],
-      isLoading: false,
-      errorMessage: '',
-    })),
+  clear: () => set((state) => ({ userId: null, taxInputId: null, requestId: state.requestId + 1, scenarios: [], isLoading: false, errorMessage: '' })),
 }));
 
 // 같은 분석의 입력 영역과 저장 목록이 DB 응답을 메모리에서 공유한다.

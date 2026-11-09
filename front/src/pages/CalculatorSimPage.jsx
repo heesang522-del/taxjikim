@@ -33,13 +33,9 @@ function SimulationContent() {
   const [errorMessage, setErrorMessage] = useState('');
 
   // 추가 가정은 현재 분석 화면의 메모리에만 보관한다.
-  function patchSim(patch) {
-    setSim((previous) => ({ ...previous, ...patch }));
-  }
+  function patchSim(patch) { setSim((previous) => ({ ...previous, ...patch })); }
 
-  function resetSim() {
-    setSim({ ...EMPTY_SIM });
-  }
+  function resetSim() { setSim({ ...EMPTY_SIM }); }
 
   // 결과창에서 받은 데이터를 우선 사용하고, 직접 접근한 경우에만 기준 결과를 조회한다.
   useEffect(() => {
