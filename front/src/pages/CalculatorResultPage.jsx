@@ -22,7 +22,10 @@ export default function CalcResultPage() {
   const taxInputId = Number(searchParams.get('taxInputId'));
   const validTaxInputId = Number.isSafeInteger(taxInputId) && taxInputId > 0;
   const savedResult = searchParams.get('saved') === 'true';
-  const { calculated } = useTax();
+  const { calculated, taxInputIdsByYear } = useTax();
+  const { loggedIn, authStatus } = useAuth();
+  // 비회원은 현재 작업 메모리에 저장된 분석번호만 열 수 있으며 새로고침 후에는 다시 입력한다.
+  const guestAccessBlocked = !savedResult && !loggedIn && !Object.values(taxInputIdsByYear ?? {}).includes(taxInputId);
   const [result, setResult] = useState(savedResult ? null : state?.taxResult ?? null);
   const breakdown = result?.breakdown;
   const [isLoading, setIsLoading] = useState(savedResult || !state?.taxResult);
@@ -33,6 +36,7 @@ export default function CalcResultPage() {
 
   // 결과를 한 번 조회하고 산출 근거와 월별 목록을 각 컴포넌트에 나눠 전달한다.
   useEffect(() => {
+    if (authStatus === 'checking' || guestAccessBlocked) return;
     // 로그인 후 돌아온 경우 당시 화면 데이터를 유지하고 다시 계산하지 않는다.
     if (!savedResult && state?.taxResult) {
       setResult(state.taxResult);
@@ -68,8 +72,7 @@ export default function CalcResultPage() {
       cancelled = true;
       controller.abort();
     };
-  }, [calculated, savedResult, taxInputId, validTaxInputId, state, navigate, toast]);
-  const { loggedIn } = useAuth();
+  }, [calculated, savedResult, taxInputId, validTaxInputId, state, navigate, toast, authStatus, guestAccessBlocked]);
   // 페이지의 결과 전체를 저장하며 브라우저의 요약 기록으로 대체하지 않는다.
   const handleSaveResult = useCallback(async () => {
     if (isSaving) return;
@@ -104,6 +107,9 @@ export default function CalcResultPage() {
     void handleSaveResult();
     navigate(`${ROUTES.calcResult}${search}`, { replace: true, state: { taxResult: result } });
   }, [state, loggedIn, result, isLoading, handleSaveResult, navigate, search]);
+
+  if (authStatus === 'checking') return <p>로그인 상태를 확인하고 있습니다.</p>;
+  if (guestAccessBlocked) return <Navigate to={ROUTES.calcInput} replace />;
 
   if (!validTaxInputId) {
     return <p role="alert">분석번호가 없습니다. 입력 화면에서 분석 결과 보기를 눌러주세요.</p>;
