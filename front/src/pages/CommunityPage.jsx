@@ -107,6 +107,9 @@ export default function PostListPage() {
   ];
   const writeTab = tab === '전체' || (tab === '공지' && !isAdmin) ? POST_WRITE_TABS[0] : tab;
   const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+  // 1페이지에서만 고정 공지를 맨 위에 끼워 넣는다. 별도 영역으로 나누지 않고 한 목록처럼 보이게 한다.
+  // 2페이지부터는 공지 없이 일반 목록 그대로다.
+  const displayRows = showPinned && page === 1 ? [...pinnedNotices, ...posts] : posts;
 
   return (
     <Card>
@@ -125,22 +128,12 @@ export default function PostListPage() {
           <Button variant="soft" size="sm" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
         </div>
       </div>
-      {showPinned && pinnedNotices.length > 0 && (
-        <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
-          <DataTable
-            columns={columns}
-            rows={pinnedNotices}
-            rowKey={(p) => `pinned-${p.id}`}
-            onRowClick={(p) => navigate(ROUTES.postDetail(p.id), { state: { fromList: true } })}
-          />
-        </div>
-      )}
       {loading ? <p className="state-msg" role="status">게시글을 불러오는 중입니다.</p>
         : error ? <p className="state-msg" role="alert">{error}</p>
-        : posts.length
+        : displayRows.length
         ? (
           <>
-            <DataTable columns={columns} rows={posts} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.postDetail(p.id), { state: { fromList: true } })} />
+            <DataTable columns={columns} rows={displayRows} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.postDetail(p.id), { state: { fromList: true } })} />
             {pageNumbers.length > 1 && (
               <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
                 <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
