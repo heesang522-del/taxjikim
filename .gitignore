@@ -49,6 +49,11 @@
 !/ml/models/expense_classifier/model_report.json
 !/ml/models/expense_classifier/previous_test_report.json
 !/ml/models/expense_classifier/previous_test_predictions.csv
+!/ml/models/income_classifier/
+/ml/models/income_classifier/*
+!/ml/models/income_classifier/logistic_regression_bundle.pkl
+!/ml/models/income_classifier/linear_svc_bundle.pkl
+!/ml/models/income_classifier/model_report.json
 
 # IntelliJ IDEA
 **/.idea/
@@ -143,6 +148,7 @@ workers
 
 # 테스트 소스는 로컬에서만 관리한다.
 /back/src/test/
+/ml/scripts/test_pdf_parser.py
 
 # 로컬 SQL 자료는 Git에 올리지 않는다.
 /back/sql/schema.sql

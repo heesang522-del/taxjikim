@@ -296,7 +296,6 @@ export const useTaxStore = create((set, get) => ({
     specialDonationAmount: 0,
   },
 
-  sim: { ...EMPTY_SIM },
   calculated: false,
 
   // 입력이 변경되면 이전 계산 완료 상태를 해제한다.
@@ -319,11 +318,7 @@ export const useTaxStore = create((set, get) => ({
       return;
     }
 
-    set((state) => ({
-      inputMethod: method,
-      sim: state.inputMethod === method ? state.sim : { ...EMPTY_SIM },
-      calculated: false,
-    }));
+    set({ inputMethod: method, calculated: false });
   },
 
   addFileResult: (rows, file) =>
@@ -430,21 +425,6 @@ export const useTaxStore = create((set, get) => ({
       },
       calculated: false,
     })),
-
-  patchSim: (patch) =>
-    set((state) => ({
-      sim: {
-        ...state.sim,
-        ...patch,
-      },
-      calculated: false,
-    })),
-
-  resetSim: () =>
-    set({
-      sim: { ...EMPTY_SIM },
-      calculated: false,
-    }),
 
   setCalculated: (value) =>
     set({

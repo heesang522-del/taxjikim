@@ -26,6 +26,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 import com.kh.back.tax.dto.TaxSimulationDto;
 import com.kh.back.tax.dto.SimulationScenarioDto;
+import com.kh.back.tax.dto.SavedTaxResultDto;
 
 // 세금 분석 결과 조회와 계산을 처리한다.
 @Service
@@ -35,20 +36,27 @@ public class TaxServiceImpl implements TaxService {
 
     private final TaxMapper taxMapper;
 
-    // 소유자 필터링은 Mapper의 USER_ID 조건으로 처리한다.
+    // 회원번호를 SQL 조건으로 전달하며 저장된 결과를 다시 계산하지 않는다.
     @Override
     @Transactional(readOnly = true)
-    public List<SimulationScenarioDto> getScenarios(Long userId) {
-        return taxMapper.findScenarios(userId);
+    public List<SavedTaxResultDto> getSavedResults(Long userId) {
+        return taxMapper.findSavedResults(userId);
     }
 
-    // 기존 A/B/C 이름과 세 개 저장 정책을 유지한다.
+    // 회원번호와 분석번호를 함께 사용해 다른 분석의 시나리오를 섞지 않는다.
+    @Override
+    @Transactional(readOnly = true)
+    public List<SimulationScenarioDto> getScenarios(Long userId, Long taxInputId) {
+        return taxMapper.findScenarios(userId, taxInputId);
+    }
+
+    // A/B/C 이름과 세 개 저장 제한을 기준 분석별로 적용한다.
     @Override
     @Transactional
     public SimulationScenarioDto saveScenario(Long userId, SimulationScenarioDto scenario) {
-        List<SimulationScenarioDto> saved = taxMapper.findScenarios(userId);
+        List<SimulationScenarioDto> saved = taxMapper.findScenarios(userId, scenario.getTaxInputId());
         if (saved.size() >= 3) {
-            throw new ApiException(HttpStatus.CONFLICT, "SCENARIO_LIMIT_REACHED", "시나리오는 최대 3개까지 저장할 수 있습니다.");
+            throw new ApiException(HttpStatus.CONFLICT, "SCENARIO_LIMIT_REACHED", "분석별 시나리오는 최대 3개까지 저장할 수 있습니다.");
         }
         for (String name : List.of("A안", "B안", "C안")) {
             boolean used = false;
@@ -60,7 +68,9 @@ public class TaxServiceImpl implements TaxService {
                 break;
             }
         }
-        taxMapper.insertScenario(userId, scenario);
+        if (taxMapper.insertScenario(userId, scenario) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "시나리오를 저장할 분석을 찾을 수 없습니다.");
+        }
         return scenario;
     }
 
@@ -100,24 +110,30 @@ public class TaxServiceImpl implements TaxService {
         return calculateBreakdown(input);
     }
 
-    // 페이지의 결과를 그대로 보관하고 저장 상태만 변경한다. 회원 연결은 하지 않는다.
+    // 결과 JSON과 분석의 회원번호·저장 상태를 같은 DB 트랜잭션에서 기록한다.
     @Override
     @Transactional
-    public void saveResult(Long taxInputId, JsonNode result) {
+    public void saveResult(Long taxInputId, Long userId, JsonNode result) {
         if (result == null || !result.isObject() || !result.path("breakdown").isObject()) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "저장할 분석 결과가 필요합니다.");
         }
+        // 다른 회원에게 이미 연결된 분석의 소유자를 덮어쓰지 않는다.
+        if (taxMapper.markResultSaved(taxInputId, userId) != 1) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "저장할 수 있는 분석을 찾을 수 없습니다.");
+        }
+        // 같은 귀속연도의 이전 저장본만 삭제해 연결 데이터를 정리하고, 다른 연도는 유지한다.
+        taxMapper.deletePreviousSavedInputs(userId, taxInputId);
         taxMapper.saveResult(taxInputId, result.toString());
-        taxMapper.markResultSaved(taxInputId);
     }
 
     // 저장된 JSON만 조회하며 계산 메서드나 업로드 서비스를 호출하지 않는다.
     @Override
     @Transactional(readOnly = true)
-    public JsonNode getSavedResult(Long taxInputId) {
-        String detail = taxMapper.findResult(taxInputId);
+    public JsonNode getSavedResult(Long taxInputId, Long userId) {
+        // 소유자 확인과 결과 조회를 한 번에 처리하고, 미존재와 권한 없음을 구분해 노출하지 않는다.
+        String detail = taxMapper.findResult(taxInputId, userId);
         if (detail == null) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_RESULT_NOT_FOUND", "저장된 결과가 없습니다.");
+            throw new ApiException(HttpStatus.FORBIDDEN, "TAX_INPUT_FORBIDDEN", "조회할 수 없는 저장 결과입니다.");
         }
         return JsonMapper.builder().build().readTree(detail);
     }
@@ -125,11 +141,11 @@ public class TaxServiceImpl implements TaxService {
     // 거래 기간과 월별 목록을 한 번씩 조회해 계산과 그래프에서 함께 사용한다.
     @Override
     @Transactional(readOnly = true)
-    public TaxCalculationResultDto getCalculationResult(Long taxInputId) {
-        // 1. 분석 기본정보와 공제 조건을 조회한다.
-        TaxCalculationInputDto input = taxMapper.findCalculationInput(taxInputId);
+    public TaxCalculationResultDto getCalculationResult(Long taxInputId, Long userId) {
+        // 1. 회원 소유 분석은 본인만, 비회원 분석은 기존처럼 조회하며 추가 DB 요청은 하지 않는다.
+        TaxCalculationInputDto input = taxMapper.findCalculationInput(taxInputId, userId);
         if (input == null) {
-            throw new ApiException(HttpStatus.NOT_FOUND, "TAX_INPUT_NOT_FOUND", "분석 정보를 찾을 수 없습니다.");
+            throw new ApiException(HttpStatus.FORBIDDEN, "TAX_INPUT_FORBIDDEN", "조회할 수 없는 분석입니다.");
         }
 
         // 2. 첫·마지막 거래 날짜가 있고, 두 날짜의 연도가 같은지 확인한다.
