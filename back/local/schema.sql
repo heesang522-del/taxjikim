@@ -257,7 +257,7 @@ CREATE TABLE `chatbot_messages` (
     KEY `idx_chatbot_messages_conversation` (`conversation_id`,`deleted_at`,`message_id`),
     KEY `idx_chatbot_messages_processing` (`conversation_id`,`processing_status`,`deleted_at`),
     CONSTRAINT `fk_chatbot_messages_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `chatbot_conversations` (`conversation_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=183 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=183 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
 
