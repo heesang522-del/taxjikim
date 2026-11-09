@@ -11,6 +11,7 @@ import lombok.Setter;
 @NoArgsConstructor
 public class SimulationScenarioDto {
     private Long simulationId;
+    private Long taxInputId; // 이 시나리오의 기준 분석번호
     private String name;
     private BigDecimal extraInc;
     private BigDecimal extraExp;

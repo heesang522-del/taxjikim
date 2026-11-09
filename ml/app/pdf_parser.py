@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import math
 import re
 import statistics
@@ -438,14 +439,45 @@ def words_to_rows(words, config=None):
 
 def _text_rows(source, config):
     result = []
+    lines = source.splitlines()
+    csv_rows = {}
+    csv_widths = set()
 
-    for line in source.splitlines():
+    # 날짜가 독립된 CSV 필드인 행으로 형식을 확인한다.
+    # 기존 표의 금액에 들어 있는 천 단위 쉼표는 열 구분자로 취급하지 않는다.
+    for index, line in enumerate(lines):
+        if "," not in line:
+            continue
+
+        try:
+            cells = next(csv.reader(
+                [line], skipinitialspace=True, strict=True,
+            ))
+        except csv.Error:
+            continue
+
+        if len(cells) < 3:
+            continue
+
+        csv_rows[index] = cells
+
+        if any(DATE_PATTERN.fullmatch(_text(cell)) for cell in cells):
+            csv_widths.add(len(cells))
+
+    for index, line in enumerate(lines):
         line = line.strip()
 
         if not line:
             continue
 
-        if "|" in line:
+        csv_cells = csv_rows.get(index)
+
+        # CSV 헤더도 거래 행과 같은 열 수일 때 함께 복원한다.
+        # 따옴표로 감싼 설명·금액 내부의 쉼표는 csv 모듈이 보존한다.
+        if csv_cells is not None and len(csv_cells) in csv_widths:
+            cells = csv_cells
+
+        elif "|" in line:
             cells = [
                 _text(cell)
                 for cell in line.split("|")

@@ -55,15 +55,48 @@ LogisticRegression의 분류 점수와 LinearSVC의 결정 점수는 서로 다�
 
 ## 서버
 
+### 다른 PC에서 처음 실행
+
+프로젝트 루트의 PowerShell에서 실행한다. 현재 모델을 학습한 환경은 Python 3.14.7이며,
+패키지 버전은 `ml/requirements.txt`를 따른다. `.venv`는 공유하지 않고 PC마다 새로 만든다.
+
 ```powershell
-cd ml
-python -m uvicorn app.main:app --reload
+py -3.14 -m venv ml/.venv
+.\ml\.venv\Scripts\python.exe -m pip install -r ml/requirements.txt
+.\ml\.venv\Scripts\python.exe -m uvicorn ml.app.main:app --reload
+```
+
+가상환경을 활성화하지 않아도 해당 환경의 Python을 직접 지정해 실행할 수 있다.
+서버는 시작할 때 수입·지출 모델을 모두 불러오므로 다음 파일들이 필요하다.
+
+```text
+ml/models/expense_classifier/model_report.json
+ml/models/expense_classifier/linear_svc_bundle.pkl
+ml/models/expense_classifier/logistic_regression_bundle.pkl
+ml/models/income_classifier/model_report.json
+ml/models/income_classifier/linear_svc_bundle.pkl
+ml/models/income_classifier/logistic_regression_bundle.pkl
+```
+
+수입 모델도 지출 모델처럼 Git 공유 대상으로 허용했다. 이 파일들과 `.gitignore` 변경이
+커밋·push된 이후 다른 PC에서 받아야 한다. 제외 예외만 추가해도 기존 로컬 파일이 자동으로 커밋되지는 않는다.
+각 보고서의 `selected_model`에 해당하는 번들을 실제로 읽으며, 두 후보 번들을 함께 공유한다.
+
+재학습 결과·SetFit 모델·다운로드 캐시는 계속 Git에서 제외한다.
+다른 PC에서 처음 서버를 실행하면 별도 스레드의 재학습 스케줄러가 학습을 시작할 수 있고,
+SetFit 기본 모델 다운로드에는 인터넷 연결이 필요하다. API는 공유된 기본 모델로 요청을 처리한다.
+
+### 이미 가상환경을 활성화한 경우
+
+프로젝트 루트에서:
+
+```powershell
+python -m uvicorn ml.app.main:app --reload
 ```
 
 모델 파일만 바뀌면 자동 반영되지 않으므로 학습 후 서버를 재시작한다.
 `http://127.0.0.1:8000/docs`에서 PDF 분석 요청을 확인할 수 있다.
-PDF·OCR에서 추출한 거래 중 지출의 설명만 모델에 전달하고 나머지 거래 정보는 유지한다.
-수입 모델은 아직 연결하지 않았다. DB 저장은 Spring 담당이다.
+PDF·OCR에서 추출한 수입·지출 설명을 각각의 모델로 분류한다. DB 저장은 Spring 담당이다.
 
 ## 미분류와 후속 작업
 

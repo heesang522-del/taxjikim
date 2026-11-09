@@ -5,6 +5,7 @@ import com.kh.back.tax.dto.CategoryAmountDto;
 import com.kh.back.tax.dto.TaxCalculationInputDto;
 import com.kh.back.tax.dto.TransactionPeriodDto;
 import com.kh.back.tax.dto.SimulationScenarioDto;
+import com.kh.back.tax.dto.SavedTaxResultDto;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.stereotype.Repository;
@@ -16,23 +17,29 @@ import java.util.List;
 @Repository("taxCalculationMapper")
 public interface TaxMapper {
 
-    List<SimulationScenarioDto> findScenarios(@Param("userId") Long userId);
+    // 로그인 회원이 저장한 결과의 목록 정보만 조회한다.
+    List<SavedTaxResultDto> findSavedResults(@Param("userId") Long userId);
+
+    List<SimulationScenarioDto> findScenarios(@Param("userId") Long userId, @Param("taxInputId") Long taxInputId);
 
     int insertScenario(@Param("userId") Long userId, @Param("scenario") SimulationScenarioDto scenario);
 
     int deleteScenario(@Param("userId") Long userId, @Param("simulationId") Long simulationId);
 
+    // 현재 분석을 제외한 같은 회원·같은 귀속연도의 이전 저장 분석을 삭제한다.
+    int deletePreviousSavedInputs(@Param("userId") Long userId, @Param("taxInputId") Long taxInputId);
+
     // 같은 분석의 결과 JSON을 저장하거나 덮어쓴다.
     int saveResult(@Param("taxInputId") Long taxInputId, @Param("resultDetail") String resultDetail);
 
-    // 임시 데이터 정리 대상에서 제외하도록 저장 상태만 변경한다.
-    int markResultSaved(@Param("taxInputId") Long taxInputId);
+    // 분석의 회원번호와 저장 상태를 함께 기록한다.
+    int markResultSaved(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
-    // 저장한 JSON 원문을 조회한다.
-    String findResult(@Param("taxInputId") Long taxInputId);
+    // 분석번호와 소유자 회원번호가 모두 일치하는 저장 JSON을 조회한다.
+    String findResult(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
     // 같은 분석의 귀속연도·가족 수·기부금액을 조회한다.
-    TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId);
+    TaxCalculationInputDto findCalculationInput(@Param("taxInputId") Long taxInputId, @Param("userId") Long userId);
 
     // 분석에 저장된 전체 거래의 첫 날짜와 마지막 날짜를 함께 조회한다.
     TransactionPeriodDto findTransactionPeriod(@Param("taxInputId") Long taxInputId);
