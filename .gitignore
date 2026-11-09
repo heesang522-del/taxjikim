@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 !.env.*.example
+# 개인 실행 설정은 비밀번호와 로컬 인증서 경로를 포함하므로 공유하지 않는다.
+back/src/main/resources/application-local.yml
 *.local
 *.pem
 *.key

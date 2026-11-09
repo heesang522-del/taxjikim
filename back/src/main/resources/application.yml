@@ -1,4 +1,21 @@
 spring:
+  # 거래 검색용 클라이언트가 사용할 접속 정보다. 원본 거래는 기존 MySQL에 저장한다.
+  elasticsearch:
+    uris: ${ELASTICSEARCH_URIS:https://localhost:9200}
+    username: ${ELASTICSEARCH_USERNAME:elastic}
+    password: ${ELASTICSEARCH_PASSWORD:}
+    connection-timeout: 5s
+    socket-timeout: 30s
+    restclient:
+      ssl:
+        bundle: elasticsearch
+  ssl:
+    bundle:
+      pem:
+        elasticsearch:
+          truststore:
+            # 실행 환경의 http_ca.crt 위치를 file: 경로로 전달해 서버 인증서를 검증한다.
+            certificate: ${ELASTICSEARCH_CA_CERT}
   ai:
     openai:
       api-key: ${OPENAI_API_KEY:no-key}
@@ -40,6 +57,14 @@ spring:
     password: ${DB_PASSWORD:server}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+# 연결 확인이 필요할 때만 true로 설정해 시작 시 서버 정보를 한 번 요청한다.
+elasticsearch:
+  connection-check:
+    enabled: ${ELASTICSEARCH_CONNECTION_CHECK_ENABLED:false}
+  # 처음 검색 공간을 준비할 때만 켠다. 기존 인덱스는 수정하지 않는다.
+  index-initialize:
+    enabled: ${ELASTICSEARCH_INDEX_INITIALIZE_ENABLED:false}
+
 # 서버 포트 (React 의 vite.config.js API_TARGET 과 같아야 한다)
 server:
   port: ${SERVER_PORT:8080}
@@ -66,7 +91,8 @@ python:
 
 tax:
   ocr:
-    tessdata-path: C:/TAXJIKIM/back/tessdata
+    # 백엔드 실행 작업 디렉터리를 back/으로 맞춰 학습 데이터 폴더를 찾는다.
+    tessdata-path: ./tessdata
     language: kor+eng
     dpi: 200
     max-pages: 50
@@ -81,7 +107,3 @@ jwt:
   secret: my-temporary-secret-key-for-jwt-authentication-demo-project-2026-safe
   access-token-expiration: 1800000 # 30분, 밀리초
   refresh-token-expiration: 1209600000 # 14일, 밀리초
-
-  file:
-    upload-dir:
-      post: C:/TAXJIKIM/back/uploads/posts
