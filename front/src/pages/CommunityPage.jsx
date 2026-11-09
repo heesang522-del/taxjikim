@@ -10,6 +10,7 @@ import { useAuth } from '../store/useAuthStore';
 import { getPostsPage } from '../api/post';
 
 const CATEGORY_TONE = { 공지: 'danger', '정보 공유': 'primary', 팁: 'neutral' };
+const PINNED_NOTICE_COUNT = 3; // "전체" 탭 상단에 고정 노출할 최신 공지 개수
 
 export default function PostListPage() {
   const [params, setParams] = useSearchParams();
@@ -18,11 +19,14 @@ export default function PostListPage() {
   const [query, setQuery] = useState(params.get('q') ?? '');
   const [page, setPage] = useState(Number(params.get('page')) || 1);
   const [posts, setPosts] = useState([]);
+  const [pinnedNotices, setPinnedNotices] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const { isAdmin } = useAuth();
+  // "전체" 탭이고 검색 중이 아닐 때만 공지를 상단에 고정 노출한다. 검색 중에는 검색 결과에만 집중하도록 숨긴다.
+  const showPinned = tab === '전체' && !query;
 
   // 검색어 입력마다 바로 서버에 요청하지 않도록 잠깐 멈췄다가 반영한다.
   useEffect(() => {
@@ -53,10 +57,11 @@ export default function PostListPage() {
   }, [tab, query, page, setParams]);
 
   // 탭·검색어·페이지가 바뀔 때마다 그 페이지만 서버에서 받아온다.
+  // showPinned이면 아래 일반 목록에서는 공지를 빼서, 위에 고정 노출한 공지와 중복되지 않게 한다.
   useEffect(() => {
     let active = true;
     setLoading(true);
-    getPostsPage({ page, postType: tab === '전체' ? undefined : tab, keyword: query })
+    getPostsPage({ page, postType: tab === '전체' ? undefined : tab, keyword: query, excludeNotice: showPinned })
       .then(({ posts: items, meta }) => {
         if (!active) return;
         setPosts(items);
@@ -72,7 +77,27 @@ export default function PostListPage() {
     return () => {
       active = false;
     };
-  }, [tab, query, page]);
+  }, [tab, query, page, showPinned]);
+
+  // 상단에 고정 노출할 최신 공지를 따로 받아온다. "전체" 탭에서 검색 중이 아닐 때만 조회한다.
+  // 보조 기능이라 실패해도 조용히 넘어가고, 일반 목록 조회에는 영향을 주지 않는다.
+  useEffect(() => {
+    if (!showPinned) {
+      setPinnedNotices([]);
+      return undefined;
+    }
+    let active = true;
+    getPostsPage({ page: 1, postType: '공지', sort: 'latest' })
+      .then(({ posts: items }) => {
+        if (active) setPinnedNotices(items.slice(0, PINNED_NOTICE_COUNT));
+      })
+      .catch(() => {
+        if (active) setPinnedNotices([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [showPinned]);
 
   // 제목 길이가 들쭉날쭉해도 작성자 위치가 흔들리지 않도록 열 폭을 고정한다(제목 70% / 작성자 30%, 조회는 짧은 고정폭).
   const columns = [
@@ -100,6 +125,16 @@ export default function PostListPage() {
           <Button variant="soft" size="sm" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
         </div>
       </div>
+      {showPinned && pinnedNotices.length > 0 && (
+        <div style={{ marginBottom: 16, paddingBottom: 16, borderBottom: '1px solid var(--border)' }}>
+          <DataTable
+            columns={columns}
+            rows={pinnedNotices}
+            rowKey={(p) => `pinned-${p.id}`}
+            onRowClick={(p) => navigate(ROUTES.postDetail(p.id), { state: { fromList: true } })}
+          />
+        </div>
+      )}
       {loading ? <p className="state-msg" role="status">게시글을 불러오는 중입니다.</p>
         : error ? <p className="state-msg" role="alert">{error}</p>
         : posts.length

@@ -40,9 +40,12 @@ public class PostApiController {
 
                                                   @RequestParam(defaultValue = "1") int page,
 
-                                                  @RequestParam(required = false) String postType) {
+                                                  @RequestParam(required = false) String postType,
 
-        return postService.getPostPage(sort, keyword, page, postType);
+                                                  // "전체" 탭에서 상위 공지를 따로 고정 노출할 때, 일반 목록에서는 공지를 뺀다.
+                                                  @RequestParam(defaultValue = "false") boolean excludeNotice) {
+
+        return postService.getPostPage(sort, keyword, page, postType, excludeNotice);
     } // latest 정렬방식, "" 검색어, 1 페이지 번호, null 게시판 종류 ( 받은 조건으로 서비스에 게시글 조회를 요청하고 그결과를 반환)
 
     @GetMapping("/{postId}")
