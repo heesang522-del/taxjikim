@@ -25,6 +25,8 @@ dependencies {
 	implementation 'com.fasterxml.jackson.core:jackson-databind'
 	implementation 'org.apache.pdfbox:pdfbox:3.0.6'
 	implementation 'net.sourceforge.tess4j:tess4j:5.16.0'
+	implementation platform('org.springframework.ai:spring-ai-bom:2.0.2')
+	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
 
 	// 옮긴 인증·회원 코드에서 사용하는 보안, 세션 저장, 이메일, 임시 캐시 의존성이다.

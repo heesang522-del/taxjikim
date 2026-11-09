@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.chatbot.mapper.ChatbotUsageMapper">
+
+    <insert id="insertUsageIfAbsent">
+        INSERT INTO chatbot_daily_usage (
+        user_id,
+        usage_date,
+        request_count
+        )
+        VALUES (
+        #{userId},
+        #{usageDate},
+        0
+        )
+        ON DUPLICATE KEY UPDATE
+        request_count = request_count
+    </insert>
+
+    <update id="increaseUsage">
+        UPDATE chatbot_daily_usage
+        SET request_count = request_count + 1
+        WHERE user_id = #{userId}
+        AND usage_date = #{usageDate}
+        AND request_count &lt; #{dailyLimit}
+    </update>
+
+    <select id="findUsageCount"
+            resultType="java.lang.Integer">
+        SELECT request_count
+        FROM chatbot_daily_usage
+        WHERE user_id = #{userId}
+        AND usage_date = #{usageDate}
+    </select>
+
+    <!-- PENDING에서 FAILED로 처음 변경된 트랜잭션에서만 호출한다. -->
+    <update id="releaseQuestionUsage">
+        UPDATE chatbot_daily_usage u
+        JOIN chatbot_messages m
+        ON m.message_id = #{questionId}
+        JOIN chatbot_conversations c
+        ON c.conversation_id = m.conversation_id
+        SET u.request_count = u.request_count - 1
+        WHERE c.user_id = #{userId}
+        AND c.conversation_id = #{conversationId}
+        AND m.role = 'USER'
+        AND m.processing_status = 'FAILED'
+        AND u.user_id = #{userId}
+        AND u.usage_date = DATE(m.created_at)
+        AND u.request_count &gt; 0
+    </update>
+
+</mapper>
