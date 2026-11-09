@@ -18,14 +18,16 @@ public interface PostMapper {
             @Param("size") int size,
             @Param("postType") String postType,
             @Param("currentUserId") Long currentUserId,
-            @Param("isAdmin") boolean isAdmin
+            @Param("isAdmin") boolean isAdmin,
+            @Param("excludeNotice") boolean excludeNotice
     );
 
     int countAll(
             @Param("keyword") String keyword,
             @Param("postType") String postType,
             @Param("currentUserId") Long currentUserId,
-            @Param("isAdmin") boolean isAdmin
+            @Param("isAdmin") boolean isAdmin,
+            @Param("excludeNotice") boolean excludeNotice
     );
 
     PostDto findById(

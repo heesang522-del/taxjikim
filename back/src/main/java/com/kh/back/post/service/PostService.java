@@ -16,7 +16,8 @@ public interface PostService {
 
     // 목록 조회. 페이지 크기·offset 변환·전체 건수 조회·PageMeta 조립까지 전부 여기서 끝내고
     // 컨트롤러가 그대로 반환할 수 있는 ApiResponse를 돌려준다. page는 1부터 시작한다.
-    ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String postType);
+    // excludeNotice=true면 공지를 뺀 결과만 돌려준다("전체" 탭에서 공지를 상단에 따로 고정 노출할 때 쓴다).
+    ApiResponse<List<PostDto>> getPostPage(String sort, String keyword, int page, String postType, boolean excludeNotice);
 
     // 게시글을 저장하고, 업로드된 첨부파일을 함께 연결한다.
     void saveWithFiles(PostDto post, List<String> savedFileNames);

@@ -133,6 +133,19 @@ public class NotificationServiceImpl implements NotificationService {
                 sseEmitterRegistry.send(adminId, NOTIFICATION_EVENT, Map.of("type", "QNA_NEW"))));
     }
 
+    @Override
+    @Transactional
+    public void notifyReportResolved(Long reporterId, Long postId, String postTitle, String targetType, String result) {
+        String safeTitle = truncateTitle(postTitle);
+        String targetLabel = "COMMENT".equals(targetType) ? "댓글" : "게시글";
+        String message = "DELETE".equals(result)
+                ? "신고하신 " + targetLabel + "이 삭제 처리되었습니다."
+                : "신고하신 " + targetLabel + "을 검토했지만 반려되었습니다.";
+        notificationMapper.insertReportResultNotification(reporterId, postId, safeTitle, message);
+        // 신고자 한 명에게만 보낸다. 커밋 후 push(이유는 broadcastNoticePost 주석 참고).
+        pushAfterCommit(() -> sseEmitterRegistry.send(reporterId, NOTIFICATION_EVENT, Map.of("type", "REPORT_RESULT")));
+    }
+
     // NOTIFICATIONS.TITLE(VARCHAR(100)) 길이 제한. POSTS.TITLE은 255자까지 허용돼서,
     // 자르지 않고 그대로 넣으면 100자를 넘는 제목에서 INSERT가 실패해 호출한 트랜잭션 전체가 롤백된다.
     private String truncateTitle(String title) {
