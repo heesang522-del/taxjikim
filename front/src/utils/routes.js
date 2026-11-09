@@ -19,6 +19,7 @@ export const ROUTES = {
   adminReports: '/admin/reports',
   adminInquiries: '/admin/inquiries',
   adminChats: '/admin/chats',
+  chatbot: '/chatbot',
 };
 
 // 헤더 가운데 메뉴. 관리자·마이페이지·로그인은 Header에서 따로 그린다.
@@ -27,4 +28,5 @@ export const NAV_ITEMS = [
   { to: '/calculator', label: '세금 계산·시뮬레이션' },
   { to: ROUTES.postList, label: '게시판' },
   { to: ROUTES.help, label: '고객센터' },
+  { to: ROUTES.chatbot, label: 'AI 챗봇' },
 ];

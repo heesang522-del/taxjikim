@@ -222,6 +222,45 @@ CREATE TABLE `tax_process_logs` (
     CONSTRAINT `FK_TAX_LOGS_USER` FOREIGN KEY (`USER_ID`) REFERENCES `users` (`USER_ID`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+
+CREATE TABLE `chatbot_conversations` (
+     `conversation_id` bigint NOT NULL AUTO_INCREMENT,
+     `user_id` bigint NOT NULL,
+     `title` varchar(100) NOT NULL DEFAULT '새 대화',
+     `revision` bigint NOT NULL DEFAULT '0',
+     `created_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+     `updated_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+     `deleted_at` datetime(6) DEFAULT NULL,
+     PRIMARY KEY (`conversation_id`),
+     KEY `idx_chatbot_conversations_user` (`user_id`,`deleted_at`,`updated_at`,`conversation_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=134 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+
+CREATE TABLE `chatbot_daily_usage` (
+   `user_id` bigint NOT NULL,
+   `usage_date` date NOT NULL,
+   `request_count` int NOT NULL DEFAULT '0',
+   PRIMARY KEY (`user_id`,`usage_date`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE `chatbot_messages` (
+    `message_id` bigint NOT NULL AUTO_INCREMENT,
+    `conversation_id` bigint NOT NULL,
+    `role` varchar(20) NOT NULL,
+    `content` mediumtext NOT NULL,
+    `created_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    `deleted_at` datetime(6) DEFAULT NULL,
+    `processing_status` varchar(16) NOT NULL DEFAULT 'COMPLETED' COMMENT 'PENDING: 처리 중, COMPLETED: 완료, FAILED: 실패',
+    PRIMARY KEY (`message_id`),
+    KEY `idx_chatbot_messages_conversation` (`conversation_id`,`deleted_at`,`message_id`),
+    KEY `idx_chatbot_messages_processing` (`conversation_id`,`processing_status`,`deleted_at`),
+    CONSTRAINT `fk_chatbot_messages_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `chatbot_conversations` (`conversation_id`) ON DELETE CASCADE
+) ENGINE=InnoDB AUTO_INCREMENT=183 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+
 ALTER TABLE `USER_LOGIN_SECURITY` ADD CONSTRAINT `fk_local_1` FOREIGN KEY (`USER_ID`) REFERENCES `users` (`USER_ID`);
 ALTER TABLE `USER_SANCTIONS` ADD CONSTRAINT `fk_local_2` FOREIGN KEY (`USER_ID`) REFERENCES `users` (`USER_ID`);
 ALTER TABLE `USER_SANCTIONS` ADD CONSTRAINT `fk_local_3` FOREIGN KEY (`ADMIN_ID`) REFERENCES `users` (`USER_ID`);

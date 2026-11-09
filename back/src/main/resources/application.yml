@@ -1,4 +1,13 @@
 spring:
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:no-key}
+      chat:
+        options:
+          model: ${OPENAI_CHAT_MODEL:gpt-5.6-luna}
+    retry:
+      max-attempts: 1
+
   servlet:
     multipart:
       # 2MB 청크와 multipart 필드·경계 데이터까지 받을 수 있게 여유를 둔다.
