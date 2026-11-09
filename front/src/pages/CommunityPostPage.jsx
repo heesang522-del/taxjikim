@@ -2,7 +2,7 @@
 'use no memo';
 
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Modal, Pill } from '../components/common/index';
 import NoticeCard from '../components/community/NoticeCard';
 import CommentSection from '../components/community/CommentSection';
@@ -22,6 +22,10 @@ const listOf = (tab) => `${ROUTES.postList}?tab=${encodeURIComponent(tab)}`;
 export default function PostDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  // 게시판 목록에서 들어왔으면 "목록"을 눌렀을 때 그 목록 화면(탭·검색어·페이지)으로 그대로 돌아간다.
+  // 알림 클릭 등으로 상세 페이지에 직접 들어온 경우는 돌아갈 목록 화면이 없어 기본 목록으로 보낸다.
+  const cameFromList = Boolean(location.state?.fromList);
   const toast = useToast();
   const { loggedIn, user } = useAuth();
   const { addReport, hasReported } = useReports();
@@ -75,9 +79,15 @@ export default function PostDetailPage() {
         title="게시글을 찾을 수 없습니다"
         desc="삭제되었거나 주소가 잘못되었습니다."
         action={
-          <Button variant="primary" to={ROUTES.postList}>
-            목록으로
-          </Button>
+          cameFromList ? (
+            <Button variant="primary" onClick={() => navigate(-1)}>
+              목록으로
+            </Button>
+          ) : (
+            <Button variant="primary" to={ROUTES.postList}>
+              목록으로
+            </Button>
+          )
         }
       />
     );
@@ -89,9 +99,15 @@ export default function PostDetailPage() {
         title={DELETED_POST}
         desc="운영 정책에 따라 삭제된 글입니다."
         action={
-          <Button variant="primary" to={listOf(post.tab)}>
-            목록으로
-          </Button>
+          cameFromList ? (
+            <Button variant="primary" onClick={() => navigate(-1)}>
+              목록으로
+            </Button>
+          ) : (
+            <Button variant="primary" to={listOf(post.tab)}>
+              목록으로
+            </Button>
+          )
         }
       />
     );
@@ -182,7 +198,9 @@ export default function PostDetailPage() {
           )
         )}
         <div className="row between" style={{ marginTop: 16 }}>
-          <Button to={listOf(post.tab)}>목록</Button>
+          {cameFromList
+            ? <Button onClick={() => navigate(-1)}>목록</Button>
+            : <Button to={listOf(post.tab)}>목록</Button>}
           {mine && (
             <div className="row">
               <Button variant="soft" to={ROUTES.postEdit(post.id)}>

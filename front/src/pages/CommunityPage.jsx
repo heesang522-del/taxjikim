@@ -1,7 +1,7 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Tabs } from '../components/common/index';
 import { POST_TABS, POST_WRITE_TABS } from '../data/content';
@@ -12,11 +12,11 @@ import { getPostsPage } from '../api/post';
 const CATEGORY_TONE = { 공지: 'danger', '정보 공유': 'primary', 팁: 'neutral' };
 
 export default function PostListPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState(POST_TABS.includes(params.get('tab')) ? params.get('tab') : POST_TABS[0]);
-  const [queryInput, setQueryInput] = useState('');
-  const [query, setQuery] = useState('');
-  const [page, setPage] = useState(1);
+  const [queryInput, setQueryInput] = useState(params.get('q') ?? '');
+  const [query, setQuery] = useState(params.get('q') ?? '');
+  const [page, setPage] = useState(Number(params.get('page')) || 1);
   const [posts, setPosts] = useState([]);
   const [totalPages, setTotalPages] = useState(1);
   const navigate = useNavigate();
@@ -30,10 +30,27 @@ export default function PostListPage() {
     return () => clearTimeout(timer);
   }, [queryInput]);
 
-  // 탭이나 검색어가 바뀌면 1페이지부터 다시 본다.
+  // 탭이나 검색어가 실제로 바뀌면 1페이지부터 다시 본다. 직전 값과 비교해서 판단한다 — 단순히
+  // "첫 렌더는 건너뛴다" 플래그를 쓰면 개발 모드의 StrictMode 이펙트 이중 실행에서 플래그가
+  // 먼저 꺼져버려 마운트 직후(예: 상세 페이지에서 뒤로가기로 돌아왔을 때)에도 오탐으로 페이지가
+  // 1로 리셋된다. 값 비교는 이중 실행돼도 매번 같은 결과라 안전하다.
+  const prevFilters = useRef({ tab, query });
   useEffect(() => {
-    setPage(1);
+    if (prevFilters.current.tab !== tab || prevFilters.current.query !== query) {
+      setPage(1);
+    }
+    prevFilters.current = { tab, query };
   }, [tab, query]);
+
+  // 탭·검색어·페이지를 주소 쿼리에 반영한다. 기본값(전체/빈 검색어/1페이지)은 생략해 주소를 깔끔하게 유지한다.
+  // 상세 페이지에서 뒤로가기로 돌아왔을 때 같은 화면을 보여주는 데 이 쿼리를 쓴다(새로고침·공유에도 유지됨).
+  useEffect(() => {
+    const next = {};
+    if (tab !== POST_TABS[0]) next.tab = tab;
+    if (query) next.q = query;
+    if (page !== 1) next.page = String(page);
+    setParams(next, { replace: true });
+  }, [tab, query, page, setParams]);
 
   // 탭·검색어·페이지가 바뀔 때마다 그 페이지만 서버에서 받아온다.
   useEffect(() => {
@@ -88,7 +105,7 @@ export default function PostListPage() {
         : posts.length
         ? (
           <>
-            <DataTable columns={columns} rows={posts} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.postDetail(p.id))} />
+            <DataTable columns={columns} rows={posts} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.postDetail(p.id), { state: { fromList: true } })} />
             {pageNumbers.length > 1 && (
               <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
                 <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
