@@ -13,8 +13,8 @@ public interface TaxService {
     // 재계산 없이 본인의 저장 결과 목록을 조회한다.
     List<SavedTaxResultDto> getSavedResults(Long userId);
 
-    // 로그인 회원의 시나리오 목록을 DB에서 조회한다.
-    List<SimulationScenarioDto> getScenarios(Long userId);
+    // 로그인 회원의 특정 분석에 속한 시나리오 목록을 조회한다.
+    List<SimulationScenarioDto> getScenarios(Long userId, Long taxInputId);
 
     // 추가 가정과 저장 당시 결과 합계를 보관한다.
     SimulationScenarioDto saveScenario(Long userId, SimulationScenarioDto scenario);

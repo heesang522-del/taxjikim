@@ -6,8 +6,8 @@ export async function getSavedTaxResults({ signal } = {}) {
 }
 
 // 시나리오는 브라우저 저장소 대신 기존 SIMULATION 테이블에서 관리한다.
-export async function getSimulationScenarios() {
-  return request({ url: '/tax/simulations', method: 'GET' });
+export async function getSimulationScenarios(taxInputId) {
+  return request({ url: '/tax/simulations', method: 'GET', params: { taxInputId } });
 }
 
 export async function saveSimulationScenario(scenario) {

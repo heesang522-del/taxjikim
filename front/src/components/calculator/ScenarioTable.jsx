@@ -7,8 +7,8 @@ import { useScenarios } from '../../utils/useScenarios';
 import { MAX_SCENARIOS } from '../../data/options';
 import { useToast } from '../../store/useToastStore';
 
-export function ScenarioTable({ onLoad }) {
-  const { scenarios, remove, isLoading, errorMessage, deletingId } = useScenarios();
+export function ScenarioTable({ taxInputId, onLoad }) {
+  const { scenarios, remove, isLoading, errorMessage, deletingId } = useScenarios(taxInputId);
   const toast = useToast();
   const columns = [
     { key: 'name', header: '이름' },

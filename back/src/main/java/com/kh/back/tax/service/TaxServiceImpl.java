@@ -43,20 +43,20 @@ public class TaxServiceImpl implements TaxService {
         return taxMapper.findSavedResults(userId);
     }
 
-    // 소유자 필터링은 Mapper의 USER_ID 조건으로 처리한다.
+    // 회원번호와 분석번호를 함께 사용해 다른 분석의 시나리오를 섞지 않는다.
     @Override
     @Transactional(readOnly = true)
-    public List<SimulationScenarioDto> getScenarios(Long userId) {
-        return taxMapper.findScenarios(userId);
+    public List<SimulationScenarioDto> getScenarios(Long userId, Long taxInputId) {
+        return taxMapper.findScenarios(userId, taxInputId);
     }
 
-    // 기존 A/B/C 이름과 세 개 저장 정책을 유지한다.
+    // A/B/C 이름과 세 개 저장 제한을 기준 분석별로 적용한다.
     @Override
     @Transactional
     public SimulationScenarioDto saveScenario(Long userId, SimulationScenarioDto scenario) {
-        List<SimulationScenarioDto> saved = taxMapper.findScenarios(userId);
+        List<SimulationScenarioDto> saved = taxMapper.findScenarios(userId, scenario.getTaxInputId());
         if (saved.size() >= 3) {
-            throw new ApiException(HttpStatus.CONFLICT, "SCENARIO_LIMIT_REACHED", "시나리오는 최대 3개까지 저장할 수 있습니다.");
+            throw new ApiException(HttpStatus.CONFLICT, "SCENARIO_LIMIT_REACHED", "분석별 시나리오는 최대 3개까지 저장할 수 있습니다.");
         }
         for (String name : List.of("A안", "B안", "C안")) {
             boolean used = false;

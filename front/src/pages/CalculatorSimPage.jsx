@@ -6,22 +6,40 @@ import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { SimSliders } from '../components/calculator/SimSliders';
 import { SimCompare } from '../components/calculator/SimCompare';
 import { getTaxCalculationResult, getSavedTaxResult, simulateTax } from '../api/taxApi';
-import { useTax } from '../store/useTaxStore';
+import { EMPTY_SIM } from '../store/useTaxStore';
 import { ScenarioTable } from '../components/calculator/ScenarioTable';
 import { useAuth } from '../store/useAuthStore';
 import { ROUTES } from '../utils/routes';
 
 export function CalculatorSimPage() {
+  const { user } = useAuth();
+  const [params] = useSearchParams();
+  const userId = user?.userId ?? user?.id ?? '';
+
+  // 회원 또는 기준 분석이 바뀌면 입력값과 계산 결과를 새 화면 상태로 시작한다.
+  return <SimulationContent key={`${userId}:${params.get('taxInputId')}:${params.get('saved')}`} />;
+}
+
+function SimulationContent() {
   const { loggedIn, authStatus } = useAuth();
   const { state } = useLocation();
   const [params] = useSearchParams();
   const taxInputId = Number(params.get('taxInputId'));
   const saved = params.get('saved') === 'true';
-  const { sim, patchSim } = useTax();
+  const [sim, setSim] = useState({ ...EMPTY_SIM });
   const [result, setResult] = useState(state?.taxResult ?? null);
   const [scenario, setScenario] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+
+  // 추가 가정은 현재 분석 화면의 메모리에만 보관한다.
+  function patchSim(patch) {
+    setSim((previous) => ({ ...previous, ...patch }));
+  }
+
+  function resetSim() {
+    setSim({ ...EMPTY_SIM });
+  }
 
   // 결과창에서 받은 데이터를 우선 사용하고, 직접 접근한 경우에만 기준 결과를 조회한다.
   useEffect(() => {
@@ -114,12 +132,15 @@ export function CalculatorSimPage() {
       <div className="grid" style={{ minWidth: 0 }}>
         <SimSliders
           taxInputId={taxInputId}
+          sim={sim}
+          patchSim={patchSim}
+          resetSim={resetSim}
           scenario={scenario}
           predictedIncome={result?.predictedIncome}
           predictedExpense={result?.predictedExpense}
           disabled={isLoading || Boolean(errorMessage)}
         />
-        <ScenarioTable onLoad={handleLoadScenario} />
+        <ScenarioTable taxInputId={taxInputId} onLoad={handleLoadScenario} />
       </div>
       <SimCompare base={result?.breakdown} scenario={scenario} isLoading={isLoading} errorMessage={errorMessage} />
     </div>

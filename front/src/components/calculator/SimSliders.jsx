@@ -4,7 +4,6 @@
 import { Button, Card } from '../common/index';
 import { useScenarios } from '../../utils/useScenarios';
 import { man, won } from '../../utils/format';
-import { useTax } from '../../store/useTaxStore';
 import { useToast } from '../../store/useToastStore';
 import { MAX_SCENARIOS } from '../../data/options';
 
@@ -14,9 +13,8 @@ const FIELDS = [
   { key: 'extraDonation', label: '추가 기부금', hint: '기존 일반기부금에 더하며, 계산 한도 안의 금액만 반영합니다.' },
 ];
 
-export function SimSliders({ taxInputId, scenario, predictedIncome, predictedExpense, disabled = false }) {
-  const { sim, patchSim, resetSim } = useTax();
-  const { save, isSaving, isLoading: isScenarioLoading } = useScenarios();
+export function SimSliders({taxInputId, sim, patchSim, resetSim, scenario, predictedIncome, predictedExpense, disabled = false,}) {
+  const { save, isSaving, isLoading: isScenarioLoading } = useScenarios(taxInputId);
   const toast = useToast();
   const onSave = async () => {
     const r = await save({
@@ -30,9 +28,9 @@ export function SimSliders({ taxInputId, scenario, predictedIncome, predictedExp
     });
     toast(
       {
-        ok: '시나리오를 저장했습니다. 마이페이지에서 확인할 수 있어요',
+        ok: '현재 분석의 시나리오를 저장했습니다',
         login: '시나리오 저장은 로그인 후 이용할 수 있습니다',
-        max: `시나리오는 최대 ${MAX_SCENARIOS}개까지 저장됩니다. 마이페이지에서 삭제 후 저장하세요`,
+        max: `분석별 시나리오는 최대 ${MAX_SCENARIOS}개까지 저장됩니다. 아래 목록에서 삭제 후 저장하세요`,
         error: '시나리오를 DB에 저장하지 못했습니다',
         busy: '시나리오를 저장 중입니다',
       }[r]

@@ -20,7 +20,7 @@ public interface TaxMapper {
     // 로그인 회원이 저장한 결과의 목록 정보만 조회한다.
     List<SavedTaxResultDto> findSavedResults(@Param("userId") Long userId);
 
-    List<SimulationScenarioDto> findScenarios(@Param("userId") Long userId);
+    List<SimulationScenarioDto> findScenarios(@Param("userId") Long userId, @Param("taxInputId") Long taxInputId);
 
     int insertScenario(@Param("userId") Long userId, @Param("scenario") SimulationScenarioDto scenario);
 

@@ -35,6 +35,7 @@
                RESULT_TOTAL_EXPENSE AS totalExpense
         FROM SIMULATION
         WHERE USER_ID = #{userId}
+          AND TAX_INPUT_ID = #{taxInputId}
         ORDER BY SIMULATION_ID
     </select>
 
