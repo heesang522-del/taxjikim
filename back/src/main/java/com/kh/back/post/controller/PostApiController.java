@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/posts/community")
+@RequestMapping("/api/v1/posts")
 @RequiredArgsConstructor
 public class PostApiController {
 

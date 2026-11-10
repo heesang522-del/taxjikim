@@ -11,10 +11,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-// 게시글 신고 접수. SecurityConfig에서 /api/v1/posts/community/** POST는 인증을 요구하므로
+// 게시글 신고 접수. SecurityConfig에서 /api/v1/posts/** POST는 인증을 요구하므로
 // 여기 도달한 요청은 이미 principal이 채워져 있다.
 @RestController
-@RequestMapping("/api/v1/posts/community/{postId}/reports")
+@RequestMapping("/api/v1/posts/{postId}/reports")
 @RequiredArgsConstructor
 public class ReportApiController {
     private final ReportService reportService;
