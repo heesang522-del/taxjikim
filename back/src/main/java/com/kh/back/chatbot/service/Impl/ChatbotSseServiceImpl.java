@@ -10,9 +10,7 @@ import com.kh.back.chatbot.service.ChatbotService;
 import com.kh.back.chatbot.service.ChatbotSseService;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.common.sse.SseEmitterRegistry;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.core.task.TaskRejectedException;
@@ -26,9 +24,7 @@ import java.util.concurrent.FutureTask;
 @Service
 public class ChatbotSseServiceImpl implements ChatbotSseService {
 
-    private static final long RETENTION_MS =
-            30 * 60 * 1000L;
-
+    private static final long RETENTION_MS = 30 * 60 * 1000L;
     private static final int MAX_REQUESTS = 5000;
 
     private final ChatbotService chatbotService;
@@ -75,7 +71,7 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             }
 
             // 취소가 먼저 접수된 요청은 실행하지 않는다.
-            task.getControl().checkActive();
+            task.checkActive();
             task.setSubmitted(true);
 
             future = new FutureTask<>(() -> {
@@ -84,20 +80,20 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
                         conversationId,
                         requestId,
                         question,
-                        task.getControl()
+                        task
                 );
 
                 return null;
             });
 
-            // 취소 요청에서도 같은 작업을 찾을 수 있게 등록한다.
+            // 취소 요청에서 같은 실행 작업을 찾을 수 있게 등록한다.
             task.setFuture(future);
         }
 
         try {
             chatbotTaskExecutor.execute(future);
         } catch (TaskRejectedException exception) {
-            task.getControl().cancel();
+            task.cancel();
             future.cancel(false);
 
             throw new ApiException(
@@ -120,10 +116,9 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
         QuestionTaskDto task = getTask(userId, conversationId, requestId);
 
         synchronized (task) {
-            // 요청 정보를 알고 있는 경우에만 취소 확정을 안내한다.
+            // 접수 이력이 있는 요청에 대해서만 취소가 확정됐다고 응답한다.
             boolean knownRequest = task.isSubmitted();
-
-            ChatbotReply completed = task.getControl().cancel();
+            ChatbotReply completed = task.cancel();
 
             if (completed != null) {
                 // DB 저장이 이미 끝난 질문은 성공 결과를 반환한다.
@@ -147,11 +142,7 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
                     .requestId(requestId)
                     .conversationId(conversationId)
                     .cancelled(knownRequest)
-                    .code(
-                            knownRequest
-                                    ? null
-                                    : "CHATBOT_CANCELLATION_UNKNOWN"
-                    )
+                    .code(knownRequest ? null : "CHATBOT_CANCELLATION_UNKNOWN")
                     .build();
         }
     }
@@ -193,7 +184,6 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             );
         }
 
-        // 같은 요청의 작업이 없을 때만 빌더로 새 작업을 만든다.
         return tasks.computeIfAbsent(
                 key,
                 ignored -> QuestionTaskDto.builder().build()
@@ -205,7 +195,7 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
             Long conversationId,
             String requestId,
             String question,
-            ChatbotService.QuestionControl control
+            QuestionTaskDto task
     ) {
         try {
             // 답변 조각이 만들어지면 SSE로 전달한다.
@@ -222,7 +212,7 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
                                     .delta(delta)
                                     .build()
                     ),
-                    control
+                    task
             );
 
             sseEmitterRegistry.send(
@@ -235,7 +225,6 @@ public class ChatbotSseServiceImpl implements ChatbotSseService {
                             .remaining(reply.remaining())
                             .build()
             );
-
         } catch (RuntimeException exception) {
             String code;
 
