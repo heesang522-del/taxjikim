@@ -122,7 +122,9 @@ export default function PostListPage() {
 
   return (
     <Card>
-      <div className="row between" style={{ marginBottom: 16 }}>
+      {/* .between은 align-items: center라서, 탭 밑줄(12px 패딩+보더)만큼 더 큰 Tabs와 입력창·버튼이
+          세로 중앙으로 맞춰져 검색창 쪽이 한 칸 내려와 보였다. 상단 기준으로 나란히 맞춘다. */}
+      <div className="row between" style={{ marginBottom: 16, alignItems: 'flex-start' }}>
         <Tabs tabs={POST_TABS.map((t) => ({ id: t, label: t }))} active={tab} onChange={setTab} />
         <div className="row" style={{ gap: 8 }}>
           <input
@@ -134,7 +136,8 @@ export default function PostListPage() {
             onChange={(e) => setQueryInput(e.target.value)}
             aria-label="검색어"
           />
-          <Button variant="soft" size="sm" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
+          {/* size="sm"(패딩 6px)이면 검색창(.in, 패딩 10px)보다 눈에 띄게 작아 보여 기본 크기(md, 패딩 10px)로 맞췄다. */}
+          <Button variant="soft" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
         </div>
       </div>
       {loading ? <p className="state-msg" role="status">게시글을 불러오는 중입니다.</p>
