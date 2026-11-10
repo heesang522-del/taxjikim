@@ -113,6 +113,16 @@ export async function getPostsPage({ page = 1, postType, keyword, sort = 'latest
   return { posts: result.data.map(toPost), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
 }
 
+// 게시글 하나를 상세 API로 직접 조회한다. 이 호출에서 서버가 조회수(하루 1회 제한)를 함께 반영한다.
+export async function getPost(postId) {
+  const result = await unwrapRequest(
+    client.get(`/${encodeURIComponent(postId)}`, { baseURL: POST_API_BASE }),
+    '게시글을 불러오지 못했습니다.'
+  );
+
+  return toPost(result.data);
+}
+
 // 서버의 QNA 게시글을 Q&A 화면에서 쓰는 필드로 변환한다.
 export function toInquiry(post) {
   return {

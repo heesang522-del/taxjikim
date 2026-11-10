@@ -1,7 +1,7 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Modal, Pill } from '../components/common/index';
 import NoticeCard from '../components/community/NoticeCard';
@@ -14,10 +14,12 @@ import { usePost } from '../store/usePostStore';
 import { useToast } from '../store/useToastStore';
 import { useReports } from '../utils/useReports';
 import { createPostReport } from '../api/report';
-import { deletePost } from '../api/post';
+import { deletePost, getPost } from '../api/post';
 import { imagePreviewProps, videoPreviewProps } from '../store/post-preview';
 
 const listOf = (tab) => `${ROUTES.postList}?tab=${encodeURIComponent(tab)}`;
+// 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. SupportQnaPostPage와 같은 구분 방식.
+const isServerId = (id) => /^\d+$/.test(id);
 
 export default function PostDetailPage() {
   const { id } = useParams();
@@ -29,15 +31,24 @@ export default function PostDetailPage() {
   const toast = useToast();
   const { loggedIn, user } = useAuth();
   const { addReport, hasReported } = useReports();
-  const { posts, addView, removePost, loadPosts } = usePost();
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
-  // 상세 주소를 직접 열거나 새로고침해도 서버 게시글을 복원한다.
+  const { posts, removePost } = usePost();
+  const [serverPost, setServerPost] = useState(null);
+  const [loading, setLoading] = useState(isServerId(id));
+  const [loadError, setLoadError] = useState(false);
+
+  // 서버 글은 상세 API로 직접 조회한다. 목록을 먼저 거치지 않고(알림 클릭 등) 바로 들어와도 복원되고,
+  // 이 호출에서 서버가 조회수(하루 1회 제한)도 함께 반영한다.
   useEffect(() => {
+    if (!isServerId(id)) return undefined;
     let active = true;
-    loadPosts()
+    setLoading(true);
+    setLoadError(false);
+    getPost(id)
+      .then((data) => {
+        if (active) setServerPost(data);
+      })
       .catch(() => {
-        if (active) setLoadError('게시글을 불러오지 못했습니다.');
+        if (active) setLoadError(true);
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -45,20 +56,12 @@ export default function PostDetailPage() {
     return () => {
       active = false;
     };
-  }, [loadPosts]);
+  }, [id]);
+
   const [confirm, setConfirm] = useState(false);
   const [reporting, setReporting] = useState(false);
-  const post = posts.find((p) => p.id === id);
-  const counted = useRef(null);
-
-  // 글을 열 때 조회수를 한 번만 올린다 (개발 모드의 이펙트 이중 실행 방지)
-  const exists = Boolean(post);
-  useEffect(() => {
-    if (exists && counted.current !== id) {
-      counted.current = id;
-      addView(id);
-    }
-  }, [exists, id, addView]);
+  // 브라우저에만 남아있는 예시 글은 usePostStore가 들고 있는 로컬 목록에서 찾는다.
+  const post = isServerId(id) ? serverPost : posts.find((p) => p.id === id);
 
   if (loading)
     return (
@@ -66,14 +69,10 @@ export default function PostDetailPage() {
         게시글을 불러오는 중입니다.
       </p>
     );
-  if (loadError)
-    return (
-      <p role="alert" className="state-msg">
-        {loadError}
-      </p>
-    );
 
-  if (!post) {
+  // 글이 없을 때(잘못된 주소·삭제됨)와 조회 자체가 실패했을 때(네트워크 오류 등)를 같은 안내로 묶는다.
+  // 전자는 404라서 "없음"과 "오류"를 사용자 입장에서 구분해 보여줄 이유가 없다.
+  if (!post || loadError) {
     return (
       <NoticeCard
         title="게시글을 찾을 수 없습니다"
@@ -116,10 +115,10 @@ export default function PostDetailPage() {
   // 서버 글의 소유자는 표시 닉네임 대신 변경되지 않는 회원 번호로 비교한다.
   const mine =
     loggedIn &&
-    (post.source === 'server' ? String(post.userId) === String(user.userId) : post.author === user.nickname);
+    (isServerId(id) ? String(post.userId) === String(user.userId) : post.author === user.nickname);
   // 서버 글은 백엔드 신고 API를 호출한다. 브라우저에만 있는 예시 글은 아직 신고 API가 없어 로컬 기록으로 처리한다.
   const report = async (reason) => {
-    if (post.source === 'server') {
+    if (isServerId(id)) {
       try {
         await createPostReport(post.id, reason);
         toast('신고를 접수했습니다');
@@ -139,9 +138,10 @@ export default function PostDetailPage() {
   };
   const remove = async () => {
     try {
-      // 실제 게시글은 서버에서 소유자를 확인한 뒤 소프트 삭제한다.
-      if (post.source === 'server') await deletePost(post.id);
-      removePost(post.id);
+      // 실제 게시글은 서버에서 소유자를 확인한 뒤 소프트 삭제한다. 더 이상 로컬에 서버 글 목록을
+      // 들고 있지 않으므로(상세는 매번 API로 직접 조회), 지울 것도 없이 바로 목록으로 돌아간다.
+      if (isServerId(id)) await deletePost(post.id);
+      else removePost(post.id);
       toast('글을 삭제했습니다');
       navigate(listOf(post.tab), { replace: true });
     } catch (error) {
