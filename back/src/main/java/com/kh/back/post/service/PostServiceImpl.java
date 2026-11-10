@@ -137,6 +137,12 @@ public class PostServiceImpl implements PostService {
             }
         }
 
+        // FAQ는 일반 게시글 상세 화면으로 보여줄 대상이 아니다(자주 묻는 질문 화면이 useFaq로 따로 관리한다).
+        // 목록에서는 이미 제외되지만, 이 API는 postId만 알면 바로 조회할 수 있어 여기서도 같은 404로 막는다.
+        if ("FAQ".equals(post.getPostType())) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
+        }
+
         post.setFiles(postMapper.findFilesByPostId(postId));
         return post;
     }
