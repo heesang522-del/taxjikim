@@ -214,13 +214,20 @@ export function useMemberChat(open, myUserId, loggedIn) {
 
   // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 확인한다. 폴링 대신, 알림과 같은 SSE 연결로
   // 관리자가 메시지를 보내거나 상담을 종료할 때마다 오는 'chat-unread' 신호(chatUnreadBus 경유)를 받아 다시 조회한다.
+  const wasActiveRef = useRef(active);
   useEffect(() => {
+    const wasActive = wasActiveRef.current;
+    wasActiveRef.current = active;
+
     if (active || !activeRoomId) {
       setBadgeCount(0);
       return undefined;
     }
     const check = () => getMemberUnreadCount(activeRoomId).then((r) => setBadgeCount(r.data)).catch(() => {});
-    check(); // 패널이 닫히는 순간까지 쌓였을 수 있는 값을 먼저 맞춰둔다
+    // 방금까지 패널이 열려 있었다면(wasActive) 그 동안은 소켓이 메시지를 실시간으로 읽음 처리했으므로
+    // 안읽은 수는 이미 0이다 — 다시 물어볼 필요 없다. 새로고침 등으로 패널이 처음부터 닫힌 채
+    // 방을 발견한 경우에만(로그인 전에 쌓였을 수 있는 값이라 SSE로 못 받았으므로) 한 번 확인한다.
+    if (!wasActive) check();
     return subscribeChatUnread(check);
   }, [active, activeRoomId]);
 
