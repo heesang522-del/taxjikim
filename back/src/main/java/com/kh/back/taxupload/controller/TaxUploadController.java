@@ -4,7 +4,6 @@ import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
-import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import com.kh.back.taxupload.service.YearEndTaxService;
@@ -25,7 +24,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @RestController
@@ -33,8 +31,7 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class TaxUploadController {
 
-    private static final String GUEST_INPUT_IDS =
-            "taxupload.guestInputIds";
+    private static final String GUEST_INPUT_IDS = "taxupload.guestInputIds";
 
     private final YearEndTaxService service;
 
@@ -47,14 +44,12 @@ public class TaxUploadController {
             HttpServletRequest servletRequest,
             @RequestBody TaxServiceRequest request
     ) {
-        boolean createAnalysis =
-                request.getTaxInputId() == null;
+        boolean createAnalysis = request.getTaxInputId() == null;
 
         // 새 비회원 분석의 소유권을 기록할 세션을 준비한다.
-        HttpSession guestSession =
-                principal == null && createAnalysis
-                        ? servletRequest.getSession(true)
-                        : servletRequest.getSession(false);
+        HttpSession guestSession = principal == null && createAnalysis
+                ? servletRequest.getSession(true)
+                : servletRequest.getSession(false);
 
         TaxServiceResponse saved = service.save(
                 principal,
@@ -64,23 +59,18 @@ public class TaxUploadController {
 
         TaxInputRequest input = saved.getInput();
 
-        // 서비스 저장이 성공한 뒤 비회원 소유 분석번호를 기록한다.
+        // 새 비회원 분석이 저장된 뒤에만 분석번호를 세션에 기록한다.
         if (createAnalysis && input.getUserId() == null) {
-            changeGuestInput(
-                    guestSession,
-                    input.getTaxInputId(),
-                    true
-            );
+            changeGuestInput(guestSession, input.getTaxInputId(), true);
         }
 
-        HttpStatus status = createAnalysis
-                ? HttpStatus.CREATED
-                : HttpStatus.OK;
+        HttpStatus status = createAnalysis ? HttpStatus.CREATED : HttpStatus.OK;
 
         return ResponseEntity
                 .status(status)
                 .body(ApiResponse.ok(saved));
     }
+
     /**
      * 기본정보와 거래 카테고리를 한 번에 수정한다.
      */
@@ -91,62 +81,53 @@ public class TaxUploadController {
             @PathVariable("taxInputId") Long taxInputId,
             @RequestBody TaxServiceRequest request
     ) {
+        HttpSession session = servletRequest.getSession(false);
+
         TaxInputRequest updated = service.update(
                 principal,
-                readGuestInputs(
-                        servletRequest.getSession(false)
-                ),
+                readGuestInputs(session),
                 taxInputId,
                 request
         );
 
-        // 회원 소유로 전환된 분석은 비회원 권한 목록에서 제거한다.
+        // 회원 소유 분석은 비회원 권한 목록에서 정리한다.
         if (updated.getUserId() != null) {
-            changeGuestInput(
-                    servletRequest.getSession(false),
-                    taxInputId,
-                    false
-            );
+            changeGuestInput(session, taxInputId, false);
         }
 
         return ApiResponse.ok(updated);
     }
 
     /**
-     * 분석 전체 삭제와 거래 한 건 삭제를 하나의 API로 처리한다.
+     * 분석 전체 삭제와 거래 삭제를 하나의 API로 처리한다.
      */
     @PostMapping("/inputs/{taxInputId}/delete")
     public ResponseEntity<Void> delete(
             @AuthenticationPrincipal CustomUserDetails principal,
             HttpServletRequest servletRequest,
             @PathVariable("taxInputId") Long taxInputId,
-            @RequestParam(
-                    value = "deleteAll",
-                    defaultValue = "false"
-            ) boolean deleteAll,
+            @RequestParam(value = "deleteAll", defaultValue = "false")
+            boolean deleteAll,
             @RequestBody TaxServiceRequest request
     ) {
+        HttpSession session = servletRequest.getSession(false);
+
         service.delete(
                 principal,
-                readGuestInputs(
-                        servletRequest.getSession(false)
-                ),
+                readGuestInputs(session),
                 taxInputId,
                 request,
                 deleteAll
         );
 
-        // 분석 전체 삭제가 성공했을 때만 세션의 분석번호를 제거한다.
+        // 분석 전체 삭제가 성공했을 때만 세션에서 분석번호를 지운다.
         if (deleteAll) {
-            changeGuestInput(
-                    servletRequest.getSession(false),
-                    taxInputId,
-                    false
-            );
+            changeGuestInput(session, taxInputId, false);
         }
 
         return ResponseEntity.noContent().build();
     }
+
     /**
      * PDF에서 거래 내역을 추출한다.
      */
@@ -168,9 +149,7 @@ public class TaxUploadController {
         // 추출만 수행하며 DB 저장은 save 요청에서 처리한다.
         PdfParseResponseDto response = service.parse(
                 principal,
-                readGuestInputs(
-                        servletRequest.getSession(false)
-                ),
+                readGuestInputs(servletRequest.getSession(false)),
                 taxInputId,
                 file
         );
@@ -178,18 +157,13 @@ public class TaxUploadController {
         return ApiResponse.ok(response);
     }
 
-    private Set<Long> readGuestInputs(
-            HttpSession session
-    ) {
+    public static Set<Long> readGuestInputs(HttpSession session) {
         if (session == null) {
             return Set.of();
         }
 
         synchronized (session) {
-            Object value = session.getAttribute(
-                    GUEST_INPUT_IDS
-            );
-
+            Object value = session.getAttribute(GUEST_INPUT_IDS);
             Set<Long> ids = new HashSet<>();
 
             if (value instanceof Set<?> values) {
@@ -200,12 +174,12 @@ public class TaxUploadController {
                 }
             }
 
-            // 서비스에는 세션 원본 대신 복사본을 전달한다.
+            // 호출하는 쪽에서 세션 원본을 바꾸지 못하도록 복사본을 반환한다.
             return Set.copyOf(ids);
         }
     }
 
-    private void changeGuestInput(
+    public static void changeGuestInput(
             HttpSession session,
             Long taxInputId,
             boolean add
@@ -214,11 +188,9 @@ public class TaxUploadController {
             return;
         }
 
-        // 같은 세션의 분석번호 목록이 동시에 변경되지 않도록 한다.
+        // 같은 세션의 분석번호 목록은 한 번에 하나의 요청만 갱신한다.
         synchronized (session) {
-            Set<Long> ids = new HashSet<>(
-                    readGuestInputs(session)
-            );
+            Set<Long> ids = new HashSet<>(readGuestInputs(session));
 
             if (add) {
                 ids.add(taxInputId);
@@ -226,10 +198,7 @@ public class TaxUploadController {
                 ids.remove(taxInputId);
             }
 
-            session.setAttribute(
-                    GUEST_INPUT_IDS,
-                    Set.copyOf(ids)
-            );
+            session.setAttribute(GUEST_INPUT_IDS, Set.copyOf(ids));
         }
     }
 }

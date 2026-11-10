@@ -5,14 +5,13 @@ import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
 import com.kh.back.chatbot.dto.ChatbotMessageDto;
 import com.kh.back.chatbot.dto.ChatbotMessageDto.MessageResponse;
 import com.kh.back.chatbot.dto.ChatbotReply;
+import com.kh.back.chatbot.dto.QuestionTaskDto;
 import com.kh.back.chatbot.service.ChatbotHistoryService;
 import com.kh.back.chatbot.service.ChatbotService;
 import com.kh.back.chatbot.service.UserContextProvider;
 import com.kh.back.chatbot.util.PiiMasker;
 import com.kh.back.common.exception.ApiException;
-
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -58,10 +57,7 @@ public class ChatbotServiceImpl implements ChatbotService {
         this.userContextProvider = userContextProvider;
 
         this.chatClient = builder
-                .defaultSystem(
-                        systemPrompt,
-                        StandardCharsets.UTF_8
-                )
+                .defaultSystem(systemPrompt, StandardCharsets.UTF_8)
                 .build();
 
         this.enabled = apiKey != null
@@ -77,18 +73,14 @@ public class ChatbotServiceImpl implements ChatbotService {
     public List<ConversationResponse> getConversations(
             CustomUserDetails principal
     ) {
-        return historyService.getConversations(
-                principal.getUserId()
-        );
+        return historyService.getConversations(principal.getUserId());
     }
 
     @Override
     public ConversationResponse createConversation(
             CustomUserDetails principal
     ) {
-        return historyService.createConversation(
-                principal.getUserId()
-        );
+        return historyService.createConversation(principal.getUserId());
     }
 
     @Override
@@ -96,10 +88,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             CustomUserDetails principal,
             Long conversationId
     ) {
-        return historyService.getSnapshot(
-                        principal.getUserId(),
-                        conversationId
-                )
+        return historyService.getSnapshot(principal.getUserId(), conversationId)
                 .messages()
                 .stream()
                 .map(ChatbotMessageDto::toResponse)
@@ -111,10 +100,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             CustomUserDetails principal,
             Long conversationId
     ) {
-        historyService.deleteConversation(
-                principal.getUserId(),
-                conversationId
-        );
+        historyService.deleteConversation(principal.getUserId(), conversationId);
     }
 
     @Override
@@ -123,7 +109,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             Long conversationId,
             String question,
             Consumer<String> onDelta,
-            QuestionControl control
+            QuestionTaskDto task
     ) {
         if (!enabled) {
             throw new ApiException(
@@ -138,17 +124,12 @@ public class ChatbotServiceImpl implements ChatbotService {
         // 저장 및 AI 전송 전에 질문의 개인정보를 마스킹한다.
         String maskedQuestion = PiiMasker.mask(question);
 
-        // 예약과 취소 대상 등록을 하나의 상태 객체에서 처리한다.
+        // 예약과 취소 대상 등록을 같은 질문 작업에서 처리한다.
         ChatbotHistoryService.QuestionReservation reservation =
-                control.begin(
-                        historyService,
-                        principal,
-                        conversationId,
-                        maskedQuestion
-                );
+                task.begin(historyService, principal, conversationId, maskedQuestion);
 
         try {
-            control.checkActive();
+            task.checkActive();
 
             List<Message> context = buildContext(
                     reservation.history(),
@@ -159,25 +140,21 @@ public class ChatbotServiceImpl implements ChatbotService {
                     userContextProvider.build(userId)
             );
 
-            StreamingPiiBuffer buffer =
-                    new StreamingPiiBuffer(onDelta);
+            StreamingPiiBuffer buffer = new StreamingPiiBuffer(onDelta);
 
             chatClient.prompt()
-                    .system(system -> system.param(
-                            "userContext",
-                            userContext
-                    ))
+                    .system(system -> system.param("userContext", userContext))
                     .messages(context)
                     .stream()
                     .content()
                     .timeout(STREAM_IDLE_TIMEOUT)
                     .doOnNext(chunk -> {
-                        control.checkActive();
+                        task.checkActive();
                         buffer.append(chunk);
                     })
                     .blockLast(STREAM_TOTAL_TIMEOUT);
 
-            control.checkActive();
+            task.checkActive();
 
             String maskedReply = buffer.finish();
 
@@ -190,7 +167,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             // 취소와 최종 저장 중 먼저 확정된 상태를 따른다.
-            return control.complete(() -> {
+            return task.complete(() -> {
                 historyService.completeQuestion(
                         userId,
                         conversationId,
@@ -203,13 +180,8 @@ public class ChatbotServiceImpl implements ChatbotService {
                         .remaining(reservation.usage().remaining())
                         .build();
             });
-
         } catch (RuntimeException exception) {
-            markFailed(
-                    userId,
-                    conversationId,
-                    reservation.questionId()
-            );
+            markFailed(userId, conversationId, reservation.questionId());
 
             if (exception instanceof ApiException apiException) {
                 throw apiException;
@@ -234,11 +206,7 @@ public class ChatbotServiceImpl implements ChatbotService {
             String question
     ) {
         List<Message> context = new ArrayList<>();
-
-        int start = Math.max(
-                0,
-                history.size() - CONTEXT_MESSAGES
-        );
+        int start = Math.max(0, history.size() - CONTEXT_MESSAGES);
 
         for (int index = start; index < history.size(); index++) {
             ChatbotMessageDto item = history.get(index);
@@ -263,13 +231,8 @@ public class ChatbotServiceImpl implements ChatbotService {
     ) {
         try {
             // 실패 상태와 횟수 복구를 별도 트랜잭션에서 확정한다.
-            historyService.failQuestion(
-                    userId,
-                    conversationId,
-                    questionId
-            );
+            historyService.failQuestion(userId, conversationId, questionId);
         } catch (RuntimeException exception) {
-            // 복구 실패를 성공으로 안내하지 않고 재조회할 수 있게 기록한다.
             log.error(
                     "챗봇 실패 처리 및 횟수 복구 실패. 질문ID={}, 예외유형={}",
                     questionId,
@@ -278,39 +241,38 @@ public class ChatbotServiceImpl implements ChatbotService {
         }
     }
 
-    private static final class StreamingPiiBuffer { // 이 대화방에서 이 질문의 답변 생성을 멈춰 달라는 요청을 처리하는 부분
+    private static final class StreamingPiiBuffer {
 
-        private static final int MAX_PENDING_LENGTH = 8192; // 개인정보 검사를 위해 잠시 모아두는 답변 조각의 길이 제한
+        private static final int MAX_PENDING_LENGTH = 8192;
 
-        private final StringBuilder pending = new StringBuilder(); // ai 답변을 조금씩 받아 처리하는데 쓰는 변수
+        private final StringBuilder pending = new StringBuilder();
         private final StringBuilder answer = new StringBuilder();
         private final Consumer<String> onDelta;
 
         private StreamingPiiBuffer(Consumer<String> onDelta) {
             this.onDelta = onDelta;
-        } // streamingpiibuffer 를 만들떄 답변 조각을 어디로 보낼지 정해주는 생성자
+        }
 
         private void append(String chunk) {
-            if (chunk == null || chunk.isEmpty()) { // 답변조각이 아예 없는경우, 답변조각이 빈 문자열 ""인 경우
+            if (chunk == null || chunk.isEmpty()) {
                 return;
-            } // append() 는 ai 가 보낸 답변 조각을 버퍼에 추가하는 메서드, 맨처음에 처리할 내용이 있는지 확인
+            }
 
-            pending.append(chunk); // 새 답변 조각을 모아두고, 어디까지 검사해서 내보낼수 있는지 찾을 준비
+            pending.append(chunk);
 
-            int cutoff = 0; // 이벤에 내보낼 부분의 끝 위치, 처음에는 내보낼 위치를 아직 못찾았으므로 0으로 시작
-            int previous = -1; // 앞에서 마지막으로 본 공백이 아닌 문자를 기억하는 변수 , -1 은 아직 그런 문자를 읽지 않았다는 표시
+            int cutoff = 0;
+            int previous = -1;
 
+            // 개인정보가 답변 조각 경계에서 잘리지 않도록 내보낼 위치를 찾는다.
             for (int index = 0; index < pending.length(); index++) {
-                char current = pending.charAt(index); // pending에 모아둔 글을 맨 앞부터 한칸씩 읽는 반복문 부분
+                char current = pending.charAt(index);
 
-                if (Character.isWhitespace(current)) { // 공백을 만났을때, 그 지접까지 개인정보를 검사해서 내보내도 될지 판단하는 부분
+                if (Character.isWhitespace(current)) {
                     if (previous >= 0
                             && !Character.isDigit(previous)
                             && previous != '-') {
                         cutoff = index + 1;
-                    } // 현재 문자가 공백이 아니면 , previous = current 로 마지막 글자를 기억하고,
-                    //   현재 문자가 공백이면 , 마지막 글자를 확인, previous >=0은 앞에서 글자를 하나라도 일었다는 뜻이며,
-                    //  그 글자가 숫자도 아니고 - 도 아니면 , cutoff = index +1 로 공백까지 포함해서 내보낼 위치를 기록.
+                    }
                 } else {
                     previous = current;
                 }
@@ -333,13 +295,10 @@ public class ChatbotServiceImpl implements ChatbotService {
             }
 
             return answer.toString();
-        } // ai가 답변을 다 보내면 호출하는 마무리 메서드
+        }
 
         private void emit(int end) {
-            String masked = PiiMasker.mask(
-                    pending.substring(0, end)
-            );
-
+            String masked = PiiMasker.mask(pending.substring(0, end));
             pending.delete(0, end);
 
             // 화면 표시와 DB 저장에 같은 마스킹 결과를 사용한다.
