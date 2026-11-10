@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-11-10T10:12:25.735113+09:00",
+  "created_at": "2026-11-10T11:12:28.126927+09:00",
   "sklearn_version": "1.9.1",
-  "train_count": 528,
+  "train_count": 529,
   "model_input": [
     "description"
   ],
@@ -19,12 +19,14 @@
   "source_sha256": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
   "source_file": "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv",
   "input_sha256": {
-    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3"
+    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
+    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\user_approved\\category_feedback.csv": "2b53271f81654845b41081b1ada28f5a2e598b4b3dde95040e679e13f563fad0"
   },
   "base_count": 528,
-  "additional_count": 0,
+  "additional_count": 1,
   "duplicate_count": 0,
   "dataset_review_status": [
+    "APPROVED",
     "PENDING"
   ],
   "training_mode": "all_labeled_rows",
