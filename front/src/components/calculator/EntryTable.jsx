@@ -135,6 +135,7 @@ export function EntryTable() {
   const previousKeysRef = useRef(new Set());
 
   const [open, setOpen] = useState(false);
+  const [unclassifiedOnly, setUnclassifiedOnly] = useState(true);
   const [drafts, setDrafts] = useState({});
   const [checkedKeys, setCheckedKeys] = useState([]);
   const [bulkCategory, setBulkCategory] = useState('');
@@ -145,8 +146,10 @@ export function EntryTable() {
   const rows = collectRows(state);
   const checked = new Set(checkedKeys);
 
-  // 본문 거래 목록에서 미분류만 골라 팝업에 표시한다.
-  const visibleRows = rows.filter((row) => row.category === 'UNCLASSIFIED');
+  // 자동으로 열면 미분류만, 사용자가 직접 열면 전체 거래를 보여준다.
+  const unclassifiedRows = rows.filter((row) => row.category === 'UNCLASSIFIED');
+  const visibleRows = unclassifiedOnly ? unclassifiedRows : rows;
+  const visibleLabel = unclassifiedOnly ? '미분류 거래' : '전체 거래';
 
   const selectedRows = rows.filter((row) => checked.has(row.key));
 
@@ -161,9 +164,9 @@ export function EntryTable() {
   const selectedBulk = ALL_CATEGORIES.some((item) => item.value === bulkCategory) ? bulkCategory : '';
 
   const rowKeys = JSON.stringify(rows.map((row) => row.key).sort());
-  const unclassifiedKeys = JSON.stringify(visibleRows.map((row) => row.key).sort());
+  const unclassifiedKeys = JSON.stringify(unclassifiedRows.map((row) => row.key).sort());
 
-  // 새로 추가된 미분류 거래가 있을 때만 팝업을 자동으로 연다.
+  // 팝업이 닫혀 있고 새 미분류 거래가 추가된 경우에만 자동으로 연다.
   useEffect(() => {
     if (busy) return;
 
@@ -172,10 +175,11 @@ export function EntryTable() {
 
     previousKeysRef.current = currentKeys;
 
-    if (hasNewUnclassifiedRows) {
+    if (!open && hasNewUnclassifiedRows) {
+      setUnclassifiedOnly(true);
       setOpen(true);
     }
-  }, [rowKeys, unclassifiedKeys, busy]);
+  }, [rowKeys, unclassifiedKeys, busy, open]);
 
   // React 상태에 맞춰 dialog를 제어하고 배경 스크롤을 막는다.
   useEffect(() => {
@@ -217,6 +221,7 @@ export function EntryTable() {
 
     resetDrafts();
     clearStatus();
+    setUnclassifiedOnly(false);
     setOpen(true);
   }
 
@@ -303,10 +308,12 @@ export function EntryTable() {
     clearStatus();
     workingRef.current = true;
     useTaxStore.setState({ taxSaveBusy: true });
+
     try {
       if (row.persisted) {
         await deleteTransaction(row.taxInputId, row.transactionId);
       }
+
       commitOperation({ ...row, type: 'delete' });
       setMessage('거래를 삭제했습니다.');
     } catch (cause) {
@@ -700,7 +707,7 @@ export function EntryTable() {
         >
           <header className="tax-toolbar">
             <h2 id="tax-review-title">수입·지출 내역 수정</h2>
-            <Button disabled={busy} onClick={handleCloseEditor}>
+            <Button type="button" disabled={busy} onClick={handleCloseEditor}>
               닫기
             </Button>
           </header>
@@ -720,7 +727,9 @@ export function EntryTable() {
           )}
 
           <div className="tax-toolbar tax-editor-tools">
-            <span>미분류 거래</span>
+            <span>
+              {visibleLabel} {visibleRows.length}건
+            </span>
 
             <select
               className="tax-bulk-select"
@@ -742,7 +751,11 @@ export function EntryTable() {
               ))}
             </select>
 
-            <Button disabled={busy || !selectedBulk || selectedRows.length === 0} onClick={handleApplyBulkCategory}>
+            <Button
+              type="button"
+              disabled={busy || !selectedBulk || selectedRows.length === 0}
+              onClick={handleApplyBulkCategory}
+            >
               일괄 적용
             </Button>
 
@@ -754,7 +767,7 @@ export function EntryTable() {
             삭제됩니다.
           </p>
 
-          <div className="tax-table-area tax-edit-area">
+          <div className="tax-table-area tax-edit-area" role="region" aria-label={`${visibleLabel} 목록`} tabIndex={0}>
             <table className="tax-table tax-edit-table">
               <colgroup>
                 <col className="tax-col-check" />
@@ -767,7 +780,7 @@ export function EntryTable() {
 
               <thead>
                 <tr>
-                  <th>
+                  <th scope="col">
                     <input
                       type="checkbox"
                       aria-label="현재 목록 전체 선택"
@@ -775,11 +788,10 @@ export function EntryTable() {
                       checked={visibleRows.length > 0 && visibleRows.every((row) => checked.has(row.key))}
                       onChange={(event) => {
                         const keys = new Set(visibleRows.map((row) => row.key));
+                        const isChecked = event.target.checked;
 
                         setCheckedKeys((previous) =>
-                          event.target.checked
-                            ? [...new Set([...previous, ...keys])]
-                            : previous.filter((key) => !keys.has(key))
+                          isChecked ? [...new Set([...previous, ...keys])] : previous.filter((key) => !keys.has(key))
                         );
 
                         setBulkCategory('');
@@ -787,11 +799,13 @@ export function EntryTable() {
                       }}
                     />
                   </th>
-                  <th>구분</th>
-                  <th>날짜</th>
-                  <th>설명</th>
-                  <th className="tax-amount">금액</th>
-                  <th>카테고리</th>
+                  <th scope="col">구분</th>
+                  <th scope="col">날짜</th>
+                  <th scope="col">설명</th>
+                  <th scope="col" className="tax-amount">
+                    금액
+                  </th>
+                  <th scope="col">카테고리</th>
                 </tr>
               </thead>
 
@@ -825,9 +839,12 @@ export function EntryTable() {
                           disabled={busy}
                           onChange={(event) => {
                             clearStatus();
+
+                            const category = event.target.value;
+
                             setDrafts((previous) => ({
                               ...previous,
-                              [row.key]: event.target.value,
+                              [row.key]: category,
                             }));
                           }}
                         >
@@ -848,7 +865,7 @@ export function EntryTable() {
 
                 {visibleRows.length === 0 && (
                   <tr>
-                    <td colSpan={6}>표시할 거래가 없습니다.</td>
+                    <td colSpan={6}>{unclassifiedOnly ? '미분류 거래가 없습니다.' : '표시할 거래가 없습니다.'}</td>
                   </tr>
                 )}
               </tbody>
@@ -863,6 +880,7 @@ export function EntryTable() {
 
             <div className="tax-separated-actions">
               <Button
+                type="button"
                 variant="primary"
                 disabled={busy || changedRows.length === 0}
                 onClick={() => void handleSubmitChanges('update')}
@@ -871,6 +889,7 @@ export function EntryTable() {
               </Button>
 
               <Button
+                type="button"
                 variant="danger"
                 disabled={busy || selectedRows.length === 0}
                 onClick={() => void handleSubmitChanges('delete')}
@@ -878,7 +897,7 @@ export function EntryTable() {
                 삭제 반영
               </Button>
 
-              <Button disabled={busy || !canUndo} onClick={handleUndoChanges}>
+              <Button type="button" disabled={busy || !canUndo} onClick={handleUndoChanges}>
                 변경 되돌리기
               </Button>
             </div>

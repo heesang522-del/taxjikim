@@ -58,32 +58,23 @@ DEFAULTS = {
     },
 }
 
-# 헤더를 확인한 열에서만 금액을 읽고, 번호나 식별자 열은 구분한다.
-DEFAULT_HEADER_ALIASES = {
-    "date": ["날짜", "일자", "거래일", "거래일자", "거래일시", "사용일자", "date"],
-    "type": ["구분", "거래구분", "거래유형", "type"],
-    "description": ["내용", "적요", "거래내용", "설명", "가맹점", "description"],
-    "amount": ["금액", "거래금액", "사용금액", "결제금액", "수입금액", "지출금액", "amount"],
-    "net": ["실제금액", "실수령액", "실입금액", "세후금액", "net amount"],
-    "gross": ["세전금액", "세전수입", "지급총액", "gross amount"],
-    "tax": ["세액", "공제세액", "원천징수액", "tax"],
-    "tax_rate": ["세율", "원천징수세율", "tax rate"],
-    "category": ["카테고리", "분류", "category"],
-    "sequence": ["번호", "순번", "거래번호", "승인번호", "계좌번호", "No."],
-}
-
-ROLES = {
-    "date",
-    "type",
-    "description",
-    "amount",
-    "net",
-    "gross",
-    "tax",
-    "tax_rate",
-    "category",
-    "sequence",
-}
+# 공백과 단위를 제거한 헤더 전체를 비교해 열의 역할을 판별한다.
+HEADER_ROLE_PATTERNS = (
+    ("date", r"날짜|일자|거래일(?:자|시)?|사용일자|date"),
+    ("type", r"(?:거래)?구분|거래유형|type"),
+    ("description", r"(?:거래)?(?:내용|설명)|적요|가맹점|description"),
+    (
+        "net",
+        r"실제(?:금액|(?:입출금|입금|출금)(?:액|금액))"
+        r"|실(?:수령|입금)액|세후(?:금액|수입|입금액)|netamount",
+    ),
+    ("gross", r"세전(?:금액|수입|수입금액|입금액)|지급총액|grossamount"),
+    ("amount", r"(?:거래|사용|결제|수입|지출)?금액|amount"),
+    ("tax", r"(?:공제)?세액|원천징수액|차감세액|tax"),
+    ("tax_rate", r"(?:차감|원천징수)?세율|taxrate"),
+    ("category", r"카테고리|분류|category"),
+    ("sequence", r"(?:거래|승인|계좌)?번호|순번|no\.?"),
+)
 
 
 def _text(value):
@@ -508,34 +499,6 @@ def _table_rows(table, config):
     return _rows(values, config)
 
 
-def _aliases(values):
-    result = {
-        role: {_compact(name).casefold() for name in names}
-        for role, names in DEFAULT_HEADER_ALIASES.items()
-    }
-
-    custom = {}
-
-    for role, names in (values or {}).items():
-        if (
-            role not in ROLES
-            or not isinstance(names, list)
-            or any(not isinstance(value, str) for value in names)
-        ):
-            raise ValueError("헤더 별칭 설정을 확인해주세요.")
-
-        custom[role] = {_compact(value).casefold() for value in names}
-
-    # 문서별 설정에서 직접 지정한 별칭은 기본 분류보다 우선한다.
-    custom_labels = set().union(*custom.values())
-
-    for role, labels in result.items():
-        labels.difference_update(custom_labels)
-        labels.update(custom.get(role, set()))
-
-    return result
-
-
 def _header_label(value: str) -> str:
     return re.sub(
         r"[\(\[（](?:원|₩|krw|%)[\)\]）]",
@@ -544,7 +507,18 @@ def _header_label(value: str) -> str:
     )
 
 
-def _schema(rows, aliases, config):
+def _header_role(value: str) -> str | None:
+    label = _header_label(value)
+    matches = [
+        role
+        for role, pattern in HEADER_ROLE_PATTERNS
+        if re.fullmatch(pattern, label)
+    ]
+
+    return matches[0] if len(matches) == 1 else None
+
+
+def _schema(rows, config):
     dated = [
         (index, row["cells"])
         for index, row in enumerate(rows)
@@ -552,7 +526,7 @@ def _schema(rows, aliases, config):
     ]
 
     if not dated:
-        return {}, [], None, "UNKNOWN"
+        return {}, [], None, "UNKNOWN", False
 
     width = Counter(
         len(cells) for _, cells in dated
@@ -574,22 +548,23 @@ def _schema(rows, aliases, config):
             continue
 
         for column, cell in enumerate(row["cells"]):
-            label = _header_label(cell)
+            role = _header_role(cell)
 
-            matched = [
-                role for role, names in aliases.items() if label in names
-            ]
+            if role is None:
+                continue
 
-            if len(matched) == 1:
-                role = matched[0]
-
-                if role in roles and roles[role] != column:
-                    conflicts.add(role)
-                else:
-                    roles[role] = column
+            if role in roles and roles[role] != column:
+                conflicts.add(role)
+            else:
+                roles[role] = column
 
     for role in conflicts:
         roles.pop(role, None)
+
+    # 실제 금액 열이 겹치면 다른 숫자 열로 대체하지 않는다.
+    ambiguous_amount = "net" in conflicts or (
+        "net" not in roles and "amount" in conflicts
+    )
 
     def ratio(column, predicate):
         values = [
@@ -630,7 +605,7 @@ def _schema(rows, aliases, config):
         ) >= config["column_match_ratio"]
     ]
 
-    # 숫자 열은 설명 후보에서 제외한다. 금액 열은 헤더로 확인한다.
+    # 숫자 열은 설명 후보에서 제외한다. 금액 열의 역할은 헤더에서 확인한다.
     excluded = set(roles.values()) | set(numeric)
 
     descriptions = (
@@ -653,11 +628,13 @@ def _schema(rows, aliases, config):
         " ".join(" ".join(row["cells"]) for row in rows[:first])
     )
 
-    return roles, descriptions, width, hint
+    return roles, descriptions, width, hint, ambiguous_amount
 
 
-def _parse(rows, page, aliases, config, page_hint):
-    roles, descriptions, width, table_hint = _schema(rows, aliases, config)
+def _parse(rows, page, config, page_hint):
+    roles, descriptions, width, table_hint, ambiguous_amount = _schema(
+        rows, config
+    )
 
     if width is None:
         return []
@@ -716,7 +693,7 @@ def _parse(rows, page, aliases, config, page_hint):
         amount = None
         basis = "UNSPECIFIED"
 
-        if valid:
+        if valid and not ambiguous_amount:
             if "net" in roles:
                 amount = _amount(get("net"))
                 basis = "ACTUAL"
@@ -732,6 +709,10 @@ def _parse(rows, page, aliases, config, page_hint):
 
         if not valid:
             reasons.append("컬럼 수가 달라 행 구조 확인 필요")
+        elif ambiguous_amount:
+            reasons.append("실제 입출금액 후보 열이 여러 개입니다.")
+        elif amount is None:
+            reasons.append("실제 입출금액을 확인할 수 없습니다.")
 
         # 원문에 세액이 없으면 추출한 세전 금액과 실제 금액에서 계산한다.
         if typ == "INCOME" and gross is not None and amount is not None and tax is None:
@@ -773,17 +754,15 @@ def _parse(rows, page, aliases, config, page_hint):
     return result
 
 
-def _is_transaction_table(
-    rows: list[dict[str, Any]],
-    aliases: dict[str, set[str]],
-) -> bool:
-    amount_labels = aliases["amount"] | aliases["net"] | aliases["gross"]
+def _is_transaction_table(rows: list[dict[str, Any]]) -> bool:
+    amount_roles = {"amount", "net", "gross"}
     header_widths = set()
 
     for row in rows:
         cells = row["cells"]
 
-        if any(_header_label(cell) in amount_labels for cell in cells):
+        # 표 감지와 실제 거래 추출에 동일한 헤더 판별을 적용한다.
+        if any(_header_role(cell) in amount_roles for cell in cells):
             header_widths.add(len(cells))
             continue
 
@@ -813,7 +792,6 @@ def _needs_image_ocr(
 def _extract_page_rows(
     page: pymupdf.Page,
     settings: dict[str, Any],
-    aliases: dict[str, set[str]],
 ) -> tuple[str, list[list[dict[str, Any]]], str]:
     native_textpage = page.get_textpage(flags=pymupdf.TEXTFLAGS_WORDS)
     native_text = native_textpage.extractText()
@@ -834,7 +812,7 @@ def _extract_page_rows(
         for table in page.find_tables().tables:
             rows = _table_rows(table, settings)
 
-            if _is_transaction_table(rows, aliases):
+            if _is_transaction_table(rows):
                 table_groups.append(rows)
 
         if table_groups:
@@ -846,7 +824,7 @@ def _extract_page_rows(
 
         # 작은 이미지는 내장 거래 구조가 확인된 경우에만 OCR에서 제외한다.
         if not images or any(
-            _is_transaction_table(group, aliases) for group in native_groups
+            _is_transaction_table(group) for group in native_groups
         ):
             return native_method, native_groups, native_text
 
@@ -876,7 +854,6 @@ def _extract_page_rows(
 def _read_pdf(
     pdf_bytes: bytes,
     settings: dict[str, Any],
-    aliases: dict[str, set[str]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     transactions = []
     pages = []
@@ -896,18 +873,14 @@ def _read_pdf(
             raise ValueError("PDF 페이지 수가 허용 범위를 벗어났습니다.")
 
         for number, page in enumerate(pdf, start=1):
-            method, groups, page_text = _extract_page_rows(
-                page,
-                settings,
-                aliases,
-            )
+            method, groups, page_text = _extract_page_rows(page, settings)
             document_parts.append(page_text)
 
             hint = _direction_hint("\n".join(page_text.splitlines()[:15]))
             selected = [
                 item
                 for rows in groups
-                for item in _parse(rows, number, aliases, settings, hint)
+                for item in _parse(rows, number, settings, hint)
             ]
             transactions.extend(selected)
 
@@ -934,18 +907,15 @@ def _read_pdf(
 def extract_transactions(
     pdf_bytes: bytes,
     *,
-    header_aliases: dict[str, list[str]] | None = None,
     category_resolver: CategoryResolver | None = None,
     config: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     settings = _settings(config)
-    aliases = _aliases(header_aliases)
 
     transactions, pages, document_parts = _PDF_EXECUTOR.submit(
         _read_pdf,
         pdf_bytes,
         settings,
-        aliases,
     ).result()
 
     document_text = "\n".join(document_parts)
