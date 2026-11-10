@@ -28,7 +28,7 @@ const LIST_POLL_MS = 8000; // 관리자 상담 목록·대기 수: 실시간 알
 const ROOM_PAGE_SIZE = 10; // 상담 목록을 한 번에 불러오는 개수. 서버 기본값(10)과 맞춘다
 
 /** 채팅 패널(ChatWidget) 열림 여부만 전역으로 둔다. 실제 상담 데이터는 서버가 가진다. */
-export const useChatPanelStore = create((set) => ({
+const useChatPanelStore = create((set) => ({
   open: false,
   setOpen: (open) => set({ open }),
 }));
@@ -52,7 +52,10 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
     }
     setLoading(true);
     return fetchMessages(roomId)
-      .then((result) => setMessages(result.data))
+      .then((result) => {
+        setMessages(result.data);
+        setError(''); // 이전 시도가 실패해 남아 있던 에러를 지운다 — 안 그러면 재조회에 성공해도 옛 에러가 계속 보인다.
+      })
       .catch((cause) => setError(cause.message))
       .finally(() => setLoading(false));
   }, [roomId, fetchMessages]);
@@ -153,7 +156,10 @@ export function useMemberChat(open, myUserId, loggedIn) {
   const loadRoom = useCallback(
     () =>
       getMyRoom()
-        .then((result) => setRoom(result.data))
+        .then((result) => {
+          setRoom(result.data);
+          setRoomError(''); // 이전 시도가 실패해 남아 있던 에러를 지운다 — 안 그러면 재조회에 성공해도 옛 에러가 계속 보인다.
+        })
         .catch((cause) => setRoomError(cause.message))
         .finally(() => setRoomLoading(false)),
     []
