@@ -122,7 +122,7 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public PostDto findById(Long postId, String viewerIp) {
+    public PostDto findById(Long postId) {
         PostDto post = postMapper.findById(postId);
         if (post == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
@@ -143,11 +143,11 @@ public class PostServiceImpl implements PostService {
             throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
         }
 
-        // 작성자 본인 조회는 세지 않는다. 그 외에는 로그인 중이면 회원 번호로, 아니면 접속 IP로 구분해
+        // 비로그인 조회는 조회수를 올리지 않는다. 로그인한 회원이 작성자 본인이 아니면 회원 번호로 구분해
         // 하루 한 번만(Redis TTL) 카운트한다. 방금 실제로 올랐으면 응답에도 바로 반영해 한 번 더
         // 조회하지 않아도 최신 수치가 보이게 한다.
-        if (!isOwner) {
-            String viewerKey = currentUserId != null ? "user:" + currentUserId : "ip:" + viewerIp;
+        if (currentUserId != null && !isOwner) {
+            String viewerKey = "user:" + currentUserId;
             if (postViewTracker.registerView(postId, viewerKey)) {
                 postMapper.incrementViewCount(postId);
                 post.setViewCount(post.getViewCount() + 1);
