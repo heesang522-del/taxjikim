@@ -6,7 +6,10 @@
     <!-- 실제 결과가 저장된 본인 분석만 최신 귀속연도부터 표시한다. -->
     <select id="findSavedResults" resultType="com.kh.back.tax.dto.SavedTaxResultDto">
         SELECT i.TAX_INPUT_ID AS taxInputId, i.TAX_YEAR AS taxYear,
-               r.CALCULATED_AT AS savedAt
+               r.CALCULATED_AT AS savedAt,
+               CAST(r.RESULT_DETAIL->>'$.breakdown.totalIncome' AS DECIMAL(15,2)) AS totalIncome,
+               CAST(r.RESULT_DETAIL->>'$.breakdown.totalExpense' AS DECIMAL(15,2)) AS totalExpense,
+               CAST(r.RESULT_DETAIL->>'$.breakdown.totalTax' AS DECIMAL(15,2)) AS totalTax
         FROM tax_inputs i
         JOIN tax_results r ON r.TAX_INPUT_ID = i.TAX_INPUT_ID
         WHERE i.USER_ID = #{userId} AND i.SAVE_STATUS = 'SAVED'
