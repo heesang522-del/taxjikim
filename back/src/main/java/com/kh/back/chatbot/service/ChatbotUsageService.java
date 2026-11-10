@@ -11,9 +11,6 @@ public interface ChatbotUsageService {
             CustomUserDetails principal
     );
 
-    ChatbotUsageDto reserveUsage(
-            CustomUserDetails principal
-    );
 
     ChatbotUsageDto reserveUsage(
             CustomUserDetails principal,

@@ -169,7 +169,7 @@ SQL은 Git 제외 경로인 `back/local/rebuild-tax-tables.sql`에서 로컬로 
 - `tax_inputs`: 분석 한 건의 기본정보. `TAX_INPUT_ID`, `USER_ID`(비회원 NULL), `TAX_YEAR`, `BUSINESS_REGISTERED`, `AGE`, `STARTUP_RELIEF_APPLIED`, `BUSINESS_REGION`, `DEPENDENT_COUNT`, `DONATION_AMOUNT`, `SAVE_STATUS`, `CREATED_AT`, `UPDATED_AT`을 저장한다.
 - `tax_transactions`: PDF·직접 입력 거래. `TRANSACTION_ID`, `TAX_INPUT_ID`, `TRANSACTION_TYPE`, `TRANSACTION_DATE`, `DESCRIPTION`, `CATEGORY`, `PRE_TAX_INCOME`, `DEDUCTED_TAX_RATE`, `AMOUNT`를 저장한다. `AMOUNT`는 실제 입출금액이다.
 - `tax_results`: 분석당 최대 한 건의 결과. `TAX_INPUT_ID`를 기본키로 사용하며 `RESULT_DETAIL` JSON과 `CALCULATED_AT`을 저장한다. JSON에는 예상세액·산출 근거·월별 및 카테고리별 집계를 담고 구체 구조는 후속 확정한다. 마이페이지 항목에 따라 일부 결과를 별도 컬럼으로 분리할 수 있다.
-- `tax_process_logs`: 업로드·계산 성공·실패 이력. `LOG_ID`, `TAX_INPUT_ID`, `USER_ID`, `PROCESS_TYPE`, `STATUS`, `FAIL_REASON`, `CREATED_AT`을 유지한다. 관리자 기능 담당 범위다.
+- 업로드·계산 이력을 위한 별도 테이블은 현재 서비스·관리자 화면에서 사용하지 않아 제거한다. DB 정리 대상과 적용 SQL은 [미사용 DB 정리](db-cleanup.md)를 따른다.
 
 `tax_inputs`에 총수입·총지출·예상세액·결과 상세·창업일·별도 만료 시각·비회원 토큰 해시·공제액·공제 설명은 두지 않는다. 공제 대상 가족 수는 본인 제외 인원이며 금액은 로직에서 계산한다.
 

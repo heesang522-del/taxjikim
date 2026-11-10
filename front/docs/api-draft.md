@@ -4,7 +4,8 @@
 
 - `GET /api/v1/tax/inputs/saved-results`: 로그인 필수. 회원번호는 인증 정보에서 가져오며 요청 파라미터로 받지 않는다.
 - `tax_inputs`와 `tax_results`를 연결해 본인의 `SAVED` 분석만 귀속연도 내림차순으로 반환한다. 결과 JSON 전체는 목록에 포함하지 않는다.
-- 공통 응답의 `data`는 `[{ taxInputId, taxYear, savedAt }]`이며, 저장 결과가 없으면 빈 배열이다. `savedAt`은 최근 JSON 저장 시각을 한국 시간 ISO 8601 문자열로 전달한다.
+- 공통 응답의 `data`는 `[{ taxInputId, taxYear, savedAt, totalIncome, totalExpense, totalTax }]`이며, 저장 결과가 없으면 빈 배열이다. `savedAt`은 최근 JSON 저장 시각을 한국 시간 ISO 8601 문자열로 전달한다.
+- 세 금액은 저장 JSON의 `breakdown.totalIncome`, `breakdown.totalExpense`, `breakdown.totalTax`에서 추출한 원 단위 숫자다. 총세금은 납부·환급 차액인 `settlementAmount`와 구분한다. 기존 목록 조회 한 번으로 비교 자료까지 반환하며 재계산하지 않는다.
 - 결과 보기와 시뮬레이션은 각각 해당 화면에 `?taxInputId=분석번호&saved=true`로 이동해 기존 저장 결과 조회 API를 사용한다.
 
 ## 댓글 신고 백엔드 연동 (2026-11-06)
@@ -20,7 +21,7 @@
 ## 게시글 신고 백엔드 연동 (2026-11-06)
 
 - `src/api/report.js`를 새로 추가했다. `createPostReport(postId, reasonDetail)`: POST `/api/v1/posts/community/{postId}/reports`. `getAdminReports()`: GET `/api/v1/admin/reports`(ADMIN 전용). `resolveReport(reportId, result)`: PATCH `/api/v1/admin/reports/{reportId}`, result는 `DELETE`\|`REJECT`.
-- 백엔드는 이미 설계돼 있던 `REPORTS`·`USER_SANCTIONS` 테이블 중 `REPORTS`만 이번에 연결했다(`com.kh.back.report` 패키지 신규). `TARGET_USER_ID`는 신고 시점의 글 작성자를 그대로 남긴다.
+- 백엔드는 `REPORTS`를 사용한다(`com.kh.back.report` 패키지). 사용하지 않는 별도 제재 이력 테이블은 DB 정리 대상이며 신고 기능에는 필요하지 않다. `TARGET_USER_ID`는 신고 시점의 글 작성자를 그대로 남긴다.
 - 본인 글 신고는 400 `CANNOT_REPORT_OWN_POST`, 중복 신고는 DB의 `UNIQUE(REPORTER_ID, TARGET_TYPE, TARGET_ID)` 위반을 409 `ALREADY_REPORTED`로 변환해 응답한다.
 - 처리(`DELETE`)하면 게시글을 관리자 삭제로 내리고(`POSTS.DELETED_BY_TYPE='ADMIN'`), 같은 글에 대기 중인 다른 신고도 함께 처리됨으로 바꾼다. 기존 자기 삭제(`deleteById`)는 `DELETED_BY_TYPE`을 기록하지 않아 그대로 두었다 — 자기 삭제한 글과 신고 전 삭제된 글은 관리자 화면에서 "삭제된 글"로만 구분되고 "관리자 삭제됨"과는 다르게 표시된다.
 - `CommunityPostPage`의 신고 버튼은 `post.source === 'server'`(실제 서버 글)일 때만 이 API를 호출한다. 브라우저에만 있는 예시 글은 여전히 mock 경로를 쓴다(실제 DB에 없는 postId라 API가 통하지 않기 때문).
@@ -136,7 +137,7 @@
 ## 인증·회원 화면 실제 연결 (2026-10-15)
 
 - 회원가입: SignupForm → userApi의 중복 확인·이메일 발송/확인·가입 요청. mock 계정 저장과 브라우저 인증번호 생성은 사용하지 않는다.
-- 요청 필드: loginId, password, name, nickname, email, 선택 birthDate. 프로필 선택 시 multipart의 profile 파일로 보낸다. 전화번호 입력은 제거했다.
+- 요청 필드: loginId, password, name, nickname, email. 프로필 선택 시 multipart의 profile 파일로 보낸다. 전화번호 입력은 제거했다.
 - 인증번호 안내는 5분, 인증 완료 후 가입 안내는 10분이며, 최종 유효성은 서버가 판단한다. 이메일을 바꾸면 화면의 이전 인증 상태를 초기화한다.
 - 계정 찾기: 이름·이메일·인증번호로 로그인 아이디를 조회하고 화면에서 마스킹한다.
 - 비밀번호 재설정: 계정과 이메일 일치 및 메일 인증 후 서버에 새 비밀번호를 전송한다. 성공하면 기존 Redis 세션도 종료한다.

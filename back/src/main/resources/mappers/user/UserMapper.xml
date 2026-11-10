@@ -6,8 +6,8 @@
 
     <!-- 회원 가입 -->
     <insert id="insertUser" parameterType="com.kh.back.user.dto.UserDto" useGeneratedKeys="true" keyProperty="userId" keyColumn="USER_ID">
-        INSERT INTO `users` (LOGIN_ID, PASSWORD, NAME, NICKNAME, EMAIL, BIRTH_DATE, PROFILE_IMAGE_URL)
-        VALUES (#{loginId}, #{password}, #{name}, #{nickname}, #{email}, #{birthDate}, #{profileImageUrl})
+        INSERT INTO `users` (LOGIN_ID, PASSWORD, NAME, NICKNAME, EMAIL, PROFILE_IMAGE_URL)
+        VALUES (#{loginId}, #{password}, #{name}, #{nickname}, #{email}, #{profileImageUrl})
     </insert>
 
     <!-- 중복 확인 쿼리 -->
@@ -37,7 +37,6 @@
             USER_STATUS   AS userStatus,
             CREATED_AT      AS createdAt,
             UPDATED_AT      AS updatedAt,
-            BIRTH_DATE AS birthDate,
             LAST_LOGIN_AT AS lastLoginAt
         FROM `users`
         WHERE LOGIN_ID = #{loginId}
@@ -56,7 +55,6 @@
             USER_STATUS   AS userStatus,
             CREATED_AT      AS createdAt,
             UPDATED_AT      AS updatedAt,
-            BIRTH_DATE AS birthDate,
             LAST_LOGIN_AT AS lastLoginAt
         FROM `users`
         WHERE USER_ID = #{userId}
@@ -90,7 +88,6 @@
     <update id="updateUserFields" parameterType="com.kh.back.user.dto.UserDto">
         UPDATE `users`
         <set>
-            <if test="birthDate != null">BIRTH_DATE = #{birthDate},</if>
             <if test="nickname != null">NICKNAME = #{nickname},</if>
             <if test="email != null">EMAIL = #{email},</if>
             <if test="profileImageUrl != null">PROFILE_IMAGE_URL = #{profileImageUrl},</if>

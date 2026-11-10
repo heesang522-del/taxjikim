@@ -48,17 +48,6 @@ public class ChatbotUsageServiceImpl implements ChatbotUsageService {
     @Override
     @Transactional
     public ChatbotUsageDto reserveUsage(
-            CustomUserDetails principal
-    ) {
-        return reserveUsage(
-                principal,
-                LocalDate.now(KOREA_ZONE)
-        );
-    }
-
-    @Override
-    @Transactional
-    public ChatbotUsageDto reserveUsage(
             CustomUserDetails principal,
             LocalDate usageDate
     ) {

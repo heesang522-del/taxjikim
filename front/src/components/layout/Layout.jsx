@@ -55,30 +55,25 @@ export default function Layout() {
     rememberPath(pathname + search);
   }, [pathname, search]);
 
-  // 서버 확인 전에는 비로그인으로 단정하지 않고, 장애는 인증 실패와 구분해 재시도를 제공한다.
-  if (authStatus !== 'ready') {
-    return (
-      <main className="shell" aria-busy={authStatus === 'checking'}>
-        {authStatus === 'checking' ? (
-          <p role="status">로그인 상태를 확인하고 있습니다.</p>
-        ) : (
-          <div className="grid">
-            <p role="alert">{authError}</p>
-            <Button onClick={() => checkAuth()}>다시 확인</Button>
-          </div>
-        )}
-      </main>
-    );
-  }
-
   return (
     <>
       <StoreSync />
       <Header />
       <main className="shell">
+        {authStatus === 'checking' && <p role="status">로그인 상태를 확인하고 있습니다.</p>}
+        {authStatus === 'error' && (
+          <div className="grid">
+            <p role="alert">
+              로그인 상태를 확인하지 못했습니다. {authError} 백엔드 서버 실행 상태와 연결 설정을 확인한 뒤 다시
+              시도해주세요.
+            </p>
+            <Button onClick={() => checkAuth()}>다시 확인</Button>
+          </div>
+        )}
+        {/* 인증 조회와 화면 표시를 분리하고, 로그인·API가 필요한 기능은 각 화면에서 처리한다. */}
         <Outlet />
       </main>
-      <ChatWidget />
+      {authStatus === 'ready' && <ChatWidget />}
       <Toast message={toastMessage} />
     </>
   );
