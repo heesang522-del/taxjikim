@@ -131,13 +131,4 @@
         )
     </update>
 
-    <update id="activateDormantAccount">
-        UPDATE `users`
-        SET USER_STATUS = 'ACTIVE',
-            LAST_LOGIN_AT = NOW()
-        WHERE LOGIN_ID = #{loginId}
-          AND EMAIL = #{email}
-          AND USER_STATUS = 'DORMANT'
-    </update>
-
 </mapper>

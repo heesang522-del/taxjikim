@@ -80,58 +80,10 @@ public final class FileValidationUtil {
         }
     }
 
-    /** 목록의 각 파일(비어있지 않은 것만)에 validateFileName을 적용한다. */
-    public static void validateFileExtensions(List<MultipartFile> files, String allowedExtensionPattern) {
-
-        if (files == null) {
-            return;
-        }
-
-        for (MultipartFile file : files) {
-
-            if (file == null) {
-                throw invalid("files", "첨부파일 입력값을 확인해주세요.");
-            }
-
-            if (file.isEmpty()) {
-                continue;
-            }
-
-            validateFileName(file.getOriginalFilename(), allowedExtensionPattern);
-        }
-    }
-
     /** 최종 첨부파일 개수가 범위 안인지 검사한다. */
     public static void validateFileCount(int count, int maxCount) {
 
         if (count < 0 || count > maxCount) {
-            throw invalid("files", "첨부파일은 최대 " + maxCount + "개까지 등록할 수 있습니다.");
-        }
-    }
-
-    /** 기존 첨부 개수 + 새로 올리는(비어있지 않은) 파일 수가 최대 개수를 넘지 않는지 검사한다. */
-    public static void validateFileCountWithNewFiles(int baseCount, List<MultipartFile> newFiles, int maxCount) {
-
-        if (baseCount < 0) {
-            throw invalid("files", "기존 첨부파일 개수가 올바르지 않습니다.");
-        }
-
-        long newFileCount = 0;
-
-        if (newFiles != null) {
-            for (MultipartFile file : newFiles) {
-
-                if (file == null) {
-                    throw invalid("files", "첨부파일 입력값을 확인해주세요.");
-                }
-
-                if (!file.isEmpty()) {
-                    newFileCount++;
-                }
-            }
-        }
-
-        if (baseCount + newFileCount > maxCount) {
             throw invalid("files", "첨부파일은 최대 " + maxCount + "개까지 등록할 수 있습니다.");
         }
     }

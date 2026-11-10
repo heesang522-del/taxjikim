@@ -40,8 +40,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
 
-        // 재발급은 컨트롤러에서 한 번만 처리
-            if ("/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
+        // 로그인·로그아웃은 각 컨트롤러의 처리 흐름을 사용한다.
+            if ("/api/v1/auth/sessions".equals(path)
                     || "/api/v1/auth/sessions/current".equals(path)) {
                 return true;
             }

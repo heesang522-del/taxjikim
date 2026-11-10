@@ -16,7 +16,6 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.http.HttpStatus;
-import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
@@ -182,36 +181,6 @@ public class UserServiceImpl implements UserService {
     @Override
     public void deleteUser(String loginId) {
         userMapper.deleteUser(loginId);
-    }
-
-    @Transactional
-    @Override
-    public void restoreDormantAccount(String loginId, String email) {
-        if (!StringUtils.hasText(loginId) || !StringUtils.hasText(email)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", "복구 요청 정보를 확인해주세요.");
-        }
-
-        // 이메일을 인증했다는 사실과 해당 계정의 소유자라는 사실을 함께 확인한다.
-        UserDto user = userMapper.findByLoginId(loginId);
-        if (user == null || !email.equals(user.getEmail())) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "ACCOUNT_RECOVERY_REJECTED", "계정 복구 정보를 확인해주세요.");
-        }
-        if (!emailVerificationService.isVerified(email)) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "EMAIL_NOT_VERIFIED", "이메일 인증이 필요합니다.");
-        }
-
-        if (!"DORMANT".equals(user.getUserStatus())) {
-            throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_DORMANT", "휴면 계정만 재활성화할 수 있습니다.");
-        }
-        int updatedCount = userMapper.activateDormantAccount(loginId, email);
-
-        // 조회 후 이메일이나 상태가 바뀌면 SQL이 갱신하지 않으므로 성공으로 처리하지 않는다.
-        if (updatedCount != 1) {
-            throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_RECOVERY_CONFLICT", "계정 상태가 변경되었습니다. 다시 확인해주세요.");
-        }
-
-        // 복구가 실제로 성공한 경우에만 인증 완료 기록을 소비한다.
-        emailVerificationService.removeVerification(email);
     }
 
     /* ================= 5. 보조 메서드 ================= */

@@ -14,12 +14,12 @@
 
 ## 인증
 
+현재 인증 API는 로그인·세션 확인·로그아웃을 제공한다. 프론트 미연결 토큰 재발급·휴면 복구 API는 제거했다. 자동 로그인 재발급은 JWT 필터가 `AuthService.reissue()`를 호출해 처리한다. 휴면 자동 전환은 유지하지만 별도의 휴면 복구 API는 제공하지 않는다.
+
 | 메서드 | 경로 | 요청 |
 | --- | --- | --- |
 | POST | `/api/v1/auth/sessions` | JSON `loginId`, `password`, `rememberMe` |
 | DELETE | `/api/v1/auth/sessions/current` | `Authorization: Bearer {accessToken}` 또는 인증 쿠키 |
-| POST | `/api/v1/auth/tokens` | `refreshToken` 쿠키 |
-| POST | `/api/v1/auth/dormancy-recoveries` | JSON `loginId`, `email`, `code` |
 | POST | `/api/v1/auth/account-lookups/email-verifications` | JSON `name`, `email` |
 | POST | `/api/v1/auth/account-lookups` | JSON `name`, `email`, `code`; data는 로그인 아이디 |
 | POST | `/api/v1/auth/password-resets/email-verifications` | JSON `loginId`, `email` |
