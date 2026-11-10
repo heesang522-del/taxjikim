@@ -2,7 +2,7 @@ package com.kh.back.taxupload.service;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
-import com.kh.back.taxupload.dto.PageOcrResultDto;
+import com.kh.back.common.security.JwtTokenProvider;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
@@ -12,6 +12,7 @@ import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import com.kh.back.taxupload.mapper.TaxMapper;
 import com.kh.back.taxupload.validator.TaxValidator;
+import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -22,7 +23,10 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,10 +39,12 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class YearEndTaxServiceImpl implements YearEndTaxService {
 
+    private static final Duration GUEST_TAX_TOKEN_LIFETIME = Duration.ofHours(24);
+
     private final TaxValidator taxValidator;
     private final TaxMapper taxMapper;
-    private final TaxOcrService taxOcrService;
     private final PythonPdfClient pythonPdfClient;
+    private final JwtTokenProvider jwtTokenProvider;
 
     /**
      * 분석 기본정보와 최초 거래 목록을 같은 트랜잭션에서 저장한다.
@@ -47,15 +53,15 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Transactional
     public TaxServiceResponse save(
             CustomUserDetails principal,
-            Set<Long> guestInputIds,
+            String guestAccessToken,
             TaxServiceRequest request
     ) {
-        taxValidator.validateRequestPresent(request, "저장 요청이 필요합니다.");
+        taxValidator.validateRequestPresent(request, "저장 요청이 필요합니다."); // request가 null 이면 저장요청이 필요합니다. 라는 메세지와 함께 400 bad request 오류 발생시킴
 
-        AccessContext access = createAccess(principal, guestInputIds);
-        Long taxInputId = request.getTaxInputId();
-        List<TaxTransactionDto> rows = request.getTransactions();
-        boolean createAnalysis = taxInputId == null;
+        AccessContext access = createAccess(principal, guestAccessToken); // 로그인 사용자 정보 principal와 비회원 토큰 guestAccessToken 으로 접근정보를 만듬 , access에는 회원번호 관리자 여부 비회원 토큰에서 검증된 분석번호가담김, 이후 기존 분석에 접근할수 있는지 판단할떄 사용
+        Long taxInputId = request.getTaxInputId(); // 요청에 담긴 분석번호를 가져옴 taxinputid가 42라면 42번 분석을 대상으로 저장한다는뜻
+        List<TaxTransactionDto> rows = request.getTransactions(); // 요청에 담긴 거래 목록을 가져옴 , 거래 목록을  보내지 않았다면 rows는 null 일수 있음.
+        boolean createAnalysis = taxInputId == null; // 분석번호가 없으면 true가 되어 새 분석을 생성, 분석번호가 있으면 false가 되어 기존 분석의 접근 권한을 확인한뒤 그 분석에 거래를 저장
 
         if (!createAnalysis) {
             taxValidator.validateExistingAnalysisSave(request.getInput(), rows);
@@ -147,9 +153,17 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             }
         }
 
+        String issuedGuestAccessToken = null;
+
+        // 새 비회원 분석에만 해당 분석번호로 토큰을 발급한다.
+        if (createAnalysis && access.getUserId() == null) {
+            issuedGuestAccessToken = issueGuestAccessToken(taxInputId);
+        }
+
         return TaxServiceResponse.builder()
                 .input(input)
                 .transactions(savedRows)
+                .guestAccessToken(issuedGuestAccessToken)
                 .build();
     }
 
@@ -160,7 +174,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Transactional
     public TaxInputRequest update(
             CustomUserDetails principal,
-            Set<Long> guestInputIds,
+            String guestAccessToken,
             Long taxInputId,
             TaxServiceRequest request
     ) {
@@ -174,7 +188,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         taxValidator.validateUpdateTargets(updateProfile, updateCategory);
         taxValidator.validateMatchingTaxInputId(taxInputId, request.getTaxInputId());
 
-        AccessContext access = createAccess(principal, guestInputIds);
+        AccessContext access = createAccess(principal, guestAccessToken);
 
         // 기본정보와 카테고리가 같은 분석을 기준으로 수정되도록 먼저 잠근다.
         TaxInputRequest existingInput = requireInput(access, taxInputId, true);
@@ -206,7 +220,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Transactional
     public void delete(
             CustomUserDetails principal,
-            Set<Long> guestInputIds,
+            String guestAccessToken,
             Long taxInputId,
             TaxServiceRequest request,
             boolean deleteAll
@@ -219,7 +233,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         List<Long> requestedIds = request.getTransactionIds();
         taxValidator.validateDeleteTargets(deleteAll, transactionId, requestedIds);
 
-        AccessContext access = createAccess(principal, guestInputIds);
+        AccessContext access = createAccess(principal, guestAccessToken);
 
         // 삭제 전에 분석 접근 권한을 확인하고 분석을 잠근다.
         requireInput(access, taxInputId, true);
@@ -272,11 +286,11 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     public PdfParseResponseDto parse(
             CustomUserDetails principal,
-            Set<Long> guestInputIds,
+            String guestAccessToken,
             Long taxInputId,
             MultipartFile file
     ) throws IOException {
-        AccessContext access = createAccess(principal, guestInputIds);
+        AccessContext access = createAccess(principal, guestAccessToken);
 
         if (taxInputId != null) {
             requireInput(access, taxInputId, false);
@@ -284,12 +298,11 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
         try {
             byte[] bytes = taxValidator.validatePdf(file);
-            List<PageOcrResultDto> pages = taxOcrService.extractPages(bytes);
 
+            // Python에서 PDF 분석과 OCR을 함께 수행하도록 원본을 전달한다.
             PdfParseResponseDto response = pythonPdfClient.analyze(
                     bytes,
-                    file.getOriginalFilename(),
-                    pages
+                    file.getOriginalFilename()
             );
 
             if (response == null
@@ -340,6 +353,26 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             source.setTaxInputId(null);
             source.setTransactionId(null);
 
+            TaxTransactionDto row;
+
+            try {
+                row = copyStoredTransaction(source, null);
+                taxValidator.validateExtractedPdfTransaction(source, row);
+            } catch (ApiException exception) {
+                String reason = exception.getMessage();
+
+                // 검증에 실패한 거래는 화면에서 확인할 수 있도록 검토 대상으로 반환한다.
+                markPdfReview(
+                        source,
+                        reason == null || reason.isBlank()
+                                ? "거래 내용을 확인해주세요."
+                                : reason
+                );
+
+                result.add(source);
+                continue;
+            }
+
             if (!Boolean.TRUE.equals(source.getParseSuccess())
                     || Boolean.TRUE.equals(source.getNeedsReview())
                     || Boolean.TRUE.equals(source.getExcluded())) {
@@ -349,30 +382,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                         source,
                         reason == null || reason.isBlank()
                                 ? "추출한 거래 내용을 확인해주세요."
-                                : reason
-                );
-
-                result.add(source);
-                continue;
-            }
-
-            TaxTransactionDto row;
-
-            try {
-                taxValidator.validateCashTransaction(source);
-                taxValidator.validatePdfTransactionDate(source);
-
-                row = copyStoredTransaction(source, null);
-                taxValidator.validateStoredTransaction(row);
-                taxValidator.validateTransactions(List.of(row));
-            } catch (ApiException exception) {
-                String reason = exception.getMessage();
-
-                // 검증에 실패한 거래는 화면에서 확인할 수 있도록 검토 대상으로 반환한다.
-                markPdfReview(
-                        source,
-                        reason == null || reason.isBlank()
-                                ? "거래 내용을 확인해주세요."
                                 : reason
                 );
 
@@ -599,23 +608,37 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return left.compareTo(right) == 0;
     }
 
-    private AccessContext createAccess(CustomUserDetails principal, Set<Long> guestInputIds) {
+    private AccessContext createAccess(
+            CustomUserDetails principal,
+            String guestAccessToken
+    ) {
         Long userId = principal == null ? null : principal.getUserId();
 
         boolean admin = principal != null
                 && principal.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
 
-        // 현재 세션에서 접근할 수 있는 비회원 분석번호를 복사한다.
-        Set<Long> ownedGuestInputIds = guestInputIds == null
-                ? Set.of()
-                : Set.copyOf(guestInputIds);
+        // Validator에서 검증한 분석번호만 접근 정보에 담는다.
+        Long guestTaxInputId = taxValidator.readGuestTaxInputId(guestAccessToken);
 
         return AccessContext.builder()
                 .userId(userId)
                 .admin(admin)
-                .guestInputIds(ownedGuestInputIds)
+                .guestTaxInputId(guestTaxInputId)
                 .build();
+    }
+
+    private String issueGuestAccessToken(Long taxInputId) {
+        Instant now = Instant.now();
+
+        // 비회원 토큰의 권한을 생성한 분석 한 건으로 제한한다.
+        return Jwts.builder()
+                .claim("type", TaxValidator.GUEST_TAX_TOKEN_TYPE)
+                .claim("taxInputId", taxInputId)
+                .issuedAt(Date.from(now))
+                .expiration(Date.from(now.plus(GUEST_TAX_TOKEN_LIFETIME)))
+                .signWith(jwtTokenProvider.getSecretKey())
+                .compact();
     }
 
     private ApiException invalid(String field, String message) {

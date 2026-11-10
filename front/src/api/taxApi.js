@@ -1,5 +1,20 @@
 import { client } from './client';
 
+const GUEST_ACCESS_TOKEN_HEADER = 'X-Guest-Access-Token';
+
+// 같은 화면에서 이어지는 요청에 사용할 비회원 토큰을 분석번호별로 보관한다.
+const guestAccessTokens = new Map();
+
+function guestAccessHeaders(taxInputId) {
+  const token = guestAccessTokens.get(String(taxInputId));
+
+  if (!token) {
+    return undefined;
+  }
+
+  return { [GUEST_ACCESS_TOKEN_HEADER]: token };
+}
+
 // 마이페이지는 본인의 저장 결과 번호·귀속연도·저장 시각만 받는다.
 export async function getSavedTaxResults({ signal } = {}) {
   return request({ url: '/tax/inputs/saved-results', method: 'GET', signal });
@@ -239,11 +254,22 @@ export async function saveTaxData({ input, taxInputId, transactions, expectedTra
     }
   }
 
-  return request({
+  const result = await request({
     url: '/tax/save',
     method: 'POST',
+    headers: guestAccessHeaders(taxInputId),
     data,
   });
+
+  const savedTaxInputId = result?.data?.input?.taxInputId;
+  const token = result?.data?.guestAccessToken;
+
+  // 기본정보 저장 다음에 바로 거래를 저장하므로 응답을 반환하기 전에 토큰을 보관한다.
+  if (taxInputId == null && savedTaxInputId != null && typeof token === 'string' && token) {
+    guestAccessTokens.set(String(savedTaxInputId), token);
+  }
+
+  return result;
 }
 
 // 기존 화면에서 사용하는 생성 함수 이름과 응답 형식을 유지한다.
@@ -305,6 +331,7 @@ export async function updateTaxData(taxInputId, { input, changes } = {}) {
   return request({
     url,
     method: 'POST',
+    headers: guestAccessHeaders(taxInputId),
     data,
   });
 }
@@ -335,14 +362,22 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
     data.transactionId = transactionId;
   }
 
-  return request({
+  const result = await request({
     url,
     method: 'POST',
+    headers: guestAccessHeaders(taxInputId),
     params: {
       deleteAll,
     },
     data,
   });
+
+  // 분석 전체 삭제가 성공한 경우에만 해당 토큰을 제거한다.
+  if (deleteAll) {
+    guestAccessTokens.delete(String(taxInputId));
+  }
+
+  return result;
 }
 
 // 기존 화면의 분석 전체 삭제 호출을 통합 API로 연결한다.
@@ -377,6 +412,7 @@ export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   return request({
     url: '/tax/parse',
     method: 'POST',
+    headers: guestAccessHeaders(taxInputId),
     data: formData,
     timeout: 180000,
     signal,
@@ -617,6 +653,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
           await request({
             url: `${inputPath(operation.taxInputId)}/delete`,
             method: 'POST',
+            headers: guestAccessHeaders(operation.taxInputId),
             data: { transactionIds: group.map((item) => item.transactionId) },
           });
           deletionsByInput.delete(operation.taxInputId);

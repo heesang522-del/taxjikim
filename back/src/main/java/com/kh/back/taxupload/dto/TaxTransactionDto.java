@@ -70,8 +70,7 @@ public class TaxTransactionDto {
     }
 
     /*
-     * HTTP 요청 본문으로 받지 않는다.
-     * 서비스가 인증 정보와 서버 세션 정보로 생성한다.
+     * 서비스에서 로그인 정보와 검증된 비회원 토큰으로 생성한다.
      */
     @Getter
     @Builder
@@ -81,7 +80,7 @@ public class TaxTransactionDto {
 
         private Long userId;
         private boolean admin;
-        private Set<Long> guestInputIds;
+        private Long guestTaxInputId;
     }
 
     /*

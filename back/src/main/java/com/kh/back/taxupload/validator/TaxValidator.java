@@ -1,11 +1,16 @@
 package com.kh.back.taxupload.validator;
 
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.security.JwtTokenProvider;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,14 +25,18 @@ import java.util.Objects;
 import java.util.Set;
 
 @Component
+@RequiredArgsConstructor
 public class TaxValidator {
+
+    public static final String GUEST_ACCESS_TOKEN_HEADER = "X-Guest-Access-Token";
+    public static final String GUEST_TAX_TOKEN_TYPE = "guest-tax-access";
 
     // DECIMAL(15, 2)의 DB 저장 범위다.
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999999.99");
 
     // 세율 필드에 저장할 수 있는 퍼센트 값의 상한이다.
     private static final BigDecimal MAX_RATE = new BigDecimal("100");
-
+    private static final BigDecimal PDF_AMOUNT_TOLERANCE = BigDecimal.ONE;
     private static final int MAX_UNSIGNED_SMALL_INT = 65535;
     private static final int MAX_DESCRIPTION_LENGTH = 255;
 
@@ -46,6 +55,8 @@ public class TaxValidator {
 
     private static final Set<String> SAVE_STATUSES = Set.of("TEMP", "SAVED");
 
+    private final JwtTokenProvider jwtTokenProvider;
+
     public void validateId(Long value, String field) {
         if (value == null || value <= 0) {
             throw invalid(field, "유효한 번호가 필요합니다.");
@@ -55,6 +66,32 @@ public class TaxValidator {
     public void validateTaxYear(Integer taxYear) {
         if (taxYear == null || taxYear < 1000 || taxYear > 9999) {
             throw invalid("taxYear", "귀속 연도를 네 자리 숫자로 입력해주세요.");
+        }
+    }
+
+    public Long readGuestTaxInputId(String guestAccessToken) {
+        if (guestAccessToken == null || guestAccessToken.isBlank()) {
+            return null;
+        }
+
+        try {
+            // 서명과 만료 시각을 검증한 뒤 비회원 분석번호를 꺼낸다.
+            Claims claims = Jwts.parser()
+                    .verifyWith(jwtTokenProvider.getSecretKey())
+                    .build()
+                    .parseSignedClaims(guestAccessToken)
+                    .getPayload();
+
+            if (!GUEST_TAX_TOKEN_TYPE.equals(claims.get("type"))
+                    || claims.getExpiration() == null) {
+                return null;
+            }
+
+            Long taxInputId = claims.get("taxInputId", Long.class);
+            return taxInputId != null && taxInputId > 0 ? taxInputId : null;
+        } catch (JwtException | IllegalArgumentException exception) {
+            // 검증에 실패하면 비회원 분석 권한을 부여하지 않는다.
+            return null;
         }
     }
 
@@ -75,16 +112,16 @@ public class TaxValidator {
             return;
         }
 
-        // 회원 분석은 분석 소유자에게 허용한다.
+        // 회원 분석은 로그인한 소유자에게 허용한다.
         if (input.getUserId() != null
                 && Objects.equals(input.getUserId(), access.getUserId())) {
             return;
         }
 
-        // 비회원 분석은 해당 분석을 생성한 서버 세션에만 허용한다.
+        // 비회원 분석은 검증된 토큰이 가리키는 분석 한 건에만 허용한다.
         if (input.getUserId() == null
-                && access.getGuestInputIds() != null
-                && access.getGuestInputIds().contains(input.getTaxInputId())) {
+                && access.getGuestTaxInputId() != null
+                && Objects.equals(input.getTaxInputId(), access.getGuestTaxInputId())) {
             return;
         }
 
@@ -280,6 +317,51 @@ public class TaxValidator {
 
         // PDF 추출 단계에서는 거래 날짜의 연도 범위를 확인한다.
         validateTaxYear(source.getTransactionDate().getYear());
+    }
+
+    public void validateExtractedPdfTransaction(
+            TaxTransactionDto source,
+            TaxTransactionDto normalized
+    ) {
+        validateCashTransaction(source);
+        validatePdfTransactionDate(source);
+        validateStoredTransaction(normalized);
+        validateTransaction(normalized, "transactions");
+
+        String type = normalized.getTransactionType();
+
+        if (!"INCOME".equals(type) && !"EXPENSE".equals(type)) {
+            throw invalid("transactionType", "수입 및 지출 구분 확인 필요");
+        }
+
+        BigDecimal gross = source.getPreTaxIncome();
+        BigDecimal tax = source.getTaxDeducted();
+        validateDecimal(tax, MAX_AMOUNT, 2, "taxDeducted");
+
+        if (!"INCOME".equals(type) || gross == null) {
+            return;
+        }
+
+        // 파서가 추출한 값을 바탕으로 저장 전에 금액의 일관성을 확인한다.
+        BigDecimal difference = gross.subtract(normalized.getAmount());
+
+        if (difference.signum() < 0) {
+            throw invalid("actualAmount", "실제 입금액이 세전 금액보다 큽니다.");
+        }
+
+        if (tax != null && tax.compareTo(difference) != 0) {
+            throw invalid("taxDeducted", "세액과 세전·실제 금액의 차이가 다릅니다.");
+        }
+
+        BigDecimal rate = source.getDeductedTaxRate();
+
+        if (rate != null) {
+            BigDecimal expected = gross.multiply(rate).movePointLeft(2);
+
+            if (difference.subtract(expected).abs().compareTo(PDF_AMOUNT_TOLERANCE) > 0) {
+                throw invalid("deductedTaxRate", "세율과 실제 금액이 일치하지 않습니다.");
+            }
+        }
     }
 
     public void validateNewTransactionIds(List<TaxTransactionDto> rows) {
