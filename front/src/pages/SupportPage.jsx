@@ -9,9 +9,8 @@ import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
 import { useAuth } from '../store/useAuthStore';
 import { useInquiry } from '../store/useInquiryStore';
-import { useFaq } from '../utils/useFaq';
 import { toDateLabel } from '../utils/format';
-import { createPost } from '../api/post.js';
+import { createPost, getFaqs } from '../api/post.js';
 
 const VISIBILITY_OPTIONS = [{ value: 'public', label: '공개' }, { value: 'private', label: '비공개' }];
 
@@ -61,11 +60,13 @@ export default function HelpPage() {
   const [isSubmittingQna, setIsSubmittingQna] = useState(false);
   const [loadingInquiries, setLoadingInquiries] = useState(true);
   const [inquiriesError, setInquiriesError] = useState('');
+  const [faqs, setFaqs] = useState([]);
+  const [loadingFaqs, setLoadingFaqs] = useState(true);
+  const [faqsError, setFaqsError] = useState('');
   const toast = useToast();
   const navigate = useNavigate();
   const { loggedIn, user, isAdmin } = useAuth();
   const { inquiries, loadInquiries } = useInquiry();
-  const { faqs } = useFaq();
   const todo = (m) => () => toast(`프로토타입: ${m}`);
 
   // Q&A 탭에 들어올 때 DB의 실제 문의를 불러온다 (그 전까지는 브라우저 예시 문의만 보인다).
@@ -78,6 +79,18 @@ export default function HelpPage() {
       .finally(() => { if (active) setLoadingInquiries(false); });
     return () => { active = false; };
   }, [tab, loadInquiries]);
+
+  // FAQ 탭에 들어올 때 DB의 FAQ 게시글을 불러온다.
+  useEffect(() => {
+    if (tab !== 'faq') return undefined;
+    let active = true;
+    setLoadingFaqs(true);
+    getFaqs()
+      .then((list) => { if (active) setFaqs(list); })
+      .catch(() => { if (active) setFaqsError('FAQ를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); })
+      .finally(() => { if (active) setLoadingFaqs(false); });
+    return () => { active = false; };
+  }, [tab]);
 
   // 공개 글은 모두에게, 비공개 글은 작성자와 관리자에게만 보인다 (비회원·다른 회원에게는 목록에도 나오지 않는다)
   const visibleInquiries = inquiries
@@ -110,7 +123,13 @@ export default function HelpPage() {
   return (
     <Card>
       <div style={{ marginBottom: 16 }}><Tabs tabs={HELP_TABS.map(([id, label]) => ({ id, label }))} active={tab} onChange={setTab} /></div>
-      {tab === 'faq' && faqs.map((f) => <details key={f.id}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+      {tab === 'faq' && (
+        loadingFaqs ? <p className="state-msg" role="status">FAQ를 불러오는 중입니다.</p>
+          : faqsError ? <p className="state-msg" role="alert">{faqsError}</p>
+          : faqs.length
+          ? faqs.map((f) => <details key={f.id}><summary>{f.q}</summary><p>{f.a}</p></details>)
+          : <p className="state-msg">등록된 FAQ가 없습니다</p>
+      )}
       {tab === 'lib' && <DataTable columns={[{ key: 'n', header: '자료', render: (x) => x }, { key: 'd', header: '', align: 'right', render: () => <Pill tone="primary">다운로드</Pill> }]} rows={LIBRARY} rowKey={(x) => x} onRowClick={todo('자료 다운로드')} />}
       {tab === 'qna' && (
         <div className="grid" style={{ gap: 12 }}>

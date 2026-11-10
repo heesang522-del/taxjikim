@@ -10,11 +10,10 @@ import { useToast } from '../store/useToastStore';
 import { usePost } from '../store/usePostStore';
 import { useInquiry } from '../store/useInquiryStore';
 import { useAllReports } from '../utils/useAllReports';
-import { useFaq } from '../utils/useFaq';
 import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
 import { toDateLabel } from '../utils/format';
-import { getNotices, updatePost as updatePostApi } from '../api/post';
+import { getNotices, getFaqs, createPost, updatePost as updatePostApi, deletePost } from '../api/post';
 
 const ADMIN_TABS = [['usage', '모델·처리 현황'], ['members', '회원·게시판 관리'], ['support', '고객 지원']];
 // 서버 공지는 숫자 postId, 브라우저에만 남아있는 예시 공지는 문자열 id를 쓴다. 다른 게시판 화면들과 같은 구분 방식.
@@ -82,10 +81,16 @@ function FaqRow({ faq, onSave, onDelete }) {
       </details>
     );
   }
-  const save = () => {
+  // onSave가 실제 서버 호출이라 실패할 수 있다. 실패하면(상위에서 토스트로 안내) 입력값을 유지한 채
+  // 편집 모드를 그대로 둬서 다시 저장을 시도할 수 있게 한다.
+  const save = async () => {
     if (!q.trim() || !a.trim()) { toast('질문과 답변을 입력하세요'); return; }
-    onSave({ q, a });
-    setEditing(false);
+    try {
+      await onSave({ q, a });
+      setEditing(false);
+    } catch {
+      // 실패 토스트는 onSave(상위)가 띄운다.
+    }
   };
   return (
     <div className="grid" style={{ gap: 8, padding: '10px 0', borderBottom: '1px solid var(--border-soft)' }}>
@@ -103,21 +108,30 @@ function FaqAddForm({ onAdd }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
   const [a, setA] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
   if (!open) return <Button size="sm" variant="soft" onClick={() => setOpen(true)}>새 FAQ 추가</Button>;
-  const submit = () => {
+  const submit = async () => {
+    if (isSubmitting) return;
     if (!q.trim() || !a.trim()) { toast('질문과 답변을 입력하세요'); return; }
-    onAdd({ q, a });
-    setQ(''); setA(''); setOpen(false);
+    setIsSubmitting(true);
+    try {
+      await onAdd({ q, a });
+      setQ(''); setA(''); setOpen(false);
+    } catch {
+      // 실패 토스트는 onAdd(상위)가 띄운다.
+    } finally {
+      setIsSubmitting(false);
+    }
   };
   return (
     <div className="grid" style={{ gap: 8 }}>
-      <input className="in" placeholder="질문" value={q} onChange={(e) => setQ(e.target.value)} />
-      <textarea className="in" rows={3} placeholder="답변" value={a} onChange={(e) => setA(e.target.value)} />
+      <input className="in" placeholder="질문" value={q} onChange={(e) => setQ(e.target.value)} disabled={isSubmitting} />
+      <textarea className="in" rows={3} placeholder="답변" value={a} onChange={(e) => setA(e.target.value)} disabled={isSubmitting} />
       <div className="row">
-        <Button size="sm" onClick={() => setOpen(false)}>취소</Button>
-        <Button size="sm" variant="primary" onClick={submit}>등록</Button>
+        <Button size="sm" onClick={() => setOpen(false)} disabled={isSubmitting}>취소</Button>
+        <Button size="sm" variant="primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? '등록 중...' : '등록'}</Button>
       </div>
     </div>
   );
@@ -132,15 +146,20 @@ export default function AdminPage() {
   const { posts, updatePost } = usePost();
   const { inquiries } = useInquiry();
   const { reports } = useAllReports();
-  const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
   const waitingCount = useWaitingCount();
 
   // "공지 관리"는 서버 공지를 매번 DB에서 직접 받아온다(getPostsPage를 전체 페이지 모아 쓰는 getNotices).
   // 실패해도 조용히 넘어간다 — 로컬 예시 공지(있다면)만 보이는 정도이고, 탭을 다시 열면 재시도된다.
   const [serverNotices, setServerNotices] = useState([]);
   const loadNotices = () => getNotices().then(setServerNotices).catch(() => {});
+
+  // FAQ는 관리자만 작성하는 DB 게시글이라 로컬 예시 데이터 없이 서버 목록만 보여준다.
+  const [faqs, setFaqs] = useState([]);
+  const loadFaqs = () => getFaqs().then(setFaqs).catch(() => {});
+
   useEffect(() => {
     loadNotices();
+    loadFaqs();
   }, []);
 
   // 서버 공지는 실제 게시글 수정 API로 저장해야 DB에 반영된다. 브라우저에만 있는 예시 공지는
@@ -167,6 +186,48 @@ export default function AdminPage() {
     updatePost(post.id, { tab: '공지', title: values.title, body: values.body });
     toast('공지를 수정했습니다');
     navigate(ROUTES.postDetail(post.id));
+  };
+
+  // FAQ 등록·수정·삭제는 전부 실제 게시글 API(postType=FAQ)로 처리하고, 끝나면 목록을 다시 받아온다.
+  const makeFaqFormData = (values) => {
+    const formData = new FormData();
+    formData.append('title', values.q);
+    formData.append('content', values.a);
+    formData.append('postType', 'FAQ');
+    formData.append('isPublic', true);
+    return formData;
+  };
+
+  const addFaq = async (values) => {
+    try {
+      await createPost(makeFaqFormData(values));
+      await loadFaqs();
+      toast('FAQ를 등록했습니다');
+    } catch (error) {
+      toast(error.message || 'FAQ 등록에 실패했습니다.');
+      throw error;
+    }
+  };
+
+  const saveFaq = async (faq, values) => {
+    try {
+      await updatePostApi(faq.id, makeFaqFormData(values));
+      await loadFaqs();
+      toast('FAQ를 수정했습니다');
+    } catch (error) {
+      toast(error.message || 'FAQ 수정에 실패했습니다.');
+      throw error;
+    }
+  };
+
+  const deleteFaq = async (faq) => {
+    try {
+      await deletePost(faq.id);
+      await loadFaqs();
+      toast('FAQ를 삭제했습니다');
+    } catch (error) {
+      toast(error.message || 'FAQ 삭제에 실패했습니다.');
+    }
   };
 
   const reportsPending = reports.filter((r) => r.status === '대기').length;
@@ -286,16 +347,18 @@ export default function AdminPage() {
               : <p className="state-msg">등록된 공지가 없습니다</p>}
           </Card>
           <Card title="FAQ 관리" icon="fileText">
-            {faqs.map((f) => (
-              <FaqRow
-                key={f.id}
-                faq={f}
-                onSave={(v) => { updateFaq(f.id, v); toast('FAQ를 수정했습니다'); }}
-                onDelete={() => { removeFaq(f.id); toast('FAQ를 삭제했습니다'); }}
-              />
-            ))}
+            {faqs.length
+              ? faqs.map((f) => (
+                <FaqRow
+                  key={f.id}
+                  faq={f}
+                  onSave={(v) => saveFaq(f, v)}
+                  onDelete={() => deleteFaq(f)}
+                />
+              ))
+              : <p className="state-msg">등록된 FAQ가 없습니다</p>}
             <div style={{ marginTop: 12 }}>
-              <FaqAddForm onAdd={(v) => { addFaq(v); toast('FAQ를 등록했습니다'); }} />
+              <FaqAddForm onAdd={addFaq} />
             </div>
           </Card>
         </div>

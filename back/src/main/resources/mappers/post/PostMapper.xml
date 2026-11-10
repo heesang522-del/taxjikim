@@ -125,6 +125,11 @@
 
         <choose>
 
+            <!-- FAQ는 관리자가 정해둔 등록 순서를 그대로 보여준다. 최신순/인기순 선택지를 두지 않는다. -->
+            <when test="postType == 'FAQ'">
+                p.POST_ID ASC
+            </when>
+
             <when test="sort == 'popular'">
                 p.VIEW_COUNT DESC, p.POST_ID DESC
             </when>

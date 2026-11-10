@@ -93,6 +93,21 @@ export function getNotices() {
   return fetchAllPages({ postType: '공지' }, toPost, '공지 목록을 불러오지 못했습니다.');
 }
 
+// 서버의 FAQ 게시글을 고객센터 화면에서 쓰는 질문/답변 필드로 변환한다.
+export function toFaq(post) {
+  return {
+    id: String(post.postId),
+    q: post.title || '',
+    a: post.content || '',
+  };
+}
+
+// FAQ는 관리자만 작성하고 개수가 적어, 공지와 마찬가지로 페이지 UI 없이 전체를 한 번에 불러온다.
+// 서버가 등록순(오래된 글부터)으로 정렬해서 내려준다.
+export function getFaqs() {
+  return fetchAllPages({ postType: 'FAQ' }, toFaq, 'FAQ 목록을 불러오지 못했습니다.');
+}
+
 // 게시판 목록을 한 페이지만 받아온다. 탭(postType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,
 // 페이지 번호 UI에 쓸 meta(page/size/total/totalPages)도 함께 돌려준다.
 // excludeNotice: true면 공지를 뺀 결과만 받는다("전체" 탭에서 공지를 상단에 따로 고정 노출할 때 쓴다).
