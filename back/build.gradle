@@ -19,8 +19,6 @@ repositories {
 
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
-	// YML의 접속·인증·SSL 설정으로 Elasticsearch Java 클라이언트를 자동 구성한다.
-	implementation 'org.springframework.boot:spring-boot-starter-elasticsearch'
 	implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:4.0.1'
 	implementation 'software.amazon.awssdk:s3:2.20.0'
 	implementation 'org.springframework.boot:spring-boot-starter-websocket'
