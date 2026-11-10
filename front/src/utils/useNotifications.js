@@ -10,6 +10,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
 } from '../api/notifications';
+import { emitChatUnread } from './chatUnreadBus';
 
 const PAGE_SIZE = 10; // 한 번에 불러오는 알림 개수. 서버 기본값(10)과 맞춘다
 const SUBSCRIBE_URL = '/api/v1/notifications/subscribe'; // EventSource는 axios client를 거치지 않아 경로를 직접 적는다
@@ -43,7 +44,7 @@ function toNotificationItem(n) {
 }
 
 /** 헤더 알림 벨이 쓰는 훅. 로그인 중인 사용자 하나당 서버 SSE 구독(/notifications/subscribe)을
- *  하나만 열어 두고, 알림과 중복 로그인 감지가 이 연결을 함께 쓴다.
+ *  하나만 열어 두고, 알림·중복 로그인 감지·채팅 배지(chatUnreadBus로 중계)가 이 연결을 함께 쓴다.
  *  안읽음 수(unreadCount)는 로그인 중 이 SSE로 받는다.
  *  서버가 보내는 'notification' 이벤트는 "알림이 바뀌었다"는 신호만 담고 있어서, 받으면 안읽음 수를 다시 조회한다.
  *  알림 목록(items)은 항상 미읽음 알림만 담는다. 알림창을 열 때(openList) 최신 1페이지를 불러오고,
@@ -130,6 +131,11 @@ export function useNotifications() {
       // 신호만 담겨 있으므로 값은 보지 않고, 받으면 바로 모달을 띄울 상태로만 바꾼다.
       eventSource.addEventListener('session-replaced', () => {
         setSessionReplaced(true);
+      });
+
+      // 채팅 배지(ChatWidget)용 신호. 이 SSE 연결을 함께 쓰므로 여기서 받아 chatUnreadBus로 중계한다.
+      eventSource.addEventListener('chat-unread', () => {
+        emitChatUnread();
       });
 
       eventSource.onerror = () => {

@@ -22,9 +22,9 @@ import {
   markAdminRead,
 } from '../api/chat';
 import { useChatSocket } from '../utils/useChatSocket';
+import { subscribeChatUnread } from '../utils/chatUnreadBus';
 
 const LIST_POLL_MS = 8000; // 관리자 상담 목록·대기 수: 실시간 알림 채널이 없어 주기적으로 다시 불러온다
-const BADGE_POLL_MS = 15000; // 회원 패널이 닫혀 있는 동안 배지용 안읽은 수 확인 주기
 const ROOM_PAGE_SIZE = 10; // 상담 목록을 한 번에 불러오는 개수. 서버 기본값(10)과 맞춘다
 
 /** 채팅 패널(ChatWidget) 열림 여부만 전역으로 둔다. 실제 상담 데이터는 서버가 가진다. */
@@ -75,6 +75,11 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
   useEffect(() => {
     hasConnectedRef.current = false;
   }, [roomId]);
+  // 패널을 닫아 의도적으로 연결을 끊었을 때도 초기화한다. 안 그러면 패널을 다시 열어 처음 연결될 때를
+  // "재연결"로 착각해 messages·read·me를 한 번 더 불필요하게 호출하게 된다.
+  useEffect(() => {
+    if (!active) hasConnectedRef.current = false;
+  }, [active]);
 
   const { connected, sendText } = useChatSocket(active ? roomId : null, {
     // roomClosed가 true면 상대가 방금 종료하며 남긴 안내 메시지다. 메시지를 먼저 붙이고,
@@ -199,16 +204,16 @@ export function useMemberChat(open, myUserId) {
     checkRoomClosed: checkRoomClosedOnReconnect,
   });
 
-  // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 주기적으로 확인한다.
+  // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 확인한다. 폴링 대신, 알림과 같은 SSE 연결로
+  // 관리자가 메시지를 보내거나 상담을 종료할 때마다 오는 'chat-unread' 신호(chatUnreadBus 경유)를 받아 다시 조회한다.
   useEffect(() => {
     if (active || !activeRoomId) {
       setBadgeCount(0);
       return undefined;
     }
     const check = () => getMemberUnreadCount(activeRoomId).then((r) => setBadgeCount(r.data)).catch(() => {});
-    check();
-    const timer = setInterval(check, BADGE_POLL_MS);
-    return () => clearInterval(timer);
+    check(); // 패널이 닫히는 순간까지 쌓였을 수 있는 값을 먼저 맞춰둔다
+    return subscribeChatUnread(check);
   }, [active, activeRoomId]);
 
   const send = async (content) => {
