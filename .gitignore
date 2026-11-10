@@ -181,3 +181,6 @@ workers
 # PyInstaller 빌드 중간 파일과 배포 결과물
 /build/
 /dist/
+
+# 환경변수가 올라간 설정파일
+back/src/main/resources/application-local.yml

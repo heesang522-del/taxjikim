@@ -22,13 +22,13 @@ import {
   markAdminRead,
 } from '../api/chat';
 import { useChatSocket } from '../utils/useChatSocket';
+import { subscribeChatUnread } from '../utils/chatUnreadBus';
 
 const LIST_POLL_MS = 8000; // 관리자 상담 목록·대기 수: 실시간 알림 채널이 없어 주기적으로 다시 불러온다
-const BADGE_POLL_MS = 15000; // 회원 패널이 닫혀 있는 동안 배지용 안읽은 수 확인 주기
 const ROOM_PAGE_SIZE = 10; // 상담 목록을 한 번에 불러오는 개수. 서버 기본값(10)과 맞춘다
 
 /** 채팅 패널(ChatWidget) 열림 여부만 전역으로 둔다. 실제 상담 데이터는 서버가 가진다. */
-export const useChatPanelStore = create((set) => ({
+const useChatPanelStore = create((set) => ({
   open: false,
   setOpen: (open) => set({ open }),
 }));
@@ -52,7 +52,10 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
     }
     setLoading(true);
     return fetchMessages(roomId)
-      .then((result) => setMessages(result.data))
+      .then((result) => {
+        setMessages(result.data);
+        setError(''); // 이전 시도가 실패해 남아 있던 에러를 지운다 — 안 그러면 재조회에 성공해도 옛 에러가 계속 보인다.
+      })
       .catch((cause) => setError(cause.message))
       .finally(() => setLoading(false));
   }, [roomId, fetchMessages]);
@@ -75,6 +78,11 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
   useEffect(() => {
     hasConnectedRef.current = false;
   }, [roomId]);
+  // 패널을 닫아 의도적으로 연결을 끊었을 때도 초기화한다. 안 그러면 패널을 다시 열어 처음 연결될 때를
+  // "재연결"로 착각해 messages·read·me를 한 번 더 불필요하게 호출하게 된다.
+  useEffect(() => {
+    if (!active) hasConnectedRef.current = false;
+  }, [active]);
 
   const { connected, sendText } = useChatSocket(active ? roomId : null, {
     // roomClosed가 true면 상대가 방금 종료하며 남긴 안내 메시지다. 메시지를 먼저 붙이고,
@@ -139,7 +147,7 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
 }
 
 /** 회원 채팅 위젯 전용 훅. open(패널 열림)이 true인 동안만 실시간 연결한다. */
-export function useMemberChat(open, myUserId) {
+export function useMemberChat(open, myUserId, loggedIn) {
   const [room, setRoom] = useState(null);
   const [roomLoading, setRoomLoading] = useState(true);
   const [roomError, setRoomError] = useState('');
@@ -148,20 +156,25 @@ export function useMemberChat(open, myUserId) {
   const loadRoom = useCallback(
     () =>
       getMyRoom()
-        .then((result) => setRoom(result.data))
+        .then((result) => {
+          setRoom(result.data);
+          setRoomError(''); // 이전 시도가 실패해 남아 있던 에러를 지운다 — 안 그러면 재조회에 성공해도 옛 에러가 계속 보인다.
+        })
         .catch((cause) => setRoomError(cause.message))
         .finally(() => setRoomLoading(false)),
     []
   );
 
+  // 비회원은 어차피 401이 날 것을 알면서 호출할 필요가 없다. 로그인 전에는 방 조회 자체를 하지 않는다.
   useEffect(() => {
+    if (!loggedIn) return;
     loadRoom();
-  }, [loadRoom]);
+  }, [loggedIn, loadRoom]);
 
   // 패널을 다시 열 때마다 방 상태(종료 여부 등)를 최신으로 확인한다.
   useEffect(() => {
-    if (open) loadRoom();
-  }, [open, loadRoom]);
+    if (open && loggedIn) loadRoom();
+  }, [open, loggedIn, loadRoom]);
 
   const activeRoomId = room && room.status !== 'CLOSED' ? room.roomId : null;
   const active = open && Boolean(activeRoomId);
@@ -199,16 +212,23 @@ export function useMemberChat(open, myUserId) {
     checkRoomClosed: checkRoomClosedOnReconnect,
   });
 
-  // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 주기적으로 확인한다.
+  // 패널이 닫혀 있는 동안 플로팅 버튼 배지용 안읽은 수를 확인한다. 폴링 대신, 알림과 같은 SSE 연결로
+  // 관리자가 메시지를 보내거나 상담을 종료할 때마다 오는 'chat-unread' 신호(chatUnreadBus 경유)를 받아 다시 조회한다.
+  const wasActiveRef = useRef(active);
   useEffect(() => {
+    const wasActive = wasActiveRef.current;
+    wasActiveRef.current = active;
+
     if (active || !activeRoomId) {
       setBadgeCount(0);
       return undefined;
     }
     const check = () => getMemberUnreadCount(activeRoomId).then((r) => setBadgeCount(r.data)).catch(() => {});
-    check();
-    const timer = setInterval(check, BADGE_POLL_MS);
-    return () => clearInterval(timer);
+    // 방금까지 패널이 열려 있었다면(wasActive) 그 동안은 소켓이 메시지를 실시간으로 읽음 처리했으므로
+    // 안읽은 수는 이미 0이다 — 다시 물어볼 필요 없다. 새로고침 등으로 패널이 처음부터 닫힌 채
+    // 방을 발견한 경우에만(로그인 전에 쌓였을 수 있는 값이라 SSE로 못 받았으므로) 한 번 확인한다.
+    if (!wasActive) check();
+    return subscribeChatUnread(check);
   }, [active, activeRoomId]);
 
   const send = async (content) => {
