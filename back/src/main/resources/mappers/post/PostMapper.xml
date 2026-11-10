@@ -83,12 +83,21 @@
 
         </if>
 
-        <!-- postType이 없으면 모든 게시판을 섞어서 보여준다(기존 동작과 동일). -->
-        <if test="postType != null and postType != ''">
+        <choose>
+            <when test="postType != null and postType != ''">
 
-            AND p.BOARD_TYPE = #{postType}
+                AND p.BOARD_TYPE = #{postType}
 
-        </if>
+            </when>
+            <otherwise>
+                <!-- 게시판 종류를 지정하지 않으면("전체" 탭 등) 일반 게시판만 섞어서 보여준다.
+                     QNA(고객센터 문의)·FAQ(자주 묻는 질문)는 둘 다 고객센터 전용이라 일반 게시판
+                     목록에는 절대 섞이면 안 된다. QNA는 postType=QNA로 조회하고(getInquiries 등),
+                     FAQ는 아예 이 게시글 API가 아니라 useFaq가 별도로 관리한다. -->
+                AND p.BOARD_TYPE NOT IN ('QNA', 'FAQ')
+
+            </otherwise>
+        </choose>
 
         <!-- QNA 비공개 글은 postType 필터 여부와 상관없이 작성자 본인·관리자만 조회된다. -->
         <if test="!isAdmin">
@@ -156,6 +165,16 @@
         FOR UPDATE
 
     </select>
+
+    <!-- 하루 1회 제한을 통과한 조회만 반영한다(호출부인 PostServiceImpl이 Redis로 이미 걸러낸다). -->
+    <update id="incrementViewCount">
+
+        UPDATE POSTS
+        SET VIEW_COUNT = VIEW_COUNT + 1
+        WHERE POST_ID = #{postId}
+        AND DELETED_AT IS NULL
+
+    </update>
 
     <select id="findPage" resultMap="postMapping">
 

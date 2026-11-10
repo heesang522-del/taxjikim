@@ -11,7 +11,9 @@ public interface PostService {
     // 첨부파일을 조각(chunk) 단위로 받아 임시 저장하고, 마지막 조각이면 합쳐서 최종 저장 파일명을 반환한다.
     String processChunkUpload(ChunkDto dto) throws IOException;
 
-    // 단건 상세 조회(게시글 + 첨부파일). QNA 비공개 글 접근 제어도 여기서 함께 검사한다.
+    // 단건 상세 조회(게시글 + 첨부파일). QNA 비공개 글 접근 제어도 여기서 함께 검사하고,
+    // 로그인한 회원이 작성자 본인이 아니면서 하루 1회 제한(Redis)을 통과한 조회만 조회수를 올린다.
+    // 비로그인 조회는 조회수를 올리지 않는다.
     PostDto findById(Long postId);
 
     // 목록 조회. 페이지 크기·offset 변환·전체 건수 조회·PageMeta 조립까지 전부 여기서 끝내고
