@@ -63,8 +63,8 @@ export function toPost(post) {
 }
 
 // 서버가 페이지 단위로 내려주는 목록을 처음부터 끝까지 모아 하나의 배열로 돌려준다.
-// getPosts(게시판 전체 캐시)·getInquiries(Q&A 전체 목록)처럼 서버 페이징 UI 없이
-// 클라이언트에서 검색·필터링하는 화면이 쓴다. 페이지 단위로 보여주는 화면은 getPostsPage를 쓴다.
+// getNotices(공지 전체)·getInquiries(Q&A 전체 목록)처럼 서버 페이징 UI 없이 전체를 한 번에 보여주는
+// 화면이 쓴다. 페이지 단위로 보여주는 화면은 getPostsPage를 쓴다.
 async function fetchAllPages(params, mapItem, fallbackMessage) {
   const items = [];
   let page = 1;

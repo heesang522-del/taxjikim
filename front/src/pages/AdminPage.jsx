@@ -1,8 +1,8 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, HBar, Pill, Tabs } from '../components/common/index';
 import { ADMIN_STATS, USAGE_METRICS, FAILURE_LOG_SEED } from '../data/content';
 import { ROUTES } from '../utils/routes';
@@ -14,8 +14,11 @@ import { useFaq } from '../utils/useFaq';
 import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
 import { toDateLabel } from '../utils/format';
+import { getNotices, updatePost as updatePostApi } from '../api/post';
 
 const ADMIN_TABS = [['usage', '모델·처리 현황'], ['members', '회원·게시판 관리'], ['support', '고객 지원']];
+// 서버 공지는 숫자 postId, 브라우저에만 남아있는 예시 공지는 문자열 id를 쓴다. 다른 게시판 화면들과 같은 구분 방식.
+const isServerId = (id) => /^\d+$/.test(id);
 const StatCard = ({ title, data }) => <Card title={title}>{data.map(([l, v]) => <HBar key={l} label={l} value={v} display={`${v}%`} scale={2} />)}</Card>;
 
 function NoticeRow({ post, onSave }) {
@@ -30,14 +33,23 @@ function NoticeRow({ post, onSave }) {
         <summary>{post.title}</summary>
         <p>{post.body}</p>
         <p className="small muted" style={{ marginTop: 6 }}>{post.author} · {post.createdAt}</p>
-        <div style={{ marginTop: 8 }}><Button size="sm" onClick={() => setEditing(true)}>수정</Button></div>
+        <div className="row" style={{ marginTop: 8 }}>
+          <Button size="sm" onClick={() => setEditing(true)}>수정</Button>
+          <Button size="sm" variant="soft" to={ROUTES.postDetail(post.id)}>상세보기</Button>
+        </div>
       </details>
     );
   }
-  const save = () => {
+  // onSave가 실제 서버 호출이라 실패할 수 있다. 실패하면(상위에서 토스트로 안내) 입력값을 유지한 채
+  // 편집 모드를 그대로 둬서 다시 저장을 시도할 수 있게 한다.
+  const save = async () => {
     if (!title.trim() || !body.trim()) { toast('제목과 내용을 입력하세요'); return; }
-    onSave({ title, body });
-    setEditing(false);
+    try {
+      await onSave({ title, body });
+      setEditing(false);
+    } catch {
+      // 실패 토스트는 onSave(상위)가 띄운다.
+    }
   };
   return (
     <div className="grid" style={{ gap: 8, padding: '10px 0', borderBottom: '1px solid var(--border-soft)' }}>
@@ -46,6 +58,7 @@ function NoticeRow({ post, onSave }) {
       <div className="row">
         <Button size="sm" onClick={() => setEditing(false)}>취소</Button>
         <Button size="sm" variant="primary" onClick={save}>저장</Button>
+        <Button size="sm" variant="soft" to={ROUTES.postDetail(post.id)}>상세보기</Button>
       </div>
     </div>
   );
@@ -114,6 +127,7 @@ export default function AdminPage() {
   const [params] = useSearchParams();
   const [tab, setTab] = useState(ADMIN_TABS.some(([id]) => id === params.get('tab')) ? params.get('tab') : ADMIN_TABS[0][0]);
   const toast = useToast();
+  const navigate = useNavigate();
 
   const { posts, updatePost } = usePost();
   const { inquiries } = useInquiry();
@@ -121,9 +135,44 @@ export default function AdminPage() {
   const { faqs, addFaq, updateFaq, removeFaq } = useFaq();
   const waitingCount = useWaitingCount();
 
+  // "공지 관리"는 서버 공지를 매번 DB에서 직접 받아온다(getPostsPage를 전체 페이지 모아 쓰는 getNotices).
+  // 실패해도 조용히 넘어간다 — 로컬 예시 공지(있다면)만 보이는 정도이고, 탭을 다시 열면 재시도된다.
+  const [serverNotices, setServerNotices] = useState([]);
+  const loadNotices = () => getNotices().then(setServerNotices).catch(() => {});
+  useEffect(() => {
+    loadNotices();
+  }, []);
+
+  // 서버 공지는 실제 게시글 수정 API로 저장해야 DB에 반영된다. 브라우저에만 있는 예시 공지는
+  // usePostStore의 로컬 수정으로 처리한다(화면에만 반영, 저장 공간이 있으면 localStorage에 남는다).
+  // 사용자용 글 수정(PostForm)과 동일하게, 저장에 성공하면 고친 결과를 바로 확인하도록 그 글
+  // 상세로 이동한다(관리자·일반 회원 공통 동작).
+  const saveNotice = async (post, values) => {
+    if (isServerId(post.id)) {
+      try {
+        const formData = new FormData();
+        formData.append('title', values.title);
+        formData.append('content', values.body);
+        formData.append('postType', '공지');
+        formData.append('isPublic', true);
+        await updatePostApi(post.id, formData);
+        toast('공지를 수정했습니다');
+        navigate(ROUTES.postDetail(post.id));
+      } catch (error) {
+        toast(error.message || '공지 수정에 실패했습니다.');
+        throw error;
+      }
+      return;
+    }
+    updatePost(post.id, { tab: '공지', title: values.title, body: values.body });
+    toast('공지를 수정했습니다');
+    navigate(ROUTES.postDetail(post.id));
+  };
+
   const reportsPending = reports.filter((r) => r.status === '대기').length;
   const inquiriesPending = inquiries.filter((q) => q.status !== '답변 완료').length;
-  const notices = posts.filter((p) => p.tab === '공지').sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  // 서버 공지(직접 조회) + 브라우저에만 남아있는 예시 공지(있다면)를 함께 보여준다.
+  const notices = [...serverNotices, ...posts.filter((p) => p.tab === '공지')].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const latestReports = [...reports].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 5);
   const pendingQna = inquiries
     .filter((q) => q.status !== '답변 완료')
@@ -232,7 +281,7 @@ export default function AdminPage() {
           <Card title="공지 관리" icon="megaphone" aside={<Button size="sm" variant="soft" to={`${ROUTES.postWrite}?tab=${encodeURIComponent('공지')}`}>새 공지 올리기</Button>}>
             {notices.length
               ? notices.map((p) => (
-                <NoticeRow key={p.id} post={p} onSave={(v) => { updatePost(p.id, { tab: '공지', title: v.title, body: v.body }); toast('공지를 수정했습니다'); }} />
+                <NoticeRow key={p.id} post={p} onSave={(v) => saveNotice(p, v)} />
               ))
               : <p className="state-msg">등록된 공지가 없습니다</p>}
           </Card>
