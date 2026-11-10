@@ -166,6 +166,16 @@
 
     </select>
 
+    <!-- 하루 1회 제한을 통과한 조회만 반영한다(호출부인 PostServiceImpl이 Redis로 이미 걸러낸다). -->
+    <update id="incrementViewCount">
+
+        UPDATE POSTS
+        SET VIEW_COUNT = VIEW_COUNT + 1
+        WHERE POST_ID = #{postId}
+        AND DELETED_AT IS NULL
+
+    </update>
+
     <select id="findPage" resultMap="postMapping">
 
         SELECT

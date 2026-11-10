@@ -32,6 +32,7 @@ public class PostServiceImpl implements PostService {
     private final PostMapper postMapper;
     private final PostValidator postValidator;
     private final NotificationService notificationService;
+    private final PostViewTracker postViewTracker;
 
     private final Path tempRoot = Path.of(System.getProperty("user.dir"), "uploads", "temp").toAbsolutePath().normalize();
     private final Path uploadRoot = Path.of(System.getProperty("user.dir"), "uploads", "files").toAbsolutePath().normalize();
@@ -121,26 +122,36 @@ public class PostServiceImpl implements PostService {
     }
 
     @Override
-    public PostDto findById(Long postId) {
+    public PostDto findById(Long postId, String viewerIp) {
         PostDto post = postMapper.findById(postId);
         if (post == null) {
             throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
         }
 
+        Long currentUserId = postValidator.currentUserIdOrNull();
+        boolean isOwner = currentUserId != null && currentUserId.equals(post.getUserId());
+
         // QNA 비공개 글은 작성자 본인과 관리자만 볼 수 있다. 존재 여부가 드러나지 않도록 글이 없을 때와 같은 404로 응답한다.
         boolean isPrivateQna = "QNA".equals(post.getPostType()) && !post.isPublic();
-        if (isPrivateQna) {
-            Long currentUserId = postValidator.currentUserIdOrNull();
-            boolean isOwner = currentUserId != null && currentUserId.equals(post.getUserId());
-            if (!isOwner && !postValidator.hasAdminRole()) {
-                throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
-            }
+        if (isPrivateQna && !isOwner && !postValidator.hasAdminRole()) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
         }
 
         // FAQ는 일반 게시글 상세 화면으로 보여줄 대상이 아니다(자주 묻는 질문 화면이 useFaq로 따로 관리한다).
         // 목록에서는 이미 제외되지만, 이 API는 postId만 알면 바로 조회할 수 있어 여기서도 같은 404로 막는다.
         if ("FAQ".equals(post.getPostType())) {
             throw new ApiException(HttpStatus.NOT_FOUND, "POST_NOT_FOUND", "게시글을 찾을 수 없습니다.");
+        }
+
+        // 작성자 본인 조회는 세지 않는다. 그 외에는 로그인 중이면 회원 번호로, 아니면 접속 IP로 구분해
+        // 하루 한 번만(Redis TTL) 카운트한다. 방금 실제로 올랐으면 응답에도 바로 반영해 한 번 더
+        // 조회하지 않아도 최신 수치가 보이게 한다.
+        if (!isOwner) {
+            String viewerKey = currentUserId != null ? "user:" + currentUserId : "ip:" + viewerIp;
+            if (postViewTracker.registerView(postId, viewerKey)) {
+                postMapper.incrementViewCount(postId);
+                post.setViewCount(post.getViewCount() + 1);
+            }
         }
 
         post.setFiles(postMapper.findFilesByPostId(postId));

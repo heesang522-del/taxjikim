@@ -88,8 +88,9 @@ async function fetchAllPages(params, mapItem, fallbackMessage) {
   return items;
 }
 
-export function getPosts() {
-  return fetchAllPages({}, toPost, '게시글 목록을 불러오지 못했습니다.');
+// 관리자 "공지 관리"가 전체 공지를 한 번에 보여주는 데 쓴다.
+export function getNotices() {
+  return fetchAllPages({ postType: '공지' }, toPost, '공지 목록을 불러오지 못했습니다.');
 }
 
 // 게시판 목록을 한 페이지만 받아온다. 탭(postType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,

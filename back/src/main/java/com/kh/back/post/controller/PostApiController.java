@@ -11,6 +11,8 @@ import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.service.PostService;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.HttpStatus;
@@ -49,9 +51,11 @@ public class PostApiController {
     } // latest 정렬방식, "" 검색어, 1 페이지 번호, null 게시판 종류 ( 받은 조건으로 서비스에 게시글 조회를 요청하고 그결과를 반환)
 
     @GetMapping("/{postId}")
-    public ApiResponse<PostDto> getPost(@PathVariable Long postId) {
+    public ApiResponse<PostDto> getPost(@PathVariable Long postId, HttpServletRequest request) {
 
-        return ApiResponse.ok(postService.findById(postId));
+        // 비로그인 조회자의 하루 1회 제한 구분용. 리버스 프록시 뒤에 놓이면 이 값이 프록시 IP로 고정되므로,
+        // 그때는 X-Forwarded-For 등 헤더를 보도록 바꿔야 한다(지금은 그런 배포 구성이 없어 그대로 둔다).
+        return ApiResponse.ok(postService.findById(postId, request.getRemoteAddr()));
     } // url 의 {postId} 부분을 변수로 받음 , 서비스에 해당 번호의 게시글 조회를 요청
     // 조회한 게시글을 공통 성공 응답 형식으로 감싸 반환
 

@@ -38,6 +38,11 @@ public interface PostMapper {
             @Param("postId") Long postId
     );
 
+    // 하루 1회 제한(Redis)을 통과했을 때만 호출한다. 영향받은 행 수로 호출부가 성공 여부를 알 수 있다.
+    int incrementViewCount(
+            @Param("postId") Long postId
+    );
+
     void save(PostDto post);
 
     void update(PostDto post);
