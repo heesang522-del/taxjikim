@@ -7,14 +7,18 @@ import com.kh.back.chat.dto.ChatRoomSummaryDto;
 import com.kh.back.chat.event.ChatRoomClosedEvent;
 import com.kh.back.chat.mapper.ChatMapper;
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.sse.SseEmitterRegistry;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 @Service
@@ -23,8 +27,11 @@ public class ChatServiceImpl implements ChatService {
 
     private final ChatMapper chatMapper;
     private final ApplicationEventPublisher eventPublisher;
+    private final SseEmitterRegistry sseEmitterRegistry;
 
     private static final Set<String> VALID_ROOM_STATUSES = Set.of("WAITING", "IN_PROGRESS", "CLOSED");
+    // 알림과 같은 SSE 연결(userId 기준)을 재사용한다. payload는 신호 역할만 하고, 받은 쪽이 기존 조회 API로 다시 가져온다.
+    private static final String CHAT_UNREAD_EVENT = "chat-unread";
     private static final int MAX_MESSAGE_LENGTH = 1000;
     private static final int DEFAULT_ROOM_PAGE_SIZE = 10; // size 파라미터가 없을 때 기본 페이지 크기
     private static final int MAX_ROOM_PAGE_SIZE = 50; // 클라이언트가 요청할 수 있는 최대 페이지 크기
@@ -85,7 +92,12 @@ public class ChatServiceImpl implements ChatService {
         message.setContent(trimmedContent);
         chatMapper.insertMessage(message);
         // CREATED_AT은 DB 기본값(CURRENT_TIMESTAMP)으로 채워져서 insert 직후의 message 객체에는 없다. 다시 조회해서 채운다.
-        return chatMapper.findMessageById(message.getMessageId());
+        ChatMessageDto saved = chatMapper.findMessageById(message.getMessageId());
+        // 관리자가 보낸 메시지만 회원 배지를 갱신시킨다. 회원 본인이 보낸 메시지는 자기 자신에게 알릴 필요가 없다.
+        if (!senderId.equals(room.getUserId())) {
+            notifyMemberUnreadChanged(room.getUserId());
+        }
+        return saved;
     }
 
     @Override
@@ -166,13 +178,15 @@ public class ChatServiceImpl implements ChatService {
     @Override
     @Transactional
     public void closeAdminRoom(Long roomId, Long adminId) {
-        requireRoom(roomId);
+        ChatRoomDto room = requireRoom(roomId);
         int updated = chatMapper.closeAdminRoom(roomId, adminId);
         if (updated == 0) {
             throw new ApiException(HttpStatus.CONFLICT, "ROOM_NOT_CLOSABLE",
                     "담당 중인 진행중 상담만 종료할 수 있습니다.");
         }
         insertCloseNotice(roomId, adminId, ADMIN_CLOSE_NOTICE_CONTENT);
+        // 관리자가 종료했을 때만 회원에게 알린다. 회원 본인이 종료한 경우(closeUserRoom)는 REST 응답으로 이미 반영된다.
+        notifyMemberUnreadChanged(room.getUserId());
     }
 
     @Override
@@ -201,6 +215,26 @@ public class ChatServiceImpl implements ChatService {
         chatMapper.insertMessage(notice);
         ChatMessageDto savedNotice = chatMapper.findMessageById(notice.getMessageId());
         eventPublisher.publishEvent(new ChatRoomClosedEvent(roomId, closerId, savedNotice));
+    }
+
+    // 회원 채팅 배지(ChatWidget)용 실시간 신호. 알림과 같은 SseEmitterRegistry(userId 키)를 그대로 써서
+    // 연결을 추가로 열지 않는다. 값은 담지 않고 "바뀌었다"는 신호만 보내, 받는 쪽이 getUnreadCount로 다시 조회한다.
+    private void notifyMemberUnreadChanged(Long memberUserId) {
+        pushAfterCommit(() -> sseEmitterRegistry.send(memberUserId, CHAT_UNREAD_EVENT, Map.of("type", "CHAT")));
+    }
+
+    // 현재 트랜잭션이 실제로 커밋된 뒤에만 push를 실행한다. 트랜잭션 밖에서 호출된 경우(동기화가 없는 경우)에는 바로 실행한다.
+    private void pushAfterCommit(Runnable push) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            push.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                push.run();
+            }
+        });
     }
 
     @Override

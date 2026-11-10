@@ -14,7 +14,7 @@ export default function ChatWidget() {
   const { loggedIn, isAdmin, user } = useAuth();
   const { open, setOpen } = useChat();
   // connected는 useMemberChat이 실제로 맺고 있는 WebSocket 소켓 상태를 그대로 반영한다.
-  const { room, messages, unreadCount, connected, send: sendMessage, close: closeChat } = useMemberChat(open, user?.userId);
+  const { room, messages, loading, error, unreadCount, connected, send: sendMessage, close: closeChat } = useMemberChat(open, user?.userId, loggedIn);
   const toast = useToast();
   const [text, setText] = useState('');
   const endRef = useRef(null);
@@ -76,9 +76,11 @@ export default function ChatWidget() {
           ) : (
             <>
               {disconnected && <p className="chat-warn" role="alert">연결이 끊어졌습니다. 다시 연결 중입니다…</p>}
+              {error && <p className="chat-warn" role="alert">{error}</p>}
               <div className="chat-body">
-                {room?.status === 'WAITING' && !hasAdminReply && <p className="chat-note">상담사를 기다리는 중입니다.</p>}
-                {!room && <p className="chat-note">궁금한 점을 남겨 주세요.</p>}
+                {loading && !room && <p className="chat-note">불러오는 중입니다…</p>}
+                {!loading && room?.status === 'WAITING' && !hasAdminReply && <p className="chat-note">상담사를 기다리는 중입니다.</p>}
+                {!loading && !room && <p className="chat-note">궁금한 점을 남겨 주세요.</p>}
                 {messages.map((m) => {
                   const fromAdmin = m.senderId !== user?.userId;
                   return (

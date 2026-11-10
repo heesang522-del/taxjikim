@@ -55,6 +55,21 @@ back/src/main/resources/application-local.yml
 !/ml/models/income_classifier/linear_svc_bundle.pkl
 !/ml/models/income_classifier/model_report.json
 
+# 새 환경에서도 재학습 완료 기록과 모델을 함께 사용해 같은 데이터의 재학습을 방지한다.
+!/ml/models/retraining/
+/ml/models/retraining/*
+!/ml/models/retraining/income_last_training.json
+!/ml/models/retraining/expense_last_training.json
+!/ml/models/retraining/income/
+!/ml/models/retraining/expense/
+/ml/models/retraining/income/*
+/ml/models/retraining/expense/*
+!/ml/models/retraining/income/classifier/
+!/ml/models/retraining/expense/classifier/
+/ml/models/retraining/*/classifier/*
+!/ml/models/retraining/*/classifier/linear_svc_bundle.pkl
+!/ml/models/retraining/*/classifier/model_report.json
+
 # IntelliJ IDEA
 **/.idea/
 *.iml
@@ -166,3 +181,6 @@ workers
 # PyInstaller 빌드 중간 파일과 배포 결과물
 /build/
 /dist/
+
+# 환경변수가 올라간 설정파일
+back/src/main/resources/application-local.yml

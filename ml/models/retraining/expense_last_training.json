@@ -1,0 +1,8 @@
+{
+  "data_versions": {
+    "data\\expense\\training\\training_data.csv": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
+    "data\\expense\\user_approved\\category_feedback.csv": "2b53271f81654845b41081b1ada28f5a2e598b4b3dde95040e679e13f563fad0"
+  },
+  "trained_at": "2026-11-10T11:12:28.433553+09:00",
+  "duration_seconds": 2.41
+}

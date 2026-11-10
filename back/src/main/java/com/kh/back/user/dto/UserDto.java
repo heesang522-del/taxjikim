@@ -11,8 +11,6 @@ import lombok.AllArgsConstructor;
 import lombok.ToString;
 
 import java.time.LocalDateTime;
-import java.time.LocalDate;
-import org.springframework.format.annotation.DateTimeFormat;
 
 @Getter
 @Setter
@@ -28,9 +26,6 @@ public class UserDto {
     private String password;
     private String name;
     private String email;
-    // 생년월일은 선택 입력이며 날짜만 받는다.
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
-    private LocalDate birthDate;
     private String nickname;
     private String profileImageUrl; // DB 저장용 파일 경로 (/uploads/profile/xxx.png)
     private String userRole;
