@@ -248,7 +248,7 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 금액 0은 기부금이 없는 입력 예시다. 두 기부금은 각각 음수가 아닌 DECIMAL(15,2) 저장 범위이며, 미입력은 저장 정규화에서 0으로 처리한다.
 - 나이·감면·지역·기존 단일 기부금 필드는 저장 계약에서 제거한다. 요청의 분석번호·소유자는 기존 서버 결정 규칙을 유지한다.
-- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다. 기존 DB 변경 방법은 `docs/tax-input-migration.md`를 따른다.
+- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다.
 # 결과 JSON 보관 (TJK-202)
 
 - `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.
