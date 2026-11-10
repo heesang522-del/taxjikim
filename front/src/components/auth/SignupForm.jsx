@@ -20,20 +20,6 @@ const CODE_TTL = 300;
 const VERIFIED_TTL = 600;
 const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
-function getBirthDateError(digits) {
-  if (!digits) return '';
-  if (digits.length !== 8) return '생년월일을 숫자 8자리로 입력해주세요. 예: 19980521';
-  const year = Number(digits.slice(0, 4));
-  const month = Number(digits.slice(4, 6));
-  const day = Number(digits.slice(6, 8));
-  // 윤년과 월별 일수를 확인해 2월 30일처럼 존재하지 않는 날짜는 보내지 않는다.
-  const leapYear = year % 400 === 0 || (year % 4 === 0 && year % 100 !== 0);
-  const days = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-  return year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]
-    ? '올바른 생년월일을 입력해주세요.'
-    : '';
-}
-
 function getFieldError(key, values) {
   if (key === 'loginId' && !/^[a-z0-9_]{4,20}$/i.test(values.loginId.trim()))
     return '아이디는 영문·숫자·_ 4~20자로 입력하세요.';
@@ -42,7 +28,6 @@ function getFieldError(key, values) {
     return '비밀번호가 일치하지 않습니다.';
   if (key === 'name' && !values.name.trim()) return '이름을 입력해주세요.';
   if (key === 'email' && !EMAIL_RE.test(values.email.trim())) return '이메일 형식을 확인하세요.';
-  if (key === 'birthDate') return getBirthDateError(values.birthDate);
   if (key === 'nickname' && !values.nickname.trim()) return '닉네임을 입력해주세요.';
   return '';
 }
@@ -56,7 +41,6 @@ export function SignupForm({ onDone }) {
     name: '',
     nickname: '',
     loginId: '',
-    birthDate: '',
     password: '',
     passwordConfirm: '',
     email: '',
@@ -90,8 +74,7 @@ export function SignupForm({ onDone }) {
 
   function handleChange(key) {
     return (event) => {
-      // 생년월일은 숫자만 보관하고 점은 화면에서만 자동으로 표시한다.
-      const value = key === 'birthDate' ? event.target.value.replace(/\D/g, '').slice(0, 8) : event.target.value;
+      const value = event.target.value;
       const nextForm = { ...form, [key]: value };
       if (key === 'email') nextForm.code = '';
       setForm(nextForm);
@@ -268,11 +251,11 @@ export function SignupForm({ onDone }) {
       if (verified) void handleNextStep();
       else void handleSendCode();
     } else if (key === 'code') void handleVerifyCode();
-    else if (key === 'birthDate') formRef.current?.requestSubmit();
     else if (key === 'nickname') {
+      // 마지막 입력인 닉네임 확인 후 가입 버튼으로 이동해 사용자가 최종 제출한다.
       if (checks.nickname?.value === form.nickname.trim() && !checks.nickname.duplicate)
-        formRef.current?.querySelector('#su-birthDate')?.focus();
-      else void handleDuplicateCheck('nickname', 'su-birthDate');
+        formRef.current?.querySelector('#su-submit')?.focus();
+      else void handleDuplicateCheck('nickname', 'su-submit');
     } else {
       const next = { password: 'passwordConfirm', passwordConfirm: 'name', name: 'email' }[key];
       if (next) formRef.current?.querySelector(`#su-${next}`)?.focus();
@@ -287,22 +270,12 @@ export function SignupForm({ onDone }) {
       return;
     }
     if (!validateMemberInfo()) return;
-    const birthDateError = getBirthDateError(form.birthDate);
-    if (birthDateError) {
-      setFieldErrors((previous) => ({ ...previous, birthDate: birthDateError }));
-      formRef.current?.querySelector('#su-birthDate')?.focus();
-      return;
-    }
     const user = {
       loginId: form.loginId.trim(),
       password: form.password,
       name: form.name.trim(),
       nickname: form.nickname.trim(),
       email: form.email.trim(),
-      // API에는 기존 날짜 계약인 YYYY-MM-DD를 유지하며 선택하지 않으면 null을 보낸다.
-      birthDate: form.birthDate
-        ? `${form.birthDate.slice(0, 4)}-${form.birthDate.slice(4, 6)}-${form.birthDate.slice(6, 8)}`
-        : null,
     };
     const nicknameError = getFieldError('nickname', form);
     if (nicknameError) {
@@ -337,8 +310,6 @@ export function SignupForm({ onDone }) {
         if (cause.code === 'EMAIL_NOT_VERIFIED') setVerifiedUntil(null);
         focusTarget.current = `su-${memberField ?? 'email'}`;
         setStep(1);
-      } else if (cause.fields?.birthDate) {
-        focusTarget.current = 'su-birthDate';
       }
       setError(cause.message);
       setFieldErrors((previous) => ({ ...previous, ...cause.fields }));
@@ -490,22 +461,6 @@ export function SignupForm({ onDone }) {
               <Button onClick={() => handleDuplicateCheck('nickname')}>중복 확인</Button>
             </InputActionRow>
             {checks.nickname && !checks.nickname.duplicate && <p className="small">사용 가능한 닉네임입니다.</p>}
-            <TextField
-              id="su-birthDate"
-              name="birthDate"
-              error={fieldErrors.birthDate}
-              label="생년월일 (선택 · 8자리)"
-              type="text"
-              inputMode="numeric"
-              autoComplete="bday"
-              placeholder="예: 19980521"
-              maxLength={10}
-              value={form.birthDate.replace(/^(\d{4})(\d)/, '$1.$2').replace(/^(\d{4}\.\d{2})(\d)/, '$1.$2')}
-              onChange={handleChange('birthDate')}
-              onBlur={() =>
-                setFieldErrors((previous) => ({ ...previous, birthDate: getBirthDateError(form.birthDate) }))
-              }
-            />
           </>
         )}
         {error && (
@@ -520,7 +475,7 @@ export function SignupForm({ onDone }) {
         ) : (
           <div className="row">
             <Button onClick={handlePreviousStep}>이전</Button>
-            <Button type="submit" variant="primary" size="lg">
+            <Button id="su-submit" type="submit" variant="primary" size="lg">
               {pending === 'signup' ? '가입 중...' : '가입 완료'}
             </Button>
           </div>
