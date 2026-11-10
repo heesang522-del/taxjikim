@@ -144,7 +144,8 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
       else await createPost(formData);
 
       toast(postId ? '게시글이 수정되었습니다.' : '게시글이 성공적으로 등록되었습니다.');
-      navigate(ROUTES.postList); // 등록 후 실제 게시판 목록을 다시 조회한다.
+      // 수정은 고친 결과를 바로 확인할 수 있도록 그 글 상세로, 새 글 등록은 방금 올라간 목록으로 이동한다.
+      navigate(postId ? ROUTES.postDetail(postId) : ROUTES.postList);
     } catch (error) {
       console.error('게시글 등록 실패:', error);
       toast(error.message || '게시글 등록 중 오류가 발생했습니다.');

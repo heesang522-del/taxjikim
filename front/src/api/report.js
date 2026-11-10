@@ -1,7 +1,7 @@
 import { client } from './client.js';
 
 // 게시글 신고 API의 공통 주소다.
-const POST_API_BASE = '/api/v1/posts/community';
+const POST_API_BASE = '/api/v1/posts';
 const ADMIN_REPORT_API_BASE = '/api/v1/admin/reports';
 
 // 관리자 신고 목록을 AdminReportsPage가 쓰는 필드로 변환한다.

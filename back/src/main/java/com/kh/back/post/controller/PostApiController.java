@@ -11,6 +11,7 @@ import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.service.PostService;
 
+
 import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.HttpStatus;
@@ -25,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/posts/community")
+@RequestMapping("/api/v1/posts")
 @RequiredArgsConstructor
 public class PostApiController {
 
@@ -51,6 +52,7 @@ public class PostApiController {
     @GetMapping("/{postId}")
     public ApiResponse<PostDto> getPost(@PathVariable Long postId) {
 
+        // 비로그인 조회는 조회수를 올리지 않는다(PostServiceImpl.findById 참고).
         return ApiResponse.ok(postService.findById(postId));
     } // url 의 {postId} 부분을 변수로 받음 , 서비스에 해당 번호의 게시글 조회를 요청
     // 조회한 게시글을 공통 성공 응답 형식으로 감싸 반환
