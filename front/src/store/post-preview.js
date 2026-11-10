@@ -44,7 +44,7 @@ export async function uploadFileChunks(file) {
     formData.append('originalName', file.name);
 
     // 변경
-    const response = await fetch('/api/v1/posts/community/upload-chunk', {
+    const response = await fetch('/api/v1/posts/upload-chunk', {
       method: 'POST',
       // 같은 출처 요청의 인증 쿠키만 사용하며 토큰을 JavaScript에 보관하지 않는다.
       credentials: 'same-origin',

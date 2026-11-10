@@ -11,6 +11,15 @@ import { getPostsPage } from '../api/post';
 
 const CATEGORY_TONE = { 공지: 'danger', '정보 공유': 'primary', 팁: 'neutral' };
 const PINNED_NOTICE_COUNT = 3; // "전체" 탭 상단에 고정 노출할 최신 공지 개수
+const PAGE_WINDOW_SIZE = 9; // 페이지 번호 버튼은 한 번에 최대 이만큼만 보여준다
+
+// 전체 페이지가 많아져도 버튼이 끝없이 늘어나지 않도록, 현재 페이지를 중심으로 최대 size개만 잘라 보여준다.
+// 양 끝(1페이지 근처·마지막 페이지 근처)에서는 윈도우를 안쪽으로 당겨 가능한 한 size개를 채운다.
+function getPageWindow(current, total, size) {
+  if (total <= size) return Array.from({ length: total }, (_, i) => i + 1);
+  const start = Math.min(Math.max(1, current - Math.floor(size / 2)), total - size + 1);
+  return Array.from({ length: size }, (_, i) => start + i);
+}
 
 export default function PostListPage() {
   const [params, setParams] = useSearchParams();
@@ -106,14 +115,16 @@ export default function PostListPage() {
     { key: 'v', header: '조회', width: '90px', align: 'right', num: true, render: (p) => p.views.toLocaleString('ko-KR') },
   ];
   const writeTab = tab === '전체' || (tab === '공지' && !isAdmin) ? POST_WRITE_TABS[0] : tab;
-  const pageNumbers = Array.from({ length: totalPages }, (_, i) => i + 1);
+  const pageNumbers = getPageWindow(page, totalPages, PAGE_WINDOW_SIZE);
   // 1페이지에서만 고정 공지를 맨 위에 끼워 넣는다. 별도 영역으로 나누지 않고 한 목록처럼 보이게 한다.
   // 2페이지부터는 공지 없이 일반 목록 그대로다.
   const displayRows = showPinned && page === 1 ? [...pinnedNotices, ...posts] : posts;
 
   return (
     <Card>
-      <div className="row between" style={{ marginBottom: 16 }}>
+      {/* .between은 align-items: center라서, 탭 밑줄(12px 패딩+보더)만큼 더 큰 Tabs와 입력창·버튼이
+          세로 중앙으로 맞춰져 검색창 쪽이 한 칸 내려와 보였다. 상단 기준으로 나란히 맞춘다. */}
+      <div className="row between" style={{ marginBottom: 16, alignItems: 'flex-start' }}>
         <Tabs tabs={POST_TABS.map((t) => ({ id: t, label: t }))} active={tab} onChange={setTab} />
         <div className="row" style={{ gap: 8 }}>
           <input
@@ -125,7 +136,8 @@ export default function PostListPage() {
             onChange={(e) => setQueryInput(e.target.value)}
             aria-label="검색어"
           />
-          <Button variant="soft" size="sm" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
+          {/* size="sm"(패딩 6px)이면 검색창(.in, 패딩 10px)보다 눈에 띄게 작아 보여 기본 크기(md, 패딩 10px)로 맞췄다. */}
+          <Button variant="soft" to={`${ROUTES.postWrite}?tab=${encodeURIComponent(writeTab)}`}>글쓰기</Button>
         </div>
       </div>
       {loading ? <p className="state-msg" role="status">게시글을 불러오는 중입니다.</p>
@@ -134,13 +146,13 @@ export default function PostListPage() {
         ? (
           <>
             <DataTable columns={columns} rows={displayRows} rowKey={(p) => p.id} onRowClick={(p) => navigate(ROUTES.postDetail(p.id), { state: { fromList: true } })} />
-            {pageNumbers.length > 1 && (
+            {totalPages > 1 && (
               <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
                 <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>이전</Button>
                 {pageNumbers.map((n) => (
                   <Button key={n} size="sm" variant={n === page ? 'primary' : 'ghost'} onClick={() => setPage(n)}>{n}</Button>
                 ))}
-                <Button size="sm" variant="ghost" disabled={page >= pageNumbers.length} onClick={() => setPage((p) => p + 1)}>다음</Button>
+                <Button size="sm" variant="ghost" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>다음</Button>
               </div>
             )}
           </>
