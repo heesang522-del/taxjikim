@@ -1,7 +1,7 @@
 {
-  "created_at": "2026-10-28T10:12:39.999954+09:00",
+  "created_at": "2026-11-10T10:12:25.735113+09:00",
   "sklearn_version": "1.9.1",
-  "train_count": 527,
+  "train_count": 528,
   "model_input": [
     "description"
   ],
@@ -16,12 +16,12 @@
     "TELECOMMUNICATION",
     "TRANSPORT"
   ],
-  "source_sha256": "00301ed7f7ffcc79b496cb29974b468d54b39f8730b5df5862ebdb1b103c2020",
+  "source_sha256": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
   "source_file": "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv",
   "input_sha256": {
-    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv": "00301ed7f7ffcc79b496cb29974b468d54b39f8730b5df5862ebdb1b103c2020"
+    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3"
   },
-  "base_count": 527,
+  "base_count": 528,
   "additional_count": 0,
   "duplicate_count": 0,
   "dataset_review_status": [
@@ -29,6 +29,6 @@
   ],
   "training_mode": "all_labeled_rows",
   "evaluation": "not_evaluated_use_separate_manual_inputs",
-  "selection_rule": "explicit_selection_not_test_score",
-  "selected_model": "logistic_regression"
+  "selection_rule": "fixed_linear_svc",
+  "selected_model": "linear_svc"
 }
