@@ -4,9 +4,9 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Modal, Pill } from '../components/common/index';
-import NoticeCard from '../components/community/NoticeCard';
-import CommentSection from '../components/community/CommentSection';
-import ReportModal from '../components/community/ReportModal';
+import NoticeCard from '../components/post/NoticeCard';
+import CommentSection from '../components/post/CommentSection';
+import ReportModal from '../components/post/ReportModal';
 import { DELETED_POST } from '../data/options';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';

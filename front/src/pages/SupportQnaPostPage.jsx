@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Button, Card, Pill } from '../components/common/index';
-import NoticeCard from '../components/community/NoticeCard';
+import NoticeCard from '../components/post/NoticeCard';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
 import { useInquiry } from '../store/useInquiryStore';

@@ -4,8 +4,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '../components/common/index';
-import PostForm from '../components/community/PostForm';
-import NoticeCard from '../components/community/NoticeCard';
+import PostForm from '../components/post/PostForm';
+import NoticeCard from '../components/post/NoticeCard';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
 import { usePost } from '../store/usePostStore';

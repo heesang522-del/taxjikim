@@ -70,7 +70,7 @@
 
 - `front/src/pages/CalculatorInputPage.jsx`: 입력 폼·목록·요약 컴포넌트를 조합하는 페이지 구조.
 - `front/src/components/common/Modal.jsx`: 공통 모달의 틀.
-- `front/src/components/community/ReportModal.jsx`: 공통 모달에 신고 입력 기능을 구성.
+- `../front/src/components/post/ReportModal.jsx`: 공통 모달에 신고 입력 기능을 구성.
 - `front/src/pages/MyPage.jsx`: 페이지 안의 카드·차트 구현을 별도 컴포넌트로 분리할지 검토할 후보. 확정된 오류는 아니다.
 
 ### 화면 영역 분리와 그리드 배치
