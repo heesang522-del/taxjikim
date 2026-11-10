@@ -1,6 +1,7 @@
 import { client } from './client';
 
 const GUEST_ACCESS_TOKEN_HEADER = 'X-Guest-Access-Token';
+const TAX_SAVE_RECEIPT_HEADER = 'X-Tax-Save-Receipt';
 
 // 같은 화면에서 이어지는 요청에 사용할 비회원 토큰을 분석번호별로 보관한다.
 const guestAccessTokens = new Map();
@@ -72,7 +73,6 @@ async function request(config) {
     }
 
     const detail = cause?.response?.data?.error;
-
     const error = new Error(detail?.message ?? cause?.message ?? '서버 요청에 실패했습니다.');
 
     error.code = detail?.code ?? cause?.code;
@@ -131,7 +131,7 @@ function normalizeTaxInput(input) {
     throw new Error('분석 기본정보가 필요합니다.');
   }
 
-  // 제거한 필드는 요청에 다시 섞이지 않도록 저장 가능한 기본정보만 전달한다.
+  // 저장 가능한 기본정보만 전달한다.
   return {
     taxYear: validateYear(input.taxYear),
     businessRegistered: input.businessRegistered ?? null,
@@ -177,7 +177,6 @@ function validateTransactionDate(value) {
   return date;
 }
 
-// 저장 응답의 거래를 원래 화면 거래와 연결한다.
 // 동일한 내용의 거래는 별도 배열에 담아 순서대로 연결한다.
 function transactionKey(row) {
   return JSON.stringify([
@@ -222,11 +221,16 @@ export async function getTaxResult(taxInputId) {
   });
 }
 
-// 기본정보 생성과 거래 최초 저장을 하나의 API로 전달한다.
-// input만 전달하면 기본정보를 생성한다.
-// taxInputId와 transactions를 전달하면 기존 분석에 거래를 최초 저장한다.
-// input과 transactions를 전달하면 기본정보와 거래를 한 요청으로 저장한다.
-export async function saveTaxData({ input, taxInputId, transactions, expectedTransactionCount } = {}) {
+// input만 보내면 새 분석을 생성한다.
+// taxInputId와 transactions를 보내면 기존 분석에 거래를 저장한다.
+// input과 transactions를 보내면 새 분석과 거래를 함께 저장한다.
+export async function saveTaxData({
+                                    input,
+                                    taxInputId,
+                                    transactions,
+                                    expectedTransactionCount,
+                                    receipt,
+                                  } = {}) {
   const data = {};
 
   if (taxInputId == null) {
@@ -249,34 +253,58 @@ export async function saveTaxData({ input, taxInputId, transactions, expectedTra
     }
 
     data.transactions = transactions;
+
     if (expectedTransactionCount !== undefined) {
       data.expectedTransactionCount = expectedTransactionCount;
     }
   }
 
+  const headers = { ...guestAccessHeaders(taxInputId) };
+
+  if (receipt) {
+    headers[TAX_SAVE_RECEIPT_HEADER] = receipt;
+  }
+
   const result = await request({
     url: '/tax/save',
     method: 'POST',
-    headers: guestAccessHeaders(taxInputId),
+    headers,
     data,
   });
 
-  const savedTaxInputId = result?.data?.input?.taxInputId;
+  rememberGuestAccessToken(result);
+  return result;
+}
+
+function rememberGuestAccessToken(result) {
+  const taxInputId = result?.data?.input?.taxInputId;
   const token = result?.data?.guestAccessToken;
 
-  // 기본정보 저장 다음에 바로 거래를 저장하므로 응답을 반환하기 전에 토큰을 보관한다.
-  if (taxInputId == null && savedTaxInputId != null && typeof token === 'string' && token) {
-    guestAccessTokens.set(String(savedTaxInputId), token);
+  if (taxInputId != null && typeof token === 'string' && token) {
+    guestAccessTokens.set(String(taxInputId), token);
   }
+}
 
-  return result;
+function createSaveReceipt() {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// 저장 성공 기록을 조회하고, 새 비회원 분석의 토큰이 있으면 보관한다.
+export async function getTaxSaveResult(receipt) {
+  const result = await request({
+    url: '/tax/save-status',
+    method: 'GET',
+    headers: { [TAX_SAVE_RECEIPT_HEADER]: receipt },
+  });
+
+  rememberGuestAccessToken(result);
+  return result?.data ?? null;
 }
 
 // 기존 화면에서 사용하는 생성 함수 이름과 응답 형식을 유지한다.
 export async function createTaxInput(input) {
-  const result = await saveTaxData({
-    input,
-  });
+  const result = await saveTaxData({ input });
 
   return {
     ...result,
@@ -285,7 +313,6 @@ export async function createTaxInput(input) {
 }
 
 // 기존 화면에서 사용하는 거래 저장 함수 이름과 응답 형식을 유지한다.
-// 기존 거래의 수정 반영에서는 호출하지 않는다.
 export async function saveTransactions(taxInputId, rows, expectedTransactionCount) {
   if (!Array.isArray(rows)) {
     throw new Error('저장할 거래 목록이 필요합니다.');
@@ -304,10 +331,8 @@ export async function saveTransactions(taxInputId, rows, expectedTransactionCoun
 }
 
 // 기본정보와 카테고리를 하나의 수정 API로 전달한다.
-// input에는 수정 후 기본정보 전체를 전달한다.
 export async function updateTaxData(taxInputId, { input, changes } = {}) {
   const url = `${inputPath(taxInputId)}/update`;
-
   const hasInput = input != null;
   const hasCategoryChange = Array.isArray(changes) && changes.length > 0;
 
@@ -336,11 +361,8 @@ export async function updateTaxData(taxInputId, { input, changes } = {}) {
   });
 }
 
-// 기존 화면의 기본정보 수정 호출을 통합 API로 연결한다.
 export async function updateTaxInput(taxInputId, input) {
-  return updateTaxData(taxInputId, {
-    input,
-  });
+  return updateTaxData(taxInputId, { input });
 }
 
 // 분석 전체 삭제와 거래 한 건 삭제를 하나의 API로 전달한다.
@@ -357,7 +379,6 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
 
   const data = {};
 
-  // 전체 삭제를 명시하지 않았다면 거래번호가 반드시 필요하다.
   if (!deleteAll) {
     data.transactionId = transactionId;
   }
@@ -366,9 +387,7 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
     url,
     method: 'POST',
     headers: guestAccessHeaders(taxInputId),
-    params: {
-      deleteAll,
-    },
+    params: { deleteAll },
     data,
   });
 
@@ -380,21 +399,14 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
   return result;
 }
 
-// 기존 화면의 분석 전체 삭제 호출을 통합 API로 연결한다.
 export async function deleteTaxInput(taxInputId) {
-  return deleteTaxData(taxInputId, {
-    deleteAll: true,
-  });
+  return deleteTaxData(taxInputId, { deleteAll: true });
 }
 
-// 기존 화면의 거래 삭제 호출을 통합 API로 연결한다.
 export async function deleteTransaction(taxInputId, transactionId) {
-  return deleteTaxData(taxInputId, {
-    transactionId,
-  });
+  return deleteTaxData(taxInputId, { transactionId });
 }
 
-// PDF 분석만 요청한다.
 // 분석한 거래의 최초 저장은 별도 저장 API에서 수행한다.
 export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   if (!file) {
@@ -402,7 +414,6 @@ export async function parsePdf(file, { signal, taxInputId = null } = {}) {
   }
 
   const formData = new FormData();
-
   formData.append('file', file);
 
   if (taxInputId !== null) {
@@ -470,12 +481,13 @@ export async function uploadTaxPdfApi(file, options = {}) {
   };
 }
 
-// 저장 식별자를 제외한 입력 상태를 비교한다.
-// 식별자가 연결되었다는 이유만으로 입력 변경으로 판단하지 않는다.
+// 저장 식별자 연결로 입력 변경이 발생했다고 판단하지 않도록 식별자를 제외한다.
 export function getTaxReviewSignature(state) {
   function inputOnly(row) {
     return Object.fromEntries(
-      Object.entries(row).filter(([key]) => key !== 'transactionId' && key !== 'taxInputId' && key !== 'persisted')
+      Object.entries(row).filter(
+        ([key]) => key !== 'transactionId' && key !== 'taxInputId' && key !== 'persisted'
+      )
     );
   }
 
@@ -492,7 +504,6 @@ export function getTaxReviewSignature(state) {
 }
 
 // 변경 전후 거래를 비교하여 수정 또는 삭제된 거래만 처리한다.
-// 수정 요청에는 카테고리만 담고 전체 거래를 재저장하지 않는다.
 export async function saveTaxReview(proposed, { originalState, onOperationSuccess } = {}) {
   if (!originalState || !proposed) {
     throw new Error('변경 전후 거래 목록이 필요합니다.');
@@ -533,7 +544,6 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
 
   const before = collect(originalState);
   const after = collect(proposed);
-
   const operations = [];
   const serverTargets = new Set();
 
@@ -581,7 +591,6 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
         throw new Error('현재 편집창에서는 카테고리 수정과 거래 삭제만 지원합니다.');
       }
 
-      // 변경하지 않은 거래는 요청 대상에서 제외한다.
       if (next.category === previous.category) {
         continue;
       }
@@ -590,14 +599,11 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
     }
 
     const transactionId = previous.row.transactionId ?? null;
-
     const taxInputId = previous.row.taxInputId ?? null;
-
     const persisted = transactionId !== null;
 
-    // 미저장 거래는 기존 DB 행을 수정할 수 없다.
     if (!persisted && !removing) {
-      throw new Error('아직 DB에 저장되지 않은 거래입니다. ' + '거래 저장 후 다시 수정해주세요.');
+      throw new Error('아직 DB에 저장되지 않은 거래입니다. 거래 저장 후 다시 수정해주세요.');
     }
 
     if (persisted) {
@@ -624,6 +630,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
 
   // 저장된 삭제 대상은 분석번호별로 묶어 한 번에 전송한다.
   const deletionsByInput = new Map();
+
   for (const operation of operations) {
     if (operation.persisted && operation.type === 'delete') {
       const group = deletionsByInput.get(operation.taxInputId) ?? [];
@@ -633,6 +640,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
   }
 
   const updatesByInput = new Map();
+
   for (const operation of operations) {
     if (operation.persisted && operation.type === 'update') {
       const group = updatesByInput.get(operation.taxInputId) ?? [];
@@ -656,11 +664,14 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
             headers: guestAccessHeaders(operation.taxInputId),
             data: { transactionIds: group.map((item) => item.transactionId) },
           });
+
           deletionsByInput.delete(operation.taxInputId);
           completedOperations.push(...group);
+
           for (const item of group) {
             await onOperationSuccess?.(item);
           }
+
           continue;
         } else {
           const group = updatesByInput.get(operation.taxInputId);
@@ -669,21 +680,22 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
           await updateTaxData(operation.taxInputId, { changes: group });
           updatesByInput.delete(operation.taxInputId);
           completedOperations.push(...group);
-          for (const item of group) await onOperationSuccess?.(item);
+
+          for (const item of group) {
+            await onOperationSuccess?.(item);
+          }
+
           continue;
         }
       }
 
-      // 서버 성공 이후 해당 작업만 화면에 확정 반영한다.
-      // 미저장 거래 삭제는 화면에서만 처리한다.
+      // 미저장 거래 삭제는 화면에만 반영한다.
       completedOperations.push(operation);
-
       await onOperationSuccess?.(operation);
     }
   } catch (error) {
     // 일부 성공 후 실패한 경우 성공한 작업을 호출부에 전달한다.
     error.completedOperations = completedOperations;
-
     throw error;
   }
 
@@ -695,10 +707,70 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
   };
 }
 
-// 신규 정상 거래를 저장하고 DB 거래번호를 화면에 연결한다.
-// 기존 거래의 수정 반영에서는 호출하지 않는다.
-export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved } = {}) {
-  if (typeof onInputCreated !== 'function' || typeof onGroupSaved !== 'function') {
+// 정상 응답과 조회로 확인한 응답에 같은 거래 연결 규칙을 적용한다.
+export function bindSavedTaxGroup(taxYear, taxInputId, entries, savedRows, previousRows = []) {
+  if (!Number.isSafeInteger(taxInputId) || taxInputId <= 0) {
+    throw new Error('저장 결과의 분석번호가 올바르지 않습니다.');
+  }
+
+  if (!Array.isArray(savedRows) || savedRows.length !== entries.length) {
+    throw new Error('저장 결과의 거래 건수가 다릅니다.');
+  }
+
+  const buckets = new Map();
+  const seenIds = new Set();
+
+  for (const row of savedRows) {
+    if (
+      row.taxInputId !== taxInputId ||
+      !Number.isSafeInteger(row.transactionId) ||
+      row.transactionId <= 0 ||
+      seenIds.has(row.transactionId)
+    ) {
+      throw new Error('저장 결과의 식별자가 올바르지 않습니다.');
+    }
+
+    seenIds.add(row.transactionId);
+    const key = transactionKey(row);
+
+    if (!buckets.has(key)) {
+      buckets.set(key, []);
+    }
+
+    buckets.get(key).push(row);
+  }
+
+  // 저장 응답의 DB 거래번호를 원래 화면 행에 연결한다.
+  const bindings = entries.map((entry) => {
+    const saved = buckets.get(transactionKey(entry.payload))?.shift();
+
+    if (!saved) {
+      throw new Error('저장 결과를 화면 거래와 연결하지 못했습니다.');
+    }
+
+    return {
+      source: entry.source,
+      rowId: entry.rowId,
+      saved,
+    };
+  });
+
+  return {
+    taxYear,
+    taxInputId,
+    rows: [...previousRows, ...savedRows],
+    bindings,
+  };
+}
+
+// 신규 정상 거래를 귀속연도별로 저장하고 DB 거래번호를 화면에 연결한다.
+export async function saveInitialTaxRows(
+  state,
+  { onInputCreated, onGroupSaved, onPdfSaveRequest } = {}
+) {
+  const trackPdfSave = typeof onPdfSaveRequest === 'function';
+
+  if (typeof onGroupSaved !== 'function' || (!trackPdfSave && typeof onInputCreated !== 'function')) {
     throw new Error('저장 결과를 반영할 함수가 필요합니다.');
   }
 
@@ -713,10 +785,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
 
       const date = validateTransactionDate(row.date);
       const year = validateYear(date.slice(0, 4));
-
-      const kind = String(row.kind ?? '')
-        .trim()
-        .toUpperCase();
+      const kind = String(row.kind ?? '').trim().toUpperCase();
 
       const transactionType = ['IN', 'INCOME', '수입'].includes(kind)
         ? 'INCOME'
@@ -771,9 +840,7 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
   collect(state.fileRows, 'file');
 
   if (groups.size === 0) {
-    return {
-      savedCount: 0,
-    };
+    return { savedCount: 0 };
   }
 
   const profile = normalizeTaxInput({
@@ -784,83 +851,50 @@ export async function saveInitialTaxRows(state, { onInputCreated, onGroupSaved }
   let savedCount = 0;
 
   for (const [year, entries] of groups) {
-    // 첫 저장에서 발급한 분석번호를 같은 화면의 같은 연도에 재사용한다.
+    // 같은 화면에서 같은 연도에 이미 만든 분석번호를 재사용한다.
     let taxInputId = state.taxInputIdsByYear?.[year] ?? state.taxPendingInputIdsByYear?.[year] ?? null;
+
     const previousRows =
       (state.taxSavedSnapshots ?? []).find((snapshot) => snapshot.taxInputId === taxInputId)?.rows ?? [];
 
-    if (taxInputId == null) {
-      const response = await createTaxInput({
-        ...profile,
-        taxYear: year,
-        saveStatus: 'TEMP',
-      });
+    const transactions = entries.map(({ payload }) => payload);
+    let savedRows;
 
-      taxInputId = response?.data?.taxInputId;
+    if (trackPdfSave) {
+      const receipt = createSaveReceipt();
 
-      await onInputCreated({
-        taxYear: year,
+      // 요청을 보내기 전에 확인 키와 이 요청에 포함된 화면 거래를 보관한다.
+      onPdfSaveRequest({ receipt, taxYear: year, entries });
+
+      const response = await saveTaxData({
+        input: taxInputId == null ? { ...profile, taxYear: year, saveStatus: 'TEMP' } : undefined,
         taxInputId,
+        transactions,
+        expectedTransactionCount: previousRows.length,
+        receipt,
       });
-    }
 
-    const response = await saveTransactions(
-      taxInputId,
-      entries.map(({ payload }) => payload),
-      previousRows.length
-    );
+      taxInputId = response?.data?.input?.taxInputId;
+      savedRows = response?.data?.transactions;
+    } else {
+      if (taxInputId == null) {
+        const response = await createTaxInput({
+          ...profile,
+          taxYear: year,
+          saveStatus: 'TEMP',
+        });
 
-    const savedRows = response?.data;
-
-    if (!Array.isArray(savedRows) || savedRows.length !== entries.length) {
-      throw new Error('저장 결과의 거래 건수가 다릅니다.');
-    }
-
-    const buckets = new Map();
-    const seenIds = new Set();
-
-    for (const row of savedRows) {
-      if (row.taxInputId !== taxInputId || seenIds.has(row.transactionId)) {
-        throw new Error('저장 결과의 식별자가 올바르지 않습니다.');
+        taxInputId = response?.data?.taxInputId;
+        await onInputCreated({ taxYear: year, taxInputId });
       }
 
-      seenIds.add(row.transactionId);
-
-      const key = transactionKey(row);
-
-      if (!buckets.has(key)) {
-        buckets.set(key, []);
-      }
-
-      buckets.get(key).push(row);
+      const response = await saveTransactions(taxInputId, transactions, previousRows.length);
+      savedRows = response?.data;
     }
 
-    // 저장 응답의 DB 거래번호를 원래 화면 행에 연결한다.
-    const bindings = entries.map((entry) => {
-      const saved = buckets.get(transactionKey(entry.payload))?.shift();
-
-      if (!saved) {
-        throw new Error('저장 결과를 화면 거래와 연결하지 못했습니다.');
-      }
-
-      return {
-        source: entry.source,
-        rowId: entry.rowId,
-        saved,
-      };
-    });
-
-    await onGroupSaved({
-      taxYear: year,
-      taxInputId,
-      rows: [...previousRows, ...savedRows],
-      bindings,
-    });
-
+    await onGroupSaved(bindSavedTaxGroup(year, taxInputId, entries, savedRows, previousRows));
     savedCount += savedRows.length;
   }
 
-  return {
-    savedCount,
-  };
+  return { savedCount };
 }

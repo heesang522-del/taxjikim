@@ -17,6 +17,15 @@ public interface YearEndTaxService {
             TaxServiceRequest request
     );
 
+    TaxServiceResponse saveWithReceipt(
+            CustomUserDetails principal,
+            String guestAccessToken,
+            String receipt,
+            TaxServiceRequest request
+    );
+
+    TaxServiceResponse findSaveResult(CustomUserDetails principal, String receipt);
+
     TaxInputRequest update(
             CustomUserDetails principal,
             String guestAccessToken,

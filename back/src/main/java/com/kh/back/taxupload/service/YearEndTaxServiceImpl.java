@@ -6,6 +6,7 @@ import com.kh.back.common.security.JwtTokenProvider;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
+import com.kh.back.taxupload.dto.TaxServiceResponse.SaveReceipt;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
@@ -15,19 +16,28 @@ import com.kh.back.taxupload.validator.TaxValidator;
 import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +50,11 @@ import java.util.Set;
 public class YearEndTaxServiceImpl implements YearEndTaxService {
 
     private static final Duration GUEST_TAX_TOKEN_LIFETIME = Duration.ofHours(24);
+    private static final String SAVE_RECEIPT_PREFIX = "tax:save-receipt:";
+    private static final String SAVE_RECEIPT_PENDING = "PENDING";
 
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
     private final TaxValidator taxValidator;
     private final TaxMapper taxMapper;
     private final PythonPdfClient pythonPdfClient;
@@ -56,12 +70,12 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             String guestAccessToken,
             TaxServiceRequest request
     ) {
-        taxValidator.validateRequestPresent(request, "저장 요청이 필요합니다."); // request가 null 이면 저장요청이 필요합니다. 라는 메세지와 함께 400 bad request 오류 발생시킴
+        taxValidator.validateRequestPresent(request, "저장 요청이 필요합니다.");
 
-        AccessContext access = createAccess(principal, guestAccessToken); // 로그인 사용자 정보 principal와 비회원 토큰 guestAccessToken 으로 접근정보를 만듬 , access에는 회원번호 관리자 여부 비회원 토큰에서 검증된 분석번호가담김, 이후 기존 분석에 접근할수 있는지 판단할떄 사용
-        Long taxInputId = request.getTaxInputId(); // 요청에 담긴 분석번호를 가져옴 taxinputid가 42라면 42번 분석을 대상으로 저장한다는뜻
-        List<TaxTransactionDto> rows = request.getTransactions(); // 요청에 담긴 거래 목록을 가져옴 , 거래 목록을  보내지 않았다면 rows는 null 일수 있음.
-        boolean createAnalysis = taxInputId == null; // 분석번호가 없으면 true가 되어 새 분석을 생성, 분석번호가 있으면 false가 되어 기존 분석의 접근 권한을 확인한뒤 그 분석에 거래를 저장
+        AccessContext access = createAccess(principal, guestAccessToken);
+        Long taxInputId = request.getTaxInputId();
+        List<TaxTransactionDto> rows = request.getTransactions();
+        boolean createAnalysis = taxInputId == null;
 
         if (!createAnalysis) {
             taxValidator.validateExistingAnalysisSave(request.getInput(), rows);
@@ -74,7 +88,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             input = normalizeInput(request.getInput(), null, access.getUserId());
             taxValidator.validateInput(input);
 
-            // 공개 저장에서는 새 분석을 임시 상태로 생성한다.
             input.setSaveStatus("TEMP");
             taxMapper.insertInput(input);
             taxInputId = input.getTaxInputId();
@@ -107,7 +120,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Integer expectedCount = request.getExpectedTransactionCount();
 
             if (expectedCount != null) {
-                // 화면이 알고 있는 저장 건수와 비교해 추가 저장과 재시도를 구분한다.
+                // 화면이 알고 있는 저장 건수와 비교해 추가 저장과 재요청을 구분한다.
                 taxValidator.validateNewTransactionIds(rows);
 
                 if (expectedCount < 0 || expectedCount > existing.size()) {
@@ -131,10 +144,9 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                     savedRows = stored.subList(expectedCount, stored.size());
                 }
             } else if (sameTransactions(existing, requested)) {
-                // 최초 저장 요청을 재시도하면 이미 저장된 거래를 돌려준다.
                 savedRows = existing;
             } else {
-                // 최초 저장 요청으로 기존 거래 전체를 교체하지 않는다.
+                // 기존 거래 전체 교체는 별도 수정·삭제 API에서 처리한다.
                 if (!existing.isEmpty()) {
                     throw new ApiException(
                             HttpStatus.CONFLICT,
@@ -165,6 +177,153 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 .transactions(savedRows)
                 .guestAccessToken(issuedGuestAccessToken)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public TaxServiceResponse saveWithReceipt(
+            CustomUserDetails principal,
+            String guestAccessToken,
+            String receipt,
+            TaxServiceRequest request
+    ) {
+        if (receipt == null) {
+            return save(principal, guestAccessToken, request);
+        }
+
+        taxValidator.validateSaveReceipt(receipt);
+
+        String redisKey = saveReceiptKey(receipt);
+        Instant expiresAt = Instant.now().plus(GUEST_TAX_TOKEN_LIFETIME);
+        Boolean reserved;
+
+        try {
+            // 같은 확인 키의 첫 요청만 DB 저장을 진행한다.
+            reserved = redisTemplate.opsForValue().setIfAbsent(
+                    redisKey,
+                    SAVE_RECEIPT_PENDING,
+                    GUEST_TAX_TOKEN_LIFETIME
+            );
+        } catch (DataAccessException exception) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "TAX_SAVE_CONFIRMATION_UNAVAILABLE",
+                    "저장 확인 서비스를 사용할 수 없어 거래 저장을 시작하지 못했습니다."
+            );
+        }
+
+        if (!Boolean.TRUE.equals(reserved)) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "TAX_SAVE_RECEIPT_ALREADY_USED",
+                    "이미 접수한 저장 요청입니다. 저장 결과를 확인해주세요."
+            );
+        }
+
+        TaxServiceResponse saved = save(principal, guestAccessToken, request);
+
+        // 조회용 응답에는 비회원 토큰 원문을 보관하지 않는다.
+        TaxServiceResponse storedResult = TaxServiceResponse.builder()
+                .input(saved.getInput())
+                .transactions(saved.getTransactions())
+                .build();
+
+        SaveReceipt record = new SaveReceipt(
+                principal == null ? null : principal.getUserId(),
+                saved.getInput().getTaxInputId(),
+                saved.getGuestAccessToken() != null,
+                expiresAt.getEpochSecond(),
+                storedResult
+        );
+
+        String recordJson = objectMapper.writeValueAsString(record);
+
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        // MySQL 커밋이 완료된 후에만 성공 기록을 공개한다.
+                        Duration remaining = Duration.between(Instant.now(), expiresAt);
+
+                        if (remaining.isZero() || remaining.isNegative()) {
+                            return;
+                        }
+
+                        try {
+                            redisTemplate.opsForValue().set(redisKey, recordJson, remaining);
+                        } catch (DataAccessException exception) {
+                            log.warn("거래는 저장됐지만 저장 확인 기록을 남기지 못했습니다.", exception);
+                        }
+                    }
+                }
+        );
+
+        return saved;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TaxServiceResponse findSaveResult(CustomUserDetails principal, String receipt) {
+        taxValidator.validateSaveReceipt(receipt);
+
+        String recordJson;
+
+        try {
+            recordJson = redisTemplate.opsForValue().get(saveReceiptKey(receipt));
+        } catch (DataAccessException exception) {
+            throw new ApiException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "TAX_SAVE_CONFIRMATION_UNAVAILABLE",
+                    "현재 저장 결과를 조회할 수 없습니다."
+            );
+        }
+
+        if (recordJson == null || SAVE_RECEIPT_PENDING.equals(recordJson)) {
+            return null;
+        }
+
+        SaveReceipt record = objectMapper.readValue(recordJson, SaveReceipt.class);
+        Long userId = principal == null ? null : principal.getUserId();
+
+        if (record.ownerUserId() != null && !Objects.equals(record.ownerUserId(), userId)) {
+            return null;
+        }
+
+        Instant now = Instant.now();
+        Instant expiresAt = Instant.ofEpochSecond(record.expiresAtEpoch());
+
+        if (!expiresAt.isAfter(now)) {
+            return null;
+        }
+
+        TaxInputRequest currentInput = taxMapper.findInput(record.taxInputId());
+
+        if (currentInput == null
+                || (currentInput.getUserId() != null
+                && !Objects.equals(currentInput.getUserId(), userId))) {
+            return null;
+        }
+
+        TaxServiceResponse result = record.result();
+
+        // 첫 비회원 저장 응답을 받지 못한 경우 남은 유효기간으로 토큰을 복구한다.
+        if (record.guestTokenIssued() && currentInput.getUserId() == null) {
+            result.setGuestAccessToken(
+                    issueGuestAccessToken(record.taxInputId(), now, expiresAt)
+            );
+        }
+
+        return result;
+    }
+
+    private String saveReceiptKey(String receipt) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(receipt.getBytes(StandardCharsets.US_ASCII));
+            return SAVE_RECEIPT_PREFIX + HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("저장 확인 키를 처리할 수 없습니다.", exception);
+        }
     }
 
     /**
@@ -198,12 +357,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             updatedInput = normalizeInput(input, taxInputId, existingInput.getUserId());
             taxValidator.validateInput(updatedInput);
 
-            // 기본정보를 수정해도 기존 소유자와 저장 상태를 유지한다.
             updatedInput.setSaveStatus(existingInput.getSaveStatus());
             taxMapper.updateInput(updatedInput);
         }
 
-        // 카테고리 변경과 결과 무효화를 같은 트랜잭션에서 처리한다.
         if (updateCategory) {
             applyCategoryChanges(taxInputId, changes);
         } else if (updateProfile) {
@@ -252,7 +409,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             return;
         }
 
-        // 목록 삭제는 이미 삭제된 번호가 있어도 재시도할 수 있다.
+        // 목록 삭제는 일부 거래가 이미 삭제된 경우에도 처리할 수 있다.
         if (requestedIds != null) {
             int deleted = taxMapper.deleteTransactionBatch(taxInputId, Set.copyOf(requestedIds));
 
@@ -263,9 +420,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             return;
         }
 
-        // 번호 형식은 검증을 마쳤으므로 거래가 해당 분석에 속하는지만 확인한다.
         requireTransaction(taxInputId, transactionId);
-
         int deleted = taxMapper.deleteTransaction(taxInputId, transactionId);
 
         if (deleted != 1) {
@@ -349,7 +504,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 throw invalid("transactions", "PDF 분석 결과에 빈 거래가 있습니다.");
             }
 
-            // PDF 추출 데이터의 식별자를 비워 DB에 저장된 거래와 구분한다.
+            // PDF 추출 행의 식별자를 비워 DB에 저장된 거래와 구분한다.
             source.setTaxInputId(null);
             source.setTransactionId(null);
 
@@ -361,7 +516,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             } catch (ApiException exception) {
                 String reason = exception.getMessage();
 
-                // 검증에 실패한 거래는 화면에서 확인할 수 있도록 검토 대상으로 반환한다.
                 markPdfReview(
                         source,
                         reason == null || reason.isBlank()
@@ -445,7 +599,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             category = "UNCLASSIFIED";
         }
 
-        // 실제 입출금액이 있으면 PDF 추출과 거래 저장에서 모두 우선 사용한다.
+        // 실제 입출금액이 있으면 PDF 추출과 거래 저장에서 우선 사용한다.
         BigDecimal actualAmount = source.getActualAmount();
         BigDecimal amount = actualAmount == null ? source.getAmount() : actualAmount;
 
@@ -468,7 +622,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     ) {
         taxValidator.validateInputPresent(source);
 
-        // 분석번호와 소유자는 서버에서 확인한 값을 사용한다.
+        // 분석번호와 소유자는 서버가 확인한 값으로 설정한다.
         return TaxInputRequest.builder()
                 .taxInputId(taxInputId)
                 .userId(ownerId)
@@ -618,7 +772,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 && principal.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
 
-        // Validator에서 검증한 분석번호만 접근 정보에 담는다.
         Long guestTaxInputId = taxValidator.readGuestTaxInputId(guestAccessToken);
 
         return AccessContext.builder()
@@ -630,13 +783,16 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
     private String issueGuestAccessToken(Long taxInputId) {
         Instant now = Instant.now();
+        return issueGuestAccessToken(taxInputId, now, now.plus(GUEST_TAX_TOKEN_LIFETIME));
+    }
 
-        // 비회원 토큰의 권한을 생성한 분석 한 건으로 제한한다.
+    private String issueGuestAccessToken(Long taxInputId, Instant issuedAt, Instant expiresAt) {
+        // 비회원 토큰의 권한을 해당 분석 한 건으로 제한한다.
         return Jwts.builder()
                 .claim("type", TaxValidator.GUEST_TAX_TOKEN_TYPE)
                 .claim("taxInputId", taxInputId)
-                .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(GUEST_TAX_TOKEN_LIFETIME)))
+                .issuedAt(Date.from(issuedAt))
+                .expiration(Date.from(expiresAt))
                 .signWith(jwtTokenProvider.getSecretKey())
                 .compact();
     }

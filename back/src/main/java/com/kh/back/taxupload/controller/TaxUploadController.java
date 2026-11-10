@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,15 +40,31 @@ public class TaxUploadController {
                     name = TaxValidator.GUEST_ACCESS_TOKEN_HEADER,
                     required = false
             ) String guestAccessToken,
+            @RequestHeader(
+                    name = TaxValidator.TAX_SAVE_RECEIPT_HEADER,
+                    required = false
+            ) String receipt,
             @RequestBody TaxServiceRequest request
     ) {
         boolean createAnalysis = request.getTaxInputId() == null;
-        TaxServiceResponse saved = service.save(principal, guestAccessToken, request);
+        TaxServiceResponse saved = service.saveWithReceipt(
+                principal, guestAccessToken, receipt, request
+        );
         HttpStatus status = createAnalysis ? HttpStatus.CREATED : HttpStatus.OK;
 
         return ResponseEntity.status(status)
                 .cacheControl(CacheControl.noStore())
                 .body(ApiResponse.ok(saved));
+    }
+
+    @GetMapping("/save-status")
+    public ResponseEntity<ApiResponse<TaxServiceResponse>> findSaveResult(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @RequestHeader(name = TaxValidator.TAX_SAVE_RECEIPT_HEADER) String receipt
+    ) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(ApiResponse.ok(service.findSaveResult(principal, receipt)));
     }
 
     @PostMapping("/inputs/{taxInputId}/update")
@@ -90,7 +107,7 @@ public class TaxUploadController {
             @RequestParam(value = "taxInputId", required = false) Long taxInputId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
-        // 새 PDF 분석은 공개하고, 기존 분석을 참조하면 접근 권한을 확인한다.
+        // 기존 분석을 참조하는 PDF 요청은 해당 분석의 접근 권한을 확인한다.
         return ApiResponse.ok(
                 service.parse(principal, guestAccessToken, taxInputId, file)
         );
