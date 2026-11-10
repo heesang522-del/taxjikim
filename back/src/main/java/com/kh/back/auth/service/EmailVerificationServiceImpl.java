@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import com.kh.back.common.exception.ApiException;
 import org.springframework.http.HttpStatus;
 import com.kh.back.common.validation.InputValidator;
+import com.kh.back.common.validation.UserInputValidator;
 
 @Service
 public class EmailVerificationServiceImpl implements EmailVerificationService {
@@ -40,15 +41,15 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
             .build();
 
     // 6자리 랜덤 인증번호 생성
-    @Override
-    public String createAuthCode() {
+    private String createAuthCode() {
         return String.valueOf((int) (Math.random() * 899999) + 100000);
     }
 
     // 메일 발송 및 메모리 캐시 저장 처리 (DB 관련 @Transactional 제거)
     @Override
     public void sendVerificationCode(String email) {
-        InputValidator.requireText("email", email);
+        // 메일 발송과 인증 캐시는 가입·회원정보 수정과 같은 주소 기준을 사용한다.
+        email = UserInputValidator.normalizeEmail(email);
         // 메일 계정이 없는 개발 환경에서도 서버는 실행하되, 발송 요청은 명확히 실패시킨다.
         if (senderEmail.isBlank() || senderPassword.isBlank()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MAIL_UNAVAILABLE",
@@ -79,7 +80,7 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
     // 인증번호 검증 처리 (DB 관련 @Transactional 제거)
     @Override
     public boolean verifyCode(String email, String inputCode) {
-        InputValidator.requireText("email", email);
+        email = UserInputValidator.normalizeEmail(email);
         InputValidator.requireText("code", inputCode);
         /* Caffeine Cache에서 해당 이메일의 인증번호 조회 */
         String storedCode = verificationCodes.getIfPresent(email);

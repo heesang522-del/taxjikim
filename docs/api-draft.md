@@ -20,7 +20,6 @@
 | DELETE | `/api/v1/auth/sessions/current` | `Authorization: Bearer {accessToken}` 또는 인증 쿠키 |
 | POST | `/api/v1/auth/tokens` | `refreshToken` 쿠키 |
 | POST | `/api/v1/auth/dormancy-recoveries` | JSON `loginId`, `email`, `code` |
-| POST | `/api/v1/auth/account-unlocks` | JSON `token` |
 | POST | `/api/v1/auth/account-lookups/email-verifications` | JSON `name`, `email` |
 | POST | `/api/v1/auth/account-lookups` | JSON `name`, `email`, `code`; data는 로그인 아이디 |
 | POST | `/api/v1/auth/password-resets/email-verifications` | JSON `loginId`, `email` |
@@ -75,6 +74,8 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 
 회원 고유 번호는 `userId`, 로그인 아이디는 `loginId`이다. 가입 성공의 `data`는 생성된 회원 고유 번호이다.
 회원가입은 이름·닉네임·로그인 아이디·비밀번호·이메일을 전송하며 생년월일은 수집하지 않는다. 프로필 이미지가 있으면 multipart 필드 `profile`로 전송한다. 삭제한 전화번호·직군·신고 알림 컬럼은 전송하지 않는다.
+아이디는 영문 대소문자·숫자·밑줄 4~20자로 제한한다. 이메일은 최대 255자이며 한글·내부 공백을 허용하지 않고 `주소@도메인.접미사` 형식을 검사한다. 둘 다 앞뒤 공백을 제거하고 대소문자는 유지한다.
+가입·아이디/이메일 중복 확인·이메일 인증 발송/확인·마이페이지 이메일 변경에서 백엔드 공통 검증을 적용한다. 잘못된 값은 DB 조회·저장이나 메일 발송 전에 `400 VALIDATION_ERROR`와 `error.fields.loginId` 또는 `error.fields.email`로 반환한다. 기존 로그인 아이디에는 신규 가입 형식 제한을 추가하지 않는다.
 인증번호는 현재 서버 메모리 캐시에서 5분, 인증 완료 기록은 10분간 유지된다. 브라우저에서 인증번호를 생성하거나 응답에 노출하지 않는다.
 이메일 변경은 새 이메일의 서버 인증 완료 기록이 필요하며 성공한 뒤 해당 기록을 소비한다.
 탈퇴는 현재 비밀번호 확인 후 users 행을 즉시 삭제하고 로그인 세션과 인증 쿠키를 정리한다. 연결된 FK가 삭제를 막으면 409 오류를 반환한다. 탈퇴 대기 복구와 30일 정리 스케줄러는 제거했다. FK의 삭제 정책은 별도 검토 대상이다.

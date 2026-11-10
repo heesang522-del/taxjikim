@@ -6,6 +6,7 @@ import com.kh.back.common.util.FileUtil;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.common.validation.InputValidator;
 import com.kh.back.common.validation.PasswordValidator;
+import com.kh.back.common.validation.UserInputValidator;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
@@ -65,15 +66,13 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void joinUser(UserDto userDto, MultipartFile profileFile) {
-        InputValidator.requireText("loginId", userDto.getLoginId());
-        InputValidator.requireText("password", userDto.getPassword());
+        // 가입·중복 확인·인증에서 같은 값으로 검증하고 저장하도록 앞뒤 공백을 정리한다.
+        userDto.setLoginId(UserInputValidator.normalizeLoginId(userDto.getLoginId()));
+        userDto.setEmail(UserInputValidator.normalizeEmail(userDto.getEmail()));
         InputValidator.requireText("name", userDto.getName());
         InputValidator.requireText("nickname", userDto.getNickname());
-        InputValidator.requireText("email", userDto.getEmail());
-        InputValidator.requireMaxLength("loginId", userDto.getLoginId(), 50);
         InputValidator.requireMaxLength("name", userDto.getName(), 50);
         InputValidator.requireMaxLength("nickname", userDto.getNickname(), 50);
-        InputValidator.requireMaxLength("email", userDto.getEmail(), 255);
         PasswordValidator.validate("password", userDto.getPassword());
         // 이메일 인증 완료 여부 확인
         validateEmailVerification(userDto.getEmail());
@@ -93,7 +92,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public boolean isIdDuplicate(String loginId) {
-        return userMapper.countByLoginId(loginId) > 0;
+        return userMapper.countByLoginId(UserInputValidator.normalizeLoginId(loginId)) > 0;
     }
 
     @Override
@@ -103,7 +102,7 @@ public class UserServiceImpl implements UserService {
 
     @Override
     public boolean isEmailDuplicate(String email) {
-        return userMapper.countByEmail(email) > 0;
+        return userMapper.countByEmail(UserInputValidator.normalizeEmail(email)) > 0;
     }
 
     /* ================= 3. 회원 정보 수정 (설정 페이지) ================= */
@@ -123,8 +122,7 @@ public class UserServiceImpl implements UserService {
     @Transactional
     @Override
     public void updateEmail(String loginId, String email) {
-        InputValidator.requireText("email", email);
-        InputValidator.requireMaxLength("email", email, 255);
+        email = UserInputValidator.normalizeEmail(email);
         // 계정 찾기에 사용하는 이메일은 새 주소 인증이 완료된 경우에만 변경한다.
         validateEmailVerification(email);
         UserDto updateDto = new UserDto();

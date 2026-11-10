@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { getPasswordError } from '../../utils/passwordValidation';
+import { getEmailError, getLoginIdError } from '../../utils/userValidation';
 import { Button, TextField } from '../common/index';
 import { SignupProfileImage } from './SignupProfileImage';
 import { useToast } from '../../store/useToastStore';
@@ -15,19 +16,17 @@ import {
   verifyEmail,
 } from '../../api/userApi.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_TTL = 300;
 const VERIFIED_TTL = 600;
 const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 function getFieldError(key, values) {
-  if (key === 'loginId' && !/^[a-z0-9_]{4,20}$/i.test(values.loginId.trim()))
-    return '아이디는 영문·숫자·_ 4~20자로 입력하세요.';
+  if (key === 'loginId') return getLoginIdError(values.loginId);
   if (key === 'password') return getPasswordError(values.password);
   if (key === 'passwordConfirm' && (!values.passwordConfirm || values.password !== values.passwordConfirm))
     return '비밀번호가 일치하지 않습니다.';
   if (key === 'name' && !values.name.trim()) return '이름을 입력해주세요.';
-  if (key === 'email' && !EMAIL_RE.test(values.email.trim())) return '이메일 형식을 확인하세요.';
+  if (key === 'email') return getEmailError(values.email);
   if (key === 'nickname' && !values.nickname.trim()) return '닉네임을 입력해주세요.';
   return '';
 }
@@ -81,7 +80,14 @@ export function SignupForm({ onDone }) {
 
   function handleChange(key) {
     return (event) => {
-      const value = event.target.value;
+      // 조합 입력·붙여넣기도 허용 문자만 남기고, 화면 입력값과 React 상태를 함께 맞춘다.
+      const value =
+        key === 'loginId' ? event.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) : event.target.value;
+      if (key === 'loginId') {
+        event.target.value = value;
+        // 막힌 문자만 입력했다면 실제 아이디는 그대로이므로 기존 중복 확인을 유지한다.
+        if (value === form.loginId) return;
+      }
       if (key === 'email' && emailLocked) return;
       const needsDuplicateCheck = key === 'loginId' || key === 'nickname';
       // 원래 값으로 되돌려도 이전 응답을 재사용하지 않도록 입력 변경 횟수를 기록한다.
@@ -116,6 +122,12 @@ export function SignupForm({ onDone }) {
     };
   }
 
+  function handleLoginIdBeforeInput(event) {
+    // 입력 전에 차단 가능한 문자는 미리 막고, 취소할 수 없는 IME 입력은 onChange에서 정리한다.
+    const text = event.data ?? event.nativeEvent.data;
+    if (text && /[^a-zA-Z0-9_]/.test(text)) event.preventDefault();
+  }
+
   function handleChangeEmail() {
     if (busy || !window.confirm('이메일을 변경하면 다시 인증해야 합니다. 변경할까요?')) return;
     // 명시적으로 변경을 확인한 경우에만 잠금을 풀고 이전 인증 정보를 모두 버린다.
@@ -138,8 +150,9 @@ export function SignupForm({ onDone }) {
   async function handleDuplicateCheck(key, nextInputId) {
     if (busy) return;
     const value = form[key].trim();
-    if (!value || (key === 'loginId' && !/^[a-z0-9_]{4,20}$/i.test(value))) {
-      setError(key === 'loginId' ? '아이디는 영문·숫자·_ 4~20자로 입력하세요.' : '닉네임을 입력하세요.');
+    const validationError = getFieldError(key, form);
+    if (validationError) {
+      setFieldErrors((previous) => ({ ...previous, [key]: validationError }));
       return;
     }
     const inputVersion = duplicateInputVersions.current[key];
@@ -178,8 +191,9 @@ export function SignupForm({ onDone }) {
     if (busy || verified) return;
     const email = form.email.trim();
     const inputVersion = emailInputVersion.current;
-    if (!EMAIL_RE.test(email)) {
-      setError('이메일 형식을 확인하세요.');
+    const emailError = getEmailError(email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
       return;
     }
     setPending('send');
@@ -215,6 +229,11 @@ export function SignupForm({ onDone }) {
 
   async function handleVerifyCode() {
     if (busy || verified) return;
+    const emailError = getEmailError(form.email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
+      return;
+    }
     if (sentAt == null || secondsLeft === 0 || sentEmail !== form.email.trim()) {
       setError('인증번호를 다시 받아 주세요.');
       return;
@@ -415,6 +434,8 @@ export function SignupForm({ onDone }) {
                 label="아이디"
                 value={form.loginId}
                 onChange={handleChange('loginId')}
+                onBeforeInput={handleLoginIdBeforeInput}
+                onCompositionEnd={handleChange('loginId')}
                 autoComplete="username"
                 placeholder="영문·숫자·_ 4~20자"
                 maxLength={20}
