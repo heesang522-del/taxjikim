@@ -144,7 +144,7 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
 }
 
 /** 회원 채팅 위젯 전용 훅. open(패널 열림)이 true인 동안만 실시간 연결한다. */
-export function useMemberChat(open, myUserId) {
+export function useMemberChat(open, myUserId, loggedIn) {
   const [room, setRoom] = useState(null);
   const [roomLoading, setRoomLoading] = useState(true);
   const [roomError, setRoomError] = useState('');
@@ -159,14 +159,16 @@ export function useMemberChat(open, myUserId) {
     []
   );
 
+  // 비회원은 어차피 401이 날 것을 알면서 호출할 필요가 없다. 로그인 전에는 방 조회 자체를 하지 않는다.
   useEffect(() => {
+    if (!loggedIn) return;
     loadRoom();
-  }, [loadRoom]);
+  }, [loggedIn, loadRoom]);
 
   // 패널을 다시 열 때마다 방 상태(종료 여부 등)를 최신으로 확인한다.
   useEffect(() => {
-    if (open) loadRoom();
-  }, [open, loadRoom]);
+    if (open && loggedIn) loadRoom();
+  }, [open, loggedIn, loadRoom]);
 
   const activeRoomId = room && room.status !== 'CLOSED' ? room.roomId : null;
   const active = open && Boolean(activeRoomId);

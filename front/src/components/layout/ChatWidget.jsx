@@ -14,7 +14,7 @@ export default function ChatWidget() {
   const { loggedIn, isAdmin, user } = useAuth();
   const { open, setOpen } = useChat();
   // connected는 useMemberChat이 실제로 맺고 있는 WebSocket 소켓 상태를 그대로 반영한다.
-  const { room, messages, unreadCount, connected, send: sendMessage, close: closeChat } = useMemberChat(open, user?.userId);
+  const { room, messages, unreadCount, connected, send: sendMessage, close: closeChat } = useMemberChat(open, user?.userId, loggedIn);
   const toast = useToast();
   const [text, setText] = useState('');
   const endRef = useRef(null);
