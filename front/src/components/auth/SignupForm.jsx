@@ -36,6 +36,8 @@ export function SignupForm({ onDone }) {
   const toast = useToast();
   const formRef = useRef(null);
   const focusTarget = useRef(null);
+  const duplicateInputVersions = useRef({ loginId: 0, nickname: 0 });
+  const duplicateRequestId = useRef(0);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     name: '',
@@ -75,6 +77,9 @@ export function SignupForm({ onDone }) {
   function handleChange(key) {
     return (event) => {
       const value = event.target.value;
+      const needsDuplicateCheck = key === 'loginId' || key === 'nickname';
+      // 원래 값으로 되돌려도 이전 응답을 재사용하지 않도록 입력 변경 횟수를 기록한다.
+      if (needsDuplicateCheck) duplicateInputVersions.current[key] += 1;
       const nextForm = { ...form, [key]: value };
       if (key === 'email') nextForm.code = '';
       setForm(nextForm);
@@ -82,7 +87,10 @@ export function SignupForm({ onDone }) {
       // 한 번 표시한 오류는 수정한 항목만 다시 검사하고, 다른 항목의 안내는 유지한다.
       setFieldErrors((previous) => {
         const next = { ...previous };
-        if (Object.hasOwn(previous, key)) {
+        if (needsDuplicateCheck) {
+          next[key] =
+            getFieldError(key, nextForm) || `${key === 'loginId' ? '아이디' : '닉네임'} 중복 확인이 필요합니다.`;
+        } else if (Object.hasOwn(previous, key)) {
           next[key] = getFieldError(key, nextForm);
           if (key === 'email' && !next[key]) next[key] = '이메일 인증을 완료해주세요.';
         }
@@ -100,29 +108,47 @@ export function SignupForm({ onDone }) {
     };
   }
 
+  function isDuplicateConfirmed(key) {
+    const checked = checks[key];
+    return checked?.value === form[key].trim() && checked.duplicate === false;
+  }
+
   async function handleDuplicateCheck(key, nextInputId) {
+    if (busy) return;
     const value = form[key].trim();
     if (!value || (key === 'loginId' && !/^[a-z0-9_]{4,20}$/i.test(value))) {
       setError(key === 'loginId' ? '아이디는 영문·숫자·_ 4~20자로 입력하세요.' : '닉네임을 입력하세요.');
       return;
     }
+    const inputVersion = duplicateInputVersions.current[key];
+    const requestId = ++duplicateRequestId.current;
+    // 요청 시작 후 값이 한 번이라도 변경되면 성공·실패 안내와 포커스 이동을 모두 무시한다.
+    const isCurrentRequest = () =>
+      requestId === duplicateRequestId.current && inputVersion === duplicateInputVersions.current[key];
     setPending(key);
+    setChecks((previous) => ({ ...previous, [key]: null }));
     setError('');
     setFieldErrors((previous) => ({ ...previous, [key]: '' }));
     try {
       const result = await (key === 'loginId' ? checkLoginId(value) : checkNickname(value));
+      if (!isCurrentRequest()) return;
       setChecks((previous) => ({ ...previous, [key]: { value, duplicate: result.data } }));
-      if (result.data) setError(`이미 사용 중인 ${key === 'loginId' ? '아이디' : '닉네임'}입니다.`);
-      else {
+      if (result.data) {
+        setFieldErrors((previous) => ({
+          ...previous,
+          [key]: `이미 사용 중인 ${key === 'loginId' ? '아이디' : '닉네임'}입니다.`,
+        }));
+      } else {
         toast('사용할 수 있습니다.');
         if (nextInputId) focusTarget.current = nextInputId;
       }
       return !result.data;
     } catch (cause) {
+      if (!isCurrentRequest()) return;
       setError(cause.message);
       setFieldErrors((previous) => ({ ...previous, ...cause.fields }));
     } finally {
-      setPending('');
+      if (requestId === duplicateRequestId.current) setPending('');
     }
   }
 
@@ -191,6 +217,8 @@ export function SignupForm({ onDone }) {
     const errors = Object.fromEntries(
       keys.map((key) => [key, getFieldError(key, form)]).filter(([, message]) => message)
     );
+    // 다음 단계와 최종 가입 모두 사용자가 현재 아이디를 직접 확인했는지 검사한다.
+    if (!isDuplicateConfirmed('loginId')) errors.loginId ||= '아이디 중복 확인이 필요합니다.';
     if (!verified || Date.now() >= verifiedUntil) errors.email ||= '이메일 인증을 완료하거나 다시 인증해주세요.';
     setFieldErrors((previous) => ({ ...previous, ...Object.fromEntries(keys.map((key) => [key, errors[key] ?? ''])) }));
     setError('');
@@ -206,14 +234,8 @@ export function SignupForm({ onDone }) {
     return true;
   }
 
-  async function handleNextStep() {
+  function handleNextStep() {
     if (busy || !validateMemberInfo()) return;
-    const checked = checks.loginId;
-    if (
-      (!checked || checked.value !== form.loginId.trim() || checked.duplicate) &&
-      !(await handleDuplicateCheck('loginId'))
-    )
-      return;
     // 입력 정보와 이메일 인증은 유지하고 표시하는 단계만 변경한다.
     focusTarget.current = 'su-nickname';
     setStep(2);
@@ -244,8 +266,7 @@ export function SignupForm({ onDone }) {
       return;
     }
     if (key === 'loginId') {
-      if (checks.loginId?.value === form.loginId.trim() && !checks.loginId.duplicate)
-        formRef.current?.querySelector('#su-password')?.focus();
+      if (isDuplicateConfirmed('loginId')) formRef.current?.querySelector('#su-password')?.focus();
       else void handleDuplicateCheck('loginId', 'su-password');
     } else if (key === 'email') {
       if (verified) void handleNextStep();
@@ -253,8 +274,7 @@ export function SignupForm({ onDone }) {
     } else if (key === 'code') void handleVerifyCode();
     else if (key === 'nickname') {
       // 마지막 입력인 닉네임 확인 후 가입 버튼으로 이동해 사용자가 최종 제출한다.
-      if (checks.nickname?.value === form.nickname.trim() && !checks.nickname.duplicate)
-        formRef.current?.querySelector('#su-submit')?.focus();
+      if (isDuplicateConfirmed('nickname')) formRef.current?.querySelector('#su-submit')?.focus();
       else void handleDuplicateCheck('nickname', 'su-submit');
     } else {
       const next = { password: 'passwordConfirm', passwordConfirm: 'name', name: 'email' }[key];
@@ -266,7 +286,7 @@ export function SignupForm({ onDone }) {
     event.preventDefault();
     if (busy) return;
     if (step === 1) {
-      await handleNextStep();
+      handleNextStep();
       return;
     }
     if (!validateMemberInfo()) return;
@@ -277,7 +297,8 @@ export function SignupForm({ onDone }) {
       nickname: form.nickname.trim(),
       email: form.email.trim(),
     };
-    const nicknameError = getFieldError('nickname', form);
+    const nicknameError =
+      getFieldError('nickname', form) || (!isDuplicateConfirmed('nickname') ? '닉네임 중복 확인이 필요합니다.' : '');
     if (nicknameError) {
       setFieldErrors((previous) => ({ ...previous, nickname: nicknameError }));
       formRef.current?.querySelector('#su-nickname')?.focus();
@@ -295,6 +316,15 @@ export function SignupForm({ onDone }) {
       ]);
       const duplicate = results.findIndex((result) => result.data);
       if (duplicate !== -1) {
+        // 최종 서버 검사에서 중복이면 화면의 이전 확인 성공도 취소한다.
+        if (duplicate < 2) {
+          const key = duplicate === 0 ? 'loginId' : 'nickname';
+          setChecks((previous) => ({ ...previous, [key]: null }));
+          setFieldErrors((previous) => ({
+            ...previous,
+            [key]: `${key === 'loginId' ? '아이디' : '닉네임'} 중복 확인이 필요합니다.`,
+          }));
+        }
         setError(`이미 사용 중인 ${['아이디', '닉네임', '이메일'][duplicate]}입니다.`);
         if (duplicate !== 1) {
           focusTarget.current = duplicate === 0 ? 'su-loginId' : 'su-email';
@@ -354,7 +384,7 @@ export function SignupForm({ onDone }) {
               />
               <Button onClick={() => handleDuplicateCheck('loginId')}>중복 확인</Button>
             </InputActionRow>
-            {checks.loginId && !checks.loginId.duplicate && <p className="small">사용 가능한 아이디입니다.</p>}
+            {isDuplicateConfirmed('loginId') && <p className="small">사용 가능한 아이디입니다.</p>}
             <TextField
               id="su-password"
               name="password"
@@ -460,7 +490,7 @@ export function SignupForm({ onDone }) {
               />
               <Button onClick={() => handleDuplicateCheck('nickname')}>중복 확인</Button>
             </InputActionRow>
-            {checks.nickname && !checks.nickname.duplicate && <p className="small">사용 가능한 닉네임입니다.</p>}
+            {isDuplicateConfirmed('nickname') && <p className="small">사용 가능한 닉네임입니다.</p>}
           </>
         )}
         {error && (
