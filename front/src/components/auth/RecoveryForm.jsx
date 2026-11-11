@@ -39,15 +39,18 @@ export function RecoveryForm({ mode, onTab }) {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
   const [sentAt, setSentAt] = useState(null);
+  const [resendAvailableAt, setResendAvailableAt] = useState(null);
   const [now, setNow] = useState(Date.now);
   const secondsLeft = sentAt == null ? 0 : Math.max(0, 300 - Math.floor((now - sentAt) / 1000));
+  // 발송 성공 응답부터 1분간 잠그며, 입력값을 바꿔도 재발송 제한은 유지한다.
+  const resendSecondsLeft = resendAvailableAt == null ? 0 : Math.max(0, Math.ceil((resendAvailableAt - now) / 1000));
   const verifyCode = { expired: sentAt != null && secondsLeft === 0, secondsLeft };
 
   useEffect(() => {
-    if (sentAt == null) return undefined;
+    if (sentAt == null && resendAvailableAt == null) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [sentAt]);
+  }, [sentAt, resendAvailableAt]);
 
   function handleIdentityChange(setValue) {
     return (event) => {
@@ -62,7 +65,7 @@ export function RecoveryForm({ mode, onTab }) {
   }
 
   const handleSendCode = async () => {
-    if (pending) return;
+    if (pending || (resendAvailableAt != null && Date.now() < resendAvailableAt)) return;
     if (!first.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
       setError('계정 정보와 이메일 형식을 확인하세요.');
       return;
@@ -70,7 +73,6 @@ export function RecoveryForm({ mode, onTab }) {
     setPending(true);
     setError('');
     setFieldErrors({});
-    setSent(false);
     try {
       // 계정 소유 정보의 일치 여부는 localStorage가 아니라 서버에서 검사한다.
       if (isId) await sendAccountLookupCode(first.trim(), email.trim());
@@ -78,6 +80,8 @@ export function RecoveryForm({ mode, onTab }) {
       const timestamp = Date.now();
       setNow(timestamp);
       setSentAt(timestamp);
+      setResendAvailableAt(timestamp + 60_000);
+      // 새 번호 발송에 성공했을 때만 인증 상태와 유효시간을 갱신한다.
       setSent(true);
       setCode('');
       toast('인증번호를 보냈습니다. 5분 안에 입력하세요.');
@@ -227,8 +231,8 @@ export function RecoveryForm({ mode, onTab }) {
             onChange={handleIdentityChange(setEmail)}
             disabled={pending}
           />
-          <Button onClick={handleSendCode} disabled={pending}>
-            {sent ? '다시 받기' : '인증번호 받기'}
+          <Button onClick={handleSendCode} disabled={pending || resendSecondsLeft > 0}>
+            {resendSecondsLeft > 0 ? `${resendSecondsLeft}초 후 받기` : sent ? '다시 받기' : '인증번호 받기'}
           </Button>
         </div>
         <TextField
