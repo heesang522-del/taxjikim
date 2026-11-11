@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { getPasswordError } from '../../utils/passwordValidation';
+import { getEmailError, getLoginIdError } from '../../utils/userValidation';
 import { Button, TextField } from '../common/index';
 import { SignupProfileImage } from './SignupProfileImage';
 import { useToast } from '../../store/useToastStore';
@@ -15,19 +16,17 @@ import {
   verifyEmail,
 } from '../../api/userApi.js';
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CODE_TTL = 300;
 const VERIFIED_TTL = 600;
 const clock = (seconds) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 
 function getFieldError(key, values) {
-  if (key === 'loginId' && !/^[a-z0-9_]{4,20}$/i.test(values.loginId.trim()))
-    return '아이디는 영문·숫자·_ 4~20자로 입력하세요.';
+  if (key === 'loginId') return getLoginIdError(values.loginId);
   if (key === 'password') return getPasswordError(values.password);
   if (key === 'passwordConfirm' && (!values.passwordConfirm || values.password !== values.passwordConfirm))
     return '비밀번호가 일치하지 않습니다.';
   if (key === 'name' && !values.name.trim()) return '이름을 입력해주세요.';
-  if (key === 'email' && !EMAIL_RE.test(values.email.trim())) return '이메일 형식을 확인하세요.';
+  if (key === 'email') return getEmailError(values.email);
   if (key === 'nickname' && !values.nickname.trim()) return '닉네임을 입력해주세요.';
   return '';
 }
@@ -36,6 +35,9 @@ export function SignupForm({ onDone }) {
   const toast = useToast();
   const formRef = useRef(null);
   const focusTarget = useRef(null);
+  const duplicateInputVersions = useRef({ loginId: 0, nickname: 0 });
+  const duplicateRequestId = useRef(0);
+  const emailInputVersion = useRef(0);
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({
     name: '',
@@ -52,10 +54,14 @@ export function SignupForm({ onDone }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const [sentAt, setSentAt] = useState(null);
   const [verifiedUntil, setVerifiedUntil] = useState(null);
+  const [verifiedEmail, setVerifiedEmail] = useState(null);
+  const [sentEmail, setSentEmail] = useState(null);
   const [now, setNow] = useState(Date.now);
   const [checks, setChecks] = useState({});
   const busy = Boolean(pending);
-  const verified = verifiedUntil != null && now < verifiedUntil;
+  // 이메일 잠금은 인증 만료와 별개로 유지하고, 인증 유효성은 주소와 만료 시각을 함께 확인한다.
+  const emailLocked = verifiedEmail != null;
+  const verified = verifiedEmail === form.email.trim() && verifiedUntil != null && now < verifiedUntil;
   const secondsLeft = sentAt == null ? 0 : Math.max(0, CODE_TTL - Math.floor((now - sentAt) / 1000));
 
   useEffect(() => {
@@ -74,7 +80,18 @@ export function SignupForm({ onDone }) {
 
   function handleChange(key) {
     return (event) => {
-      const value = event.target.value;
+      // 조합 입력·붙여넣기도 허용 문자만 남기고, 화면 입력값과 React 상태를 함께 맞춘다.
+      const value =
+        key === 'loginId' ? event.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) : event.target.value;
+      if (key === 'loginId') {
+        event.target.value = value;
+        // 막힌 문자만 입력했다면 실제 아이디는 그대로이므로 기존 중복 확인을 유지한다.
+        if (value === form.loginId) return;
+      }
+      if (key === 'email' && emailLocked) return;
+      const needsDuplicateCheck = key === 'loginId' || key === 'nickname';
+      // 원래 값으로 되돌려도 이전 응답을 재사용하지 않도록 입력 변경 횟수를 기록한다.
+      if (needsDuplicateCheck) duplicateInputVersions.current[key] += 1;
       const nextForm = { ...form, [key]: value };
       if (key === 'email') nextForm.code = '';
       setForm(nextForm);
@@ -82,7 +99,10 @@ export function SignupForm({ onDone }) {
       // 한 번 표시한 오류는 수정한 항목만 다시 검사하고, 다른 항목의 안내는 유지한다.
       setFieldErrors((previous) => {
         const next = { ...previous };
-        if (Object.hasOwn(previous, key)) {
+        if (needsDuplicateCheck) {
+          next[key] =
+            getFieldError(key, nextForm) || `${key === 'loginId' ? '아이디' : '닉네임'} 중복 확인이 필요합니다.`;
+        } else if (Object.hasOwn(previous, key)) {
           next[key] = getFieldError(key, nextForm);
           if (key === 'email' && !next[key]) next[key] = '이메일 인증을 완료해주세요.';
         }
@@ -94,42 +114,86 @@ export function SignupForm({ onDone }) {
       // 검사한 값이 바뀌면 중복 확인과 해당 이메일의 인증 상태를 다시 확인해야 한다.
       setChecks((previous) => ({ ...previous, [key]: null }));
       if (key === 'email') {
+        emailInputVersion.current += 1;
         setSentAt(null);
+        setSentEmail(null);
         setVerifiedUntil(null);
       }
     };
   }
 
+  function handleLoginIdBeforeInput(event) {
+    // 입력 전에 차단 가능한 문자는 미리 막고, 취소할 수 없는 IME 입력은 onChange에서 정리한다.
+    const text = event.data ?? event.nativeEvent.data;
+    if (text && /[^a-zA-Z0-9_]/.test(text)) event.preventDefault();
+  }
+
+  function handleChangeEmail() {
+    if (busy || !window.confirm('이메일을 변경하면 다시 인증해야 합니다. 변경할까요?')) return;
+    // 명시적으로 변경을 확인한 경우에만 잠금을 풀고 이전 인증 정보를 모두 버린다.
+    emailInputVersion.current += 1;
+    setVerifiedEmail(null);
+    setVerifiedUntil(null);
+    setSentEmail(null);
+    setSentAt(null);
+    setForm((previous) => ({ ...previous, code: '' }));
+    setFieldErrors((previous) => ({ ...previous, email: '이메일 인증을 완료해주세요.', code: '' }));
+    setError('');
+    formRef.current?.querySelector('#su-email')?.focus();
+  }
+
+  function isDuplicateConfirmed(key) {
+    const checked = checks[key];
+    return checked?.value === form[key].trim() && checked.duplicate === false;
+  }
+
   async function handleDuplicateCheck(key, nextInputId) {
+    if (busy) return;
     const value = form[key].trim();
-    if (!value || (key === 'loginId' && !/^[a-z0-9_]{4,20}$/i.test(value))) {
-      setError(key === 'loginId' ? '아이디는 영문·숫자·_ 4~20자로 입력하세요.' : '닉네임을 입력하세요.');
+    const validationError = getFieldError(key, form);
+    if (validationError) {
+      setFieldErrors((previous) => ({ ...previous, [key]: validationError }));
       return;
     }
+    const inputVersion = duplicateInputVersions.current[key];
+    const requestId = ++duplicateRequestId.current;
+    // 요청 시작 후 값이 한 번이라도 변경되면 성공·실패 안내와 포커스 이동을 모두 무시한다.
+    const isCurrentRequest = () =>
+      requestId === duplicateRequestId.current && inputVersion === duplicateInputVersions.current[key];
     setPending(key);
+    setChecks((previous) => ({ ...previous, [key]: null }));
     setError('');
     setFieldErrors((previous) => ({ ...previous, [key]: '' }));
     try {
       const result = await (key === 'loginId' ? checkLoginId(value) : checkNickname(value));
+      if (!isCurrentRequest()) return;
       setChecks((previous) => ({ ...previous, [key]: { value, duplicate: result.data } }));
-      if (result.data) setError(`이미 사용 중인 ${key === 'loginId' ? '아이디' : '닉네임'}입니다.`);
-      else {
+      if (result.data) {
+        setFieldErrors((previous) => ({
+          ...previous,
+          [key]: `이미 사용 중인 ${key === 'loginId' ? '아이디' : '닉네임'}입니다.`,
+        }));
+      } else {
         toast('사용할 수 있습니다.');
         if (nextInputId) focusTarget.current = nextInputId;
       }
       return !result.data;
     } catch (cause) {
+      if (!isCurrentRequest()) return;
       setError(cause.message);
       setFieldErrors((previous) => ({ ...previous, ...cause.fields }));
     } finally {
-      setPending('');
+      if (requestId === duplicateRequestId.current) setPending('');
     }
   }
 
   async function handleSendCode() {
+    if (busy || verified) return;
     const email = form.email.trim();
-    if (!EMAIL_RE.test(email)) {
-      setError('이메일 형식을 확인하세요.');
+    const inputVersion = emailInputVersion.current;
+    const emailError = getEmailError(email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
       return;
     }
     setPending('send');
@@ -138,19 +202,24 @@ export function SignupForm({ onDone }) {
     setVerifiedUntil(null);
     setSentAt(null);
     try {
-      if ((await checkEmail(email)).data) {
+      const result = await checkEmail(email);
+      if (inputVersion !== emailInputVersion.current) return;
+      if (result.data) {
         setError('이미 가입된 이메일입니다.');
         return;
       }
       await sendEmailVerification(email);
+      if (inputVersion !== emailInputVersion.current) return;
       // 발송 성공 응답 이후에만 서버의 5분 유효시간에 맞춰 안내를 시작한다.
       const timestamp = Date.now();
       setNow(timestamp);
       setSentAt(timestamp);
+      setSentEmail(email);
       setForm((previous) => ({ ...previous, code: '' }));
       focusTarget.current = 'su-code';
       toast('인증번호를 보냈습니다. 5분 안에 입력하세요.');
     } catch (cause) {
+      if (inputVersion !== emailInputVersion.current) return;
       setError(cause.message);
       setFieldErrors((previous) => ({ ...previous, ...cause.fields }));
     } finally {
@@ -159,7 +228,13 @@ export function SignupForm({ onDone }) {
   }
 
   async function handleVerifyCode() {
-    if (sentAt == null || secondsLeft === 0) {
+    if (busy || verified) return;
+    const emailError = getEmailError(form.email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
+      return;
+    }
+    if (sentAt == null || secondsLeft === 0 || sentEmail !== form.email.trim()) {
       setError('인증번호를 다시 받아 주세요.');
       return;
     }
@@ -168,17 +243,25 @@ export function SignupForm({ onDone }) {
       return;
     }
     setPending('verify');
+    const email = form.email.trim();
+    const inputVersion = emailInputVersion.current;
     setError('');
     setFieldErrors((previous) => ({ ...previous, code: '' }));
     try {
-      await verifyEmail(form.email.trim(), form.code.trim());
+      await verifyEmail(email, form.code.trim());
+      if (inputVersion !== emailInputVersion.current) return;
       const timestamp = Date.now();
       setNow(timestamp);
       setVerifiedUntil(timestamp + VERIFIED_TTL * 1000);
+      setVerifiedEmail(email);
+      setSentAt(null);
+      setSentEmail(null);
+      setForm((previous) => ({ ...previous, code: '' }));
       setFieldErrors((previous) => ({ ...previous, email: '', code: '' }));
       focusTarget.current = 'su-next';
       toast('이메일 인증이 완료되었습니다. 10분 안에 가입을 완료해주세요.');
     } catch (cause) {
+      if (inputVersion !== emailInputVersion.current) return;
       setError(cause.message);
       setFieldErrors((previous) => ({ ...previous, ...cause.fields }));
     } finally {
@@ -191,6 +274,8 @@ export function SignupForm({ onDone }) {
     const errors = Object.fromEntries(
       keys.map((key) => [key, getFieldError(key, form)]).filter(([, message]) => message)
     );
+    // 다음 단계와 최종 가입 모두 사용자가 현재 아이디를 직접 확인했는지 검사한다.
+    if (!isDuplicateConfirmed('loginId')) errors.loginId ||= '아이디 중복 확인이 필요합니다.';
     if (!verified || Date.now() >= verifiedUntil) errors.email ||= '이메일 인증을 완료하거나 다시 인증해주세요.';
     setFieldErrors((previous) => ({ ...previous, ...Object.fromEntries(keys.map((key) => [key, errors[key] ?? ''])) }));
     setError('');
@@ -206,14 +291,8 @@ export function SignupForm({ onDone }) {
     return true;
   }
 
-  async function handleNextStep() {
+  function handleNextStep() {
     if (busy || !validateMemberInfo()) return;
-    const checked = checks.loginId;
-    if (
-      (!checked || checked.value !== form.loginId.trim() || checked.duplicate) &&
-      !(await handleDuplicateCheck('loginId'))
-    )
-      return;
     // 입력 정보와 이메일 인증은 유지하고 표시하는 단계만 변경한다.
     focusTarget.current = 'su-nickname';
     setStep(2);
@@ -244,8 +323,7 @@ export function SignupForm({ onDone }) {
       return;
     }
     if (key === 'loginId') {
-      if (checks.loginId?.value === form.loginId.trim() && !checks.loginId.duplicate)
-        formRef.current?.querySelector('#su-password')?.focus();
+      if (isDuplicateConfirmed('loginId')) formRef.current?.querySelector('#su-password')?.focus();
       else void handleDuplicateCheck('loginId', 'su-password');
     } else if (key === 'email') {
       if (verified) void handleNextStep();
@@ -253,8 +331,7 @@ export function SignupForm({ onDone }) {
     } else if (key === 'code') void handleVerifyCode();
     else if (key === 'nickname') {
       // 마지막 입력인 닉네임 확인 후 가입 버튼으로 이동해 사용자가 최종 제출한다.
-      if (checks.nickname?.value === form.nickname.trim() && !checks.nickname.duplicate)
-        formRef.current?.querySelector('#su-submit')?.focus();
+      if (isDuplicateConfirmed('nickname')) formRef.current?.querySelector('#su-submit')?.focus();
       else void handleDuplicateCheck('nickname', 'su-submit');
     } else {
       const next = { password: 'passwordConfirm', passwordConfirm: 'name', name: 'email' }[key];
@@ -266,7 +343,7 @@ export function SignupForm({ onDone }) {
     event.preventDefault();
     if (busy) return;
     if (step === 1) {
-      await handleNextStep();
+      handleNextStep();
       return;
     }
     if (!validateMemberInfo()) return;
@@ -277,7 +354,8 @@ export function SignupForm({ onDone }) {
       nickname: form.nickname.trim(),
       email: form.email.trim(),
     };
-    const nicknameError = getFieldError('nickname', form);
+    const nicknameError =
+      getFieldError('nickname', form) || (!isDuplicateConfirmed('nickname') ? '닉네임 중복 확인이 필요합니다.' : '');
     if (nicknameError) {
       setFieldErrors((previous) => ({ ...previous, nickname: nicknameError }));
       formRef.current?.querySelector('#su-nickname')?.focus();
@@ -295,6 +373,15 @@ export function SignupForm({ onDone }) {
       ]);
       const duplicate = results.findIndex((result) => result.data);
       if (duplicate !== -1) {
+        // 최종 서버 검사에서 중복이면 화면의 이전 확인 성공도 취소한다.
+        if (duplicate < 2) {
+          const key = duplicate === 0 ? 'loginId' : 'nickname';
+          setChecks((previous) => ({ ...previous, [key]: null }));
+          setFieldErrors((previous) => ({
+            ...previous,
+            [key]: `${key === 'loginId' ? '아이디' : '닉네임'} 중복 확인이 필요합니다.`,
+          }));
+        }
         setError(`이미 사용 중인 ${['아이디', '닉네임', '이메일'][duplicate]}입니다.`);
         if (duplicate !== 1) {
           focusTarget.current = duplicate === 0 ? 'su-loginId' : 'su-email';
@@ -347,14 +434,18 @@ export function SignupForm({ onDone }) {
                 label="아이디"
                 value={form.loginId}
                 onChange={handleChange('loginId')}
+                onBeforeInput={handleLoginIdBeforeInput}
+                onCompositionEnd={handleChange('loginId')}
                 autoComplete="username"
                 placeholder="영문·숫자·_ 4~20자"
                 maxLength={20}
                 required
               />
-              <Button onClick={() => handleDuplicateCheck('loginId')}>중복 확인</Button>
+              <Button onClick={() => handleDuplicateCheck('loginId')} disabled={isDuplicateConfirmed('loginId')}>
+                중복 확인
+              </Button>
             </InputActionRow>
-            {checks.loginId && !checks.loginId.duplicate && <p className="small">사용 가능한 아이디입니다.</p>}
+            {isDuplicateConfirmed('loginId') && <p className="small">사용 가능한 아이디입니다.</p>}
             <TextField
               id="su-password"
               name="password"
@@ -403,17 +494,37 @@ export function SignupForm({ onDone }) {
                 label="이메일"
                 type="email"
                 value={form.email}
+                readOnly={emailLocked}
+                aria-describedby={emailLocked ? 'su-email-status' : undefined}
                 onChange={handleChange('email')}
                 maxLength={255}
                 autoComplete="email"
                 placeholder="예: creator@example.com (최대 255자)"
                 required
               />
-              <Button onClick={handleSendCode}>
-                {pending === 'send' ? '발송 중...' : sentAt == null ? '인증번호 받기' : '다시 받기'}
+              <Button onClick={handleSendCode} disabled={verified}>
+                {verified
+                  ? '인증 완료'
+                  : pending === 'send'
+                    ? '발송 중...'
+                    : emailLocked && sentAt == null
+                      ? '다시 인증받기'
+                      : sentAt == null
+                        ? '인증번호 받기'
+                        : '다시 받기'}
               </Button>
             </InputActionRow>
-            {sentAt != null && (
+            {emailLocked && (
+              <div className="row" style={{ justifyContent: 'space-between', gap: 8 }}>
+                <p id="su-email-status" className="small muted" role="status">
+                  {verified ? '인증된 이메일입니다.' : '인증이 만료되었습니다. 다시 인증해주세요.'}
+                </p>
+                <Button size="sm" variant="ghost" onClick={handleChangeEmail}>
+                  이메일 변경
+                </Button>
+              </div>
+            )}
+            {sentAt != null && !verified && (
               <>
                 <InputActionRow>
                   <TextField
@@ -458,9 +569,11 @@ export function SignupForm({ onDone }) {
                 maxLength={50}
                 required
               />
-              <Button onClick={() => handleDuplicateCheck('nickname')}>중복 확인</Button>
+              <Button onClick={() => handleDuplicateCheck('nickname')} disabled={isDuplicateConfirmed('nickname')}>
+                중복 확인
+              </Button>
             </InputActionRow>
-            {checks.nickname && !checks.nickname.duplicate && <p className="small">사용 가능한 닉네임입니다.</p>}
+            {isDuplicateConfirmed('nickname') && <p className="small">사용 가능한 닉네임입니다.</p>}
           </>
         )}
         {error && (

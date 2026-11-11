@@ -3,6 +3,12 @@ import styled from 'styled-components';
 import { getLockedAccounts, unlockAccount } from '../../api/authApi.js';
 import { Button, Card, DataTable, Pill } from '../common/index';
 
+const ACCOUNT_STATUSES = {
+  LOCKED: { label: '로그인 잠금 (LOCKED)', action: '잠금 해제' },
+  BANNED: { label: '이용 정지 (BANNED)', action: '정지 해제' },
+  DORMANT: { label: '휴면 (DORMANT)', action: '휴면 해제' },
+};
+
 const statusTimeFormatter = new Intl.DateTimeFormat('ko-KR', {
   timeZone: 'Asia/Seoul',
   year: 'numeric',
@@ -30,10 +36,10 @@ export function AccountLockManagement() {
 
   useEffect(() => {
     let active = true;
-    // 기존 회원 관리 위치에서 실제 BANNED·LOCKED 계정만 관리한다.
+    // 실제 잠금·정지·휴면 계정을 같은 관리자 복구 경로에서 관리한다.
     getLockedAccounts()
       .then((result) => {
-        if (active) setAccounts(result.data.filter((account) => ['BANNED', 'LOCKED'].includes(account.userStatus)));
+        if (active) setAccounts(result.data.filter((account) => Object.hasOwn(ACCOUNT_STATUSES, account.userStatus)));
       })
       .catch((cause) => {
         if (active) setError(cause.message);
@@ -54,14 +60,19 @@ export function AccountLockManagement() {
 
   const handleUnlock = async (account) => {
     if (pendingId !== null) return;
-    if (!window.confirm(`${account.loginId} 계정의 제한을 해제하고 실패 기록을 초기화할까요?`)) return;
+    if (
+      !window.confirm(
+        `${account.loginId} 계정의 ${ACCOUNT_STATUSES[account.userStatus].action}를 진행하고 실패 기록을 초기화할까요?`
+      )
+    )
+      return;
     setPendingId(account.userId);
     setError('');
     setMessage('');
     try {
       // 서버 해제 성공 후에만 목록을 갱신해 mock 해제처럼 보이지 않도록 한다.
       await unlockAccount(account.loginId);
-      setMessage('제한을 해제하고 로그인 실패 기록을 초기화했습니다.');
+      setMessage(`${ACCOUNT_STATUSES[account.userStatus].action}를 완료하고 로그인 실패 기록을 초기화했습니다.`);
       handleReload();
     } catch (cause) {
       setError(cause.message);
@@ -86,9 +97,9 @@ export function AccountLockManagement() {
         </p>
       )}
       {loading ? (
-        <p role="status">잠금 계정을 불러오는 중입니다.</p>
+        <p role="status">잠금·이용 정지·휴면 계정을 불러오는 중입니다.</p>
       ) : accounts.length === 0 ? (
-        <p>잠금·이용 정지 계정이 없습니다.</p>
+        <p>잠금·이용 정지·휴면 계정이 없습니다.</p>
       ) : (
         <MemberTable>
           <DataTable
@@ -99,14 +110,14 @@ export function AccountLockManagement() {
                 header: '상태',
                 render: (account) => (
                   <Pill tone={account.userStatus === 'BANNED' ? 'danger' : 'warn'}>
-                    {account.userStatus === 'BANNED' ? '이용 정지 (BANNED)' : '로그인 잠금 (LOCKED)'}
+                    {ACCOUNT_STATUSES[account.userStatus].label}
                   </Pill>
                 ),
               },
               {
                 key: 'updatedAt',
                 header: '상태 변경 시각',
-                // 잠금·정지 중인 회원의 UPDATED_AT을 한국 시간으로 표시한다.
+                // 잠금·정지·휴면 회원의 UPDATED_AT을 한국 시간으로 표시한다.
                 render: (account) => formatStatusTime(account.updatedAt),
               },
               {
@@ -114,11 +125,7 @@ export function AccountLockManagement() {
                 header: '해제',
                 render: (account) => (
                   <Button size="sm" variant="soft" onClick={() => handleUnlock(account)} disabled={pendingId !== null}>
-                    {pendingId === account.userId
-                      ? '해제 중...'
-                      : account.userStatus === 'BANNED'
-                        ? '정지 해제'
-                        : '잠금 해제'}
+                    {pendingId === account.userId ? '해제 중...' : ACCOUNT_STATUSES[account.userStatus].action}
                   </Button>
                 ),
               },

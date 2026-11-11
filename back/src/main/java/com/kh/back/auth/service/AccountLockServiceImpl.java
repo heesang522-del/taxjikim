@@ -31,8 +31,9 @@ public class AccountLockServiceImpl implements AccountLockService {
         // 로그인 처리와 같은 행 잠금을 얻어 해제 중 실패 기록이 다시 쌓이는 것을 막는다.
         UserDto user = mapper.findForAuthentication(loginId);
         if (user == null) throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "회원을 찾을 수 없습니다.");
-        if (!"LOCKED".equals(user.getUserStatus()) && !"BANNED".equals(user.getUserStatus())) {
-            throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_LOCKED", "잠금 또는 이용 정지 상태가 아닙니다.");
+        if (!"LOCKED".equals(user.getUserStatus()) && !"BANNED".equals(user.getUserStatus())
+                && !"DORMANT".equals(user.getUserStatus())) {
+            throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_NOT_LOCKED", "잠금·이용 정지·휴면 상태가 아닙니다.");
         }
         if (mapper.unlockAccount(user.getLoginId()) != 1) {
             throw new ApiException(HttpStatus.CONFLICT, "ACCOUNT_UNLOCK_CONFLICT", "계정 상태가 변경되었습니다.");

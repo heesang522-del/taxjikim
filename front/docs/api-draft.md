@@ -112,7 +112,7 @@
 - POST /auth/sessions: 1~5회 안내, 6회 30초·7회 1분·8회 3분·9회 5분 차단, 10회 LOCKED. 성공·관리자 해제 시만 초기화한다.
 - 실패 응답의 error.details는 failedAttempts, remainingAttempts, blockedUntil, serverTime, locked를 포함한다. 일시 차단은 429 / LOGIN_TEMPORARILY_BLOCKED다.
 - 별도 차단 상태 조회 API는 사용하지 않는다. 로그인 버튼 클릭 시 POST /auth/sessions 응답으로 차단 여부와 남은 시간을 확인한다.
-- GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED 목록, 최대 100개.
+- GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED/DORMANT 목록. 같은 관리자 해제 API로 휴면 계정도 복구한다. 휴면 복구 시 즉시 재전환되지 않도록 LAST_LOGIN_AT을 갱신한다.
 - DELETE /admin/account-locks/{loginId}: ADMIN 전용 제한 해제, 기존 로그인 종료, 실패 기록 초기화.
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
 
@@ -138,6 +138,7 @@
 
 - 회원가입: SignupForm → userApi의 중복 확인·이메일 발송/확인·가입 요청. mock 계정 저장과 브라우저 인증번호 생성은 사용하지 않는다.
 - 요청 필드: loginId, password, name, nickname, email. 프로필 선택 시 multipart의 profile 파일로 보낸다. 전화번호 입력은 제거했다.
+- 아이디는 영문·숫자·밑줄 4~20자, 이메일은 최대 255자·한글 및 내부 공백 불허·이메일 형식 검사로 백엔드와 통일한다. 앞뒤 공백은 제거한다. 가입·중복 확인·이메일 발송/확인·마이페이지 이메일 변경에서 필드별 `VALIDATION_ERROR`를 처리한다.
 - 인증번호 안내는 5분, 인증 완료 후 가입 안내는 10분이며, 최종 유효성은 서버가 판단한다. 이메일을 바꾸면 화면의 이전 인증 상태를 초기화한다.
 - 계정 찾기: 이름·이메일·인증번호로 로그인 아이디를 조회하고 화면에서 마스킹한다.
 - 비밀번호 재설정: 계정과 이메일 일치 및 메일 인증 후 서버에 새 비밀번호를 전송한다. 성공하면 기존 Redis 세션도 종료한다.
