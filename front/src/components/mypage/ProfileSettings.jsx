@@ -1,7 +1,12 @@
 'use no memo';
 
-import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
-import { getEmailError } from '../../utils/userValidation';
+import {
+  getPasswordError,
+  PASSWORD_GUIDE,
+  getEmailError,
+  PASSWORD_MAX_LENGTH,
+  USER_INPUT_LIMITS,
+} from '../../utils/userValidation';
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -210,7 +215,7 @@ export function ProfileSettings() {
           error={fieldErrors.nickname}
           label="닉네임"
           value={nickname}
-          maxLength={50}
+          maxLength={USER_INPUT_LIMITS.nickname}
           onChange={(event) => setNickname(event.target.value)}
         />
         <Button onClick={handleNickname}>닉네임 저장</Button>
@@ -220,7 +225,7 @@ export function ProfileSettings() {
           label="새 이메일"
           type="email"
           value={email}
-          maxLength={255}
+          maxLength={USER_INPUT_LIMITS.email}
           onChange={(event) => {
             setEmail(event.target.value);
             setVerifiedEmail(null);
@@ -234,7 +239,7 @@ export function ProfileSettings() {
           label="이메일 인증번호"
           value={code}
           inputMode="numeric"
-          maxLength={6}
+          maxLength={USER_INPUT_LIMITS.verificationCode}
           onChange={(event) => setCode(event.target.value)}
         />
         <Button onClick={handleVerify}>인증 확인</Button>
@@ -248,6 +253,7 @@ export function ProfileSettings() {
           type="password"
           autoComplete="current-password"
           value={currentPassword}
+          maxLength={PASSWORD_MAX_LENGTH}
           onChange={(event) => setCurrentPassword(event.target.value)}
         />
         <TextField
@@ -259,6 +265,7 @@ export function ProfileSettings() {
           aria-describedby="profile-password-guide"
           autoComplete="new-password"
           value={newPassword}
+          maxLength={PASSWORD_MAX_LENGTH}
           onChange={(event) => setNewPassword(event.target.value)}
         />
         <p id="profile-password-guide" className="small muted">
@@ -270,6 +277,7 @@ export function ProfileSettings() {
           type="password"
           autoComplete="new-password"
           value={confirmPassword}
+          maxLength={PASSWORD_MAX_LENGTH}
           onChange={(event) => setConfirmPassword(event.target.value)}
         />
         <Button onClick={handlePassword}>비밀번호 변경</Button>
@@ -316,6 +324,7 @@ export function ProfileSettings() {
             type="password"
             autoComplete="current-password"
             value={deletePassword}
+            maxLength={PASSWORD_MAX_LENGTH}
             onChange={(event) => setDeletePassword(event.target.value)}
             disabled={Boolean(pending)}
           />
