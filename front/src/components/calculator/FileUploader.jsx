@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Button } from '../common/index';
 import { saveInitialTaxRows, saveTaxReview, uploadTaxPdfApi } from '../../api/taxApi';
-import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
+import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../stores/useTaxStore';
 import { parseDeductedTaxRate, parseWon } from '../../utils/transactionAmount';
 
 function normalizeDate(value) {

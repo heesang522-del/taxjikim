@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { create } from 'zustand';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 import { getSimulationScenarios, saveSimulationScenario, deleteSimulationScenario } from '../api/taxApi';
 
 // DB 조회 결과를 화면끼리 공유하는 메모리 상태다. persist나 브라우저 저장소는 사용하지 않는다.

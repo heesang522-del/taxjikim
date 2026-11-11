@@ -7,7 +7,7 @@ import PostForm from '../components/post/PostForm';
 import NoticeCard from '../components/post/NoticeCard';
 import { ROUTES } from '../utils/routes';
 import { POST_WRITE_TABS } from '../data/content';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 
 export function PostCreatePage() {
   const [params] = useSearchParams();

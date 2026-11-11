@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { Button, Card, KeyValue } from '../common/index';
 import { getTaxReviewSignature, updateTaxInput } from '../../api/taxApi';
-import { useTax, useTaxStore } from '../../store/useTaxStore';
+import { useTax, useTaxStore } from '../../stores/useTaxStore';
 import { taxProfileNumbers } from '../../utils/transactionAmount';
 import { getTaxInputSummary } from '../../utils/taxInputSummary';
 

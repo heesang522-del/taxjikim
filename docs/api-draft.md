@@ -72,6 +72,8 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 | PUT | `/api/v1/users/me/profile-image` | 폼 `deleteProfile`, 선택 파일 `profile` |
 | DELETE | `/api/v1/users/me` | JSON `currentPassword` |
 
+`GET /api/v1/users/me`는 `MyProfileResponseDto`로 `userId`, `loginId`, `email`, `nickname`, `profileImageUrl`, `userRole`만 반환한다. 서버 내부 인증용 `UserDto`와 `CustomUserDetails`는 유지하며 이름·계정 상태·가입/수정/최근 로그인 일시는 이 응답에 포함하지 않는다.
+
 회원 고유 번호는 `userId`, 로그인 아이디는 `loginId`이다. 가입 성공의 `data`는 생성된 회원 고유 번호이다.
 회원가입은 이름·닉네임·로그인 아이디·비밀번호·이메일을 전송하며 생년월일은 수집하지 않는다. 프로필 이미지가 있으면 multipart 필드 `profile`로 전송한다. 삭제한 전화번호·직군·신고 알림 컬럼은 전송하지 않는다.
 아이디는 영문 대소문자·숫자·밑줄 4~20자로 제한한다. 이메일은 최대 255자이며 한글·내부 공백을 허용하지 않고 `주소@도메인.접미사` 형식을 검사한다. 둘 다 앞뒤 공백을 제거하고 대소문자는 유지한다.
@@ -80,6 +82,7 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 
 이메일별 인증번호 발송은 1분 간격으로 제한한다(`429 VERIFICATION_RESEND_TOO_SOON`). 번호당 5회 오입력 시 해당 번호를 폐기하고 다섯 번째 요청부터 `429 VERIFICATION_ATTEMPTS_EXCEEDED`를 반환한다. 실패 횟수는 응답에 표시하지 않으며, 새 번호 발급 성공 시 초기화한다.
 이메일 변경은 새 이메일의 서버 인증 완료 기록이 필요하며 성공한 뒤 해당 기록을 소비한다.
+닉네임 변경은 앞뒤 공백을 제거한 후 검사한다. 현재 닉네임과 같으면 `400 NICKNAME_UNCHANGED`, 다른 회원과 중복되면 `409 NICKNAME_DUPLICATE`를 반환하며, 안내는 `error.message`로 전달한다.
 탈퇴는 현재 비밀번호 확인 후 users 행을 즉시 삭제하고 로그인 세션과 인증 쿠키를 정리한다. 연결된 FK가 삭제를 막으면 409 오류를 반환한다. 탈퇴 대기 복구와 30일 정리 스케줄러는 제거했다. FK의 삭제 정책은 별도 검토 대상이다.
 중복 검사 `data`는 중복이면 `true`, 사용 가능하면 `false`이다.
 기존 `/user` 폼·JSP 컨트롤러 처리를 JSON API로 옮겼다. 신규 React 화면은 만들지 않는다.
@@ -118,6 +121,7 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 | 메서드 | 경로 | 요청 |
 | --- | --- | --- |
 | GET | `/api/v1/chat/rooms/me` | 인증된 회원. 열린 방(WAITING/IN_PROGRESS)이 없으면 `data: null` |
+| GET | `/api/v1/chat/rooms/me/history` | 인증된 본인의 종료(CLOSED) 상담 목록. 종료일 최신순. `roomId`, `lastMessage`, `createdAt`, `closedAt` 반환 |
 | POST | `/api/v1/chat/messages` | JSON `content`. 열린 방이 없으면 새 대기 방을 만들고 그 방에 저장 |
 | GET | `/api/v1/chat/rooms/{roomId}/messages` | 본인 방만 조회 가능 |
 | PATCH | `/api/v1/chat/rooms/{roomId}/messages/read` | 상대(관리자)가 보낸 메시지를 읽음 처리 |

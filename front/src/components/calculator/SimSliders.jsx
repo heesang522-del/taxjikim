@@ -4,7 +4,7 @@
 import { Button, Card } from '../common/index';
 import { useScenarios } from '../../utils/useScenarios';
 import { man, won } from '../../utils/format';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 import { MAX_SCENARIOS } from '../../data/options';
 
 const FIELDS = [

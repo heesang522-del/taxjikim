@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { Button, Modal, TextAreaField } from '../common/index';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 
 /** 게시글·댓글 신고 사유 입력 창. onSubmit(reason)은 사유가 있을 때만 부른다. */
 export default function ReportModal({ targetLabel, onSubmit, onClose }) {

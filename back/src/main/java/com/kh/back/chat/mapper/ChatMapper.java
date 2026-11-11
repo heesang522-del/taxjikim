@@ -1,6 +1,7 @@
 package com.kh.back.chat.mapper;
 
 import com.kh.back.chat.dto.ChatMessageDto;
+import com.kh.back.chat.dto.ChatHistoryRoomDto;
 import com.kh.back.chat.dto.ChatRoomDto;
 import com.kh.back.chat.dto.ChatRoomSummaryDto;
 import org.apache.ibatis.annotations.Mapper;
@@ -16,6 +17,8 @@ public interface ChatMapper {
 
     // 회원의 열린 방(WAITING/IN_PROGRESS) 1건 조회
     ChatRoomDto findOpenRoomByUserId(@Param("userId") Long userId);
+
+    List<ChatHistoryRoomDto> findClosedRoomsByUserId(@Param("userId") Long userId);
 
     // findOpenRoomByUserId와 같지만 FOR UPDATE로 조회. 동시 생성 유니크 제약 위반을 잡은 뒤 재조회할 때 쓴다
     ChatRoomDto findOpenRoomByUserIdForUpdate(@Param("userId") Long userId);

@@ -2,11 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
-import { getPasswordError } from '../../utils/passwordValidation';
-import { getEmailError, getLoginIdError } from '../../utils/userValidation';
+import {
+  getPasswordError,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_GUIDE,
+  getEmailError,
+  getLoginIdError,
+  USER_INPUT_LIMITS,
+  LOGIN_ID_MIN_LENGTH,
+} from '../../utils/userValidation';
 import { Button, TextField } from '../common/index';
 import { SignupProfileImage } from './SignupProfileImage';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 import {
   checkLoginId,
   checkNickname,
@@ -82,7 +90,9 @@ export function SignupForm({ onDone }) {
     return (event) => {
       // 조합 입력·붙여넣기도 허용 문자만 남기고, 화면 입력값과 React 상태를 함께 맞춘다.
       const value =
-        key === 'loginId' ? event.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 20) : event.target.value;
+        key === 'loginId'
+          ? event.target.value.replace(/[^a-zA-Z0-9_]/g, '').slice(0, USER_INPUT_LIMITS.loginId)
+          : event.target.value;
       if (key === 'loginId') {
         event.target.value = value;
         // 막힌 문자만 입력했다면 실제 아이디는 그대로이므로 기존 중복 확인을 유지한다.
@@ -238,8 +248,8 @@ export function SignupForm({ onDone }) {
       setError('인증번호를 다시 받아 주세요.');
       return;
     }
-    if (!/^\d{6}$/.test(form.code.trim())) {
-      setError('인증번호 6자리를 입력하세요.');
+    if (form.code.trim().length !== USER_INPUT_LIMITS.verificationCode || !/^\d+$/.test(form.code.trim())) {
+      setError(`인증번호 ${USER_INPUT_LIMITS.verificationCode}자리를 입력하세요.`);
       return;
     }
     setPending('verify');
@@ -437,8 +447,8 @@ export function SignupForm({ onDone }) {
                 onBeforeInput={handleLoginIdBeforeInput}
                 onCompositionEnd={handleChange('loginId')}
                 autoComplete="username"
-                placeholder="영문·숫자·_ 4~20자"
-                maxLength={20}
+                placeholder={`영문·숫자·_ ${LOGIN_ID_MIN_LENGTH}~${USER_INPUT_LIMITS.loginId}자`}
+                maxLength={USER_INPUT_LIMITS.loginId}
                 required
               />
               <Button onClick={() => handleDuplicateCheck('loginId')} disabled={isDuplicateConfirmed('loginId')}>
@@ -450,17 +460,18 @@ export function SignupForm({ onDone }) {
               id="su-password"
               name="password"
               error={fieldErrors.password}
-              label="비밀번호 (8~20자)"
+              label={`비밀번호 (${PASSWORD_MIN_LENGTH}~${PASSWORD_MAX_LENGTH}자)`}
               type="password"
               value={form.password}
               onChange={handleChange('password')}
+              maxLength={PASSWORD_MAX_LENGTH}
               autoComplete="new-password"
               placeholder="영문·숫자·특수문자 조합, 공백 없이"
               aria-describedby="su-password-guide"
               required
             />
             <p id="su-password-guide" className="small muted">
-              8~20자, 영문·숫자·특수문자(!@#$%^&*)를 각각 포함해주세요. 공백은 사용할 수 없어요.
+              {PASSWORD_GUIDE}
             </p>
             <TextField
               id="su-passwordConfirm"
@@ -470,6 +481,7 @@ export function SignupForm({ onDone }) {
               type="password"
               value={form.passwordConfirm}
               onChange={handleChange('passwordConfirm')}
+              maxLength={PASSWORD_MAX_LENGTH}
               autoComplete="new-password"
               placeholder="위 비밀번호를 다시 입력해주세요"
               required
@@ -481,7 +493,7 @@ export function SignupForm({ onDone }) {
               label="이름"
               value={form.name}
               onChange={handleChange('name')}
-              maxLength={50}
+              maxLength={USER_INPUT_LIMITS.name}
               autoComplete="name"
               placeholder="이름을 입력해주세요"
               required
@@ -497,9 +509,9 @@ export function SignupForm({ onDone }) {
                 readOnly={emailLocked}
                 aria-describedby={emailLocked ? 'su-email-status' : undefined}
                 onChange={handleChange('email')}
-                maxLength={255}
+                maxLength={USER_INPUT_LIMITS.email}
                 autoComplete="email"
-                placeholder="예: creator@example.com (최대 255자)"
+                placeholder={`예: creator@example.com (최대 ${USER_INPUT_LIMITS.email}자)`}
                 required
               />
               <Button onClick={handleSendCode} disabled={verified}>
@@ -537,7 +549,7 @@ export function SignupForm({ onDone }) {
                     inputMode="numeric"
                     autoComplete="one-time-code"
                     placeholder="메일로 받은 숫자 6자리"
-                    maxLength={6}
+                    maxLength={USER_INPUT_LIMITS.verificationCode}
                     disabled={verified}
                   />
                   <Button onClick={handleVerifyCode} disabled={verified}>
@@ -566,7 +578,7 @@ export function SignupForm({ onDone }) {
                 placeholder="게시판에서 사용할 닉네임 (최대 50자)"
                 value={form.nickname}
                 onChange={handleChange('nickname')}
-                maxLength={50}
+                maxLength={USER_INPUT_LIMITS.nickname}
                 required
               />
               <Button onClick={() => handleDuplicateCheck('nickname')} disabled={isDuplicateConfirmed('nickname')}>

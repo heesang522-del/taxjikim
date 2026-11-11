@@ -4,9 +4,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Card, Pill, Tabs } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
-import { useAuth } from '../store/useAuthStore';
-import { useAdminChat } from '../store/useChatStore';
-import { useToast } from '../store/useToastStore';
+import { useAuth } from '../stores/useAuthStore';
+import { useAdminChat } from '../stores/useChatStore';
+import { useToast } from '../stores/useToastStore';
 import { formatClockTime, formatDateTime, formatWaiting } from '../utils/chat';
 
 const STATUSES = ['WAITING', 'IN_PROGRESS', 'CLOSED'];

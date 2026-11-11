@@ -4,9 +4,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Icon } from '../common/index';
 import { ROUTES } from '../../utils/routes';
-import { useAuth } from '../../store/useAuthStore';
-import { useChat, useMemberChat } from '../../store/useChatStore';
-import { useToast } from '../../store/useToastStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useChat, useMemberChat } from '../../stores/useChatStore';
+import { useToast } from '../../stores/useToastStore';
 import { BUSINESS_HOURS_TEXT, formatClockTime, isBusinessHours } from '../../utils/chat';
 
 /** 모든 화면 우하단에 떠 있는 채팅 상담 버튼과 패널. 회원 전용이며 관리자는 상담 관리 화면을 쓴다. */

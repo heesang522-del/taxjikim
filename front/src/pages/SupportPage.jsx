@@ -6,9 +6,9 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Segmented, Tabs, TextAreaField, TextField } from '../components/common/index';
 import { HELP_TABS } from '../data/content';
 import { ROUTES } from '../utils/routes';
-import { useToast } from '../store/useToastStore';
-import { useAuth } from '../store/useAuthStore';
-import { useInquiry } from '../store/useInquiryStore';
+import { useToast } from '../stores/useToastStore';
+import { useAuth } from '../stores/useAuthStore';
+import { useInquiry } from '../stores/useInquiryStore';
 import { toDateLabel } from '../utils/format';
 import { createPost, getFaqsPage, getInquiriesPage, getLibraryItems } from '../api/post.js';
 

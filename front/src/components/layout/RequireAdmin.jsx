@@ -3,7 +3,7 @@
 
 import { Button, Card } from '../common/index';
 import { ROUTES } from '../../utils/routes';
-import { useAuth } from '../../store/useAuthStore';
+import { useAuth } from '../../stores/useAuthStore';
 
 /** 관리자 계정만 안쪽 화면을 볼 수 있게 막는다. 비로그인·일반 회원에게는 안내만 보여준다. */
 export default function RequireAdmin({ children }) {

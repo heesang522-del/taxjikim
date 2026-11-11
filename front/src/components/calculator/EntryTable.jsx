@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Button, Card, Icon } from '../common/index';
 import { deleteTransaction, getTaxReviewSignature, saveInitialTaxRows, saveTaxReview } from '../../api/taxApi';
-import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
+import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../stores/useTaxStore';
 import { getTransactionCashAmount } from '../../utils/taxInputSummary';
 import {
   INCOME_TRANSACTION_CATEGORIES,

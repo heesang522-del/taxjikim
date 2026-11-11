@@ -2,7 +2,7 @@
 'use no memo';
 
 import { useMemo } from 'react';
-import { useTax } from '../store/useTaxStore';
+import { useTax } from '../stores/useTaxStore';
 import { calcTax, calcSimple } from './tax';
 
 /** 현재 입력 기준 계산 결과. opts를 넘기면 시뮬레이션 가정값을 반영한다. */

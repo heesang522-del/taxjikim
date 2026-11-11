@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ROUTES } from './routes';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 import {
   getNotifications,
   getUnreadNotificationCount,

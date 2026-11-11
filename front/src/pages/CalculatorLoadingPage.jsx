@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Card, Icon } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
-import { useTax } from '../store/useTaxStore';
+import { useTax } from '../stores/useTaxStore';
 
 const STEPS = ['월별 수입·지출 집계', '연말까지 10~12월 예측', '소득금액·과세표준 계산', '세율 적용과 세액공제', '신고 방식별 비교 계산'];
 

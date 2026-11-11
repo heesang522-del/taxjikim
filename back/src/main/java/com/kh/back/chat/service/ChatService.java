@@ -2,6 +2,7 @@ package com.kh.back.chat.service;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatHistoryRoomDto;
 import com.kh.back.chat.dto.ChatRoomPageDto;
 import com.kh.back.chat.dto.ChatRoomSummaryDto;
 
@@ -14,6 +15,8 @@ public interface ChatService {
 
     // 회원의 열린 방(WAITING/IN_PROGRESS) 조회. 새로 만들지 않으며 없으면 null
     ChatRoomDto findOpenRoom(Long userId);
+
+    List<ChatHistoryRoomDto> getClosedRooms(Long userId);
 
     // 방에 메시지를 저장. 빈 내용 검증과 방 소유자(회원 또는 배정 관리자) 검증을 거친다
     ChatMessageDto sendMessage(Long roomId, Long senderId, String content);

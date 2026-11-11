@@ -5,7 +5,7 @@ import { Button, Card, DataTable, Icon } from '../common/index';
 import { man } from '../../utils/format';
 import { useScenarios } from '../../utils/useScenarios';
 import { MAX_SCENARIOS } from '../../data/options';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 
 export function ScenarioTable({ taxInputId, onLoad }) {
   const { scenarios, remove, isLoading, errorMessage, deletingId } = useScenarios(taxInputId);

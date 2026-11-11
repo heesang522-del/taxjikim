@@ -7,9 +7,9 @@ import { Button, Card, Segmented } from '../common/index';
 
 import { INCOME_TRANSACTION_CATEGORIES, EXPENSE_TRANSACTION_CATEGORIES } from '../../data/transactionCategories';
 
-import { useTax, useTaxStore } from '../../store/useTaxStore';
+import { useTax, useTaxStore } from '../../stores/useTaxStore';
 
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 import FileUploader from './FileUploader';
 
 import {

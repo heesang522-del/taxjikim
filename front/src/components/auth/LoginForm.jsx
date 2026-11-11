@@ -4,7 +4,8 @@
 import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Button, TextField } from '../common/index';
-import { useAuth } from '../../store/useAuthStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { USER_INPUT_LIMITS, PASSWORD_MAX_LENGTH } from '../../utils/userValidation';
 
 // 로그인 성공 처리와 계정 화면 이동을 연결하고, 실패 안내는 폼 아래에 표시
 export function LoginForm({ onSuccess, onTab }) {
@@ -77,6 +78,7 @@ export function LoginForm({ onSuccess, onTab }) {
       <TextField
         id="lid"
         label="아이디"
+        maxLength={USER_INPUT_LIMITS.loginId}
         value={id}
         onChange={(e) => {
           setId(e.target.value);
@@ -89,6 +91,7 @@ export function LoginForm({ onSuccess, onTab }) {
         id="lpw"
         label="비밀번호"
         type="password"
+        maxLength={PASSWORD_MAX_LENGTH}
         value={pw}
         onChange={(e) => setPw(e.target.value)}
         autoComplete="current-password"

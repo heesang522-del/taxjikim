@@ -33,6 +33,10 @@ export function getMyRoom() {
   return requestChat({ url: '/chat/rooms/me' });
 }
 
+export function getMyChatHistory() {
+  return requestChat({ url: '/chat/rooms/me/history' });
+}
+
 // 메시지 전송. 열린 방이 없으면 서버가 대기 방을 새로 만든다.
 export function sendMemberMessage(content) {
   return requestChat({ url: '/chat/messages', method: 'POST', data: { content } });

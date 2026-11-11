@@ -2,17 +2,27 @@
 'use no memo';
 
 import { useEffect, useState } from 'react';
-import { Button, Card, DataTable } from '../components/common/index';
+import { useSearchParams } from 'react-router-dom';
+import { Button, Card, DataTable, Tabs } from '../components/common/index';
 import { getSavedTaxResults } from '../api/taxApi';
 import { ROUTES } from '../utils/routes';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 import { ProfileSettings } from '../components/mypage/ProfileSettings';
 import { AnnualTaxComparison } from '../components/mypage/AnnualTaxComparison';
-import { useChat } from '../store/useChatStore';
+import { ConsultationHistory } from '../components/mypage/ConsultationHistory';
 
 export default function MyPage() {
+  const [params, setParams] = useSearchParams();
+  const activeTab = params.get('tab') === 'activity' ? 'activity' : 'settings';
+  function handleTabChange(tab) {
+    // 선택한 화면을 주소에 남겨 새로고침과 뒤로가기에도 같은 탭을 표시한다.
+    setParams((previous) => {
+      const next = new URLSearchParams(previous);
+      next.set('tab', tab);
+      return next;
+    });
+  }
   const { loggedIn, authStatus, userId } = useAuth();
-  const { setOpen: openChat } = useChat();
   const [savedResults, setSavedResults] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
@@ -81,34 +91,37 @@ export default function MyPage() {
   ];
 
   return (
-    <div className="grid g-side" style={{ alignItems: 'start' }}>
-      <div className="grid" style={{ minWidth: 0 }}>
-        <AnnualTaxComparison savedResults={savedResults} isLoading={isLoading} errorMessage={errorMessage} />
-        <Card title="저장한 분석 결과" icon="calculator">
-          {isLoading ? (
-            <p className="state-msg">저장한 분석 결과를 불러오고 있습니다.</p>
-          ) : errorMessage ? (
-            <p role="alert">{errorMessage}</p>
-          ) : savedResults.length === 0 ? (
-            <>
-              <p className="state-msg">저장한 분석 결과가 없습니다.</p>
-              <Button to={ROUTES.calcInput}>세금 계산하기</Button>
-            </>
-          ) : (
-            <DataTable columns={columns} rows={savedResults} rowKey={(row) => row.taxInputId} />
-          )}
-        </Card>
-        <Card title="상담 내역" icon="messageSquare">
-          {/* 지난 상담 목록 조회는 별도 작업으로 남겨두고, 현재 진행 중인 상담은 채팅 패널에서 바로 이어서 할 수 있다. */}
-          <p className="state-msg">
-            지난 상담 내역 보기는 준비 중입니다. 진행 중인 상담은 채팅 상담에서 이어서 볼 수 있어요.
-          </p>
-          <div style={{ marginTop: 12 }}>
-            <Button onClick={() => openChat(true)}>상담하기</Button>
-          </div>
-        </Card>
-      </div>
-      <ProfileSettings />
+    <div className="grid" style={{ minWidth: 0 }}>
+      <Tabs
+        tabs={[
+          { id: 'settings', label: '회원정보 설정' },
+          { id: 'activity', label: '이용 내역' },
+        ]}
+        active={activeTab}
+        onChange={handleTabChange}
+      />
+      {activeTab === 'activity' ? (
+        <div className="grid" style={{ minWidth: 0 }}>
+          <AnnualTaxComparison savedResults={savedResults} isLoading={isLoading} errorMessage={errorMessage} />
+          <Card title="저장한 분석 결과" icon="calculator">
+            {isLoading ? (
+              <p className="state-msg">저장한 분석 결과를 불러오고 있습니다.</p>
+            ) : errorMessage ? (
+              <p role="alert">{errorMessage}</p>
+            ) : savedResults.length === 0 ? (
+              <>
+                <p className="state-msg">저장한 분석 결과가 없습니다.</p>
+                <Button to={ROUTES.calcInput}>세금 계산하기</Button>
+              </>
+            ) : (
+              <DataTable columns={columns} rows={savedResults} rowKey={(row) => row.taxInputId} />
+            )}
+          </Card>
+          <ConsultationHistory />
+        </div>
+      ) : (
+        <ProfileSettings />
+      )}
     </div>
   );
 }

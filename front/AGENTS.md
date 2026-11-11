@@ -41,7 +41,7 @@
 src/
   mocks/       # mock JSON
   api/         # 데이터 접근 함수. 화면은 여기만 호출
-  store/       # zustand
+  stores/      # zustand
   pages/
   components/
 docs/
@@ -60,5 +60,5 @@ docs/
 - api 함수를 추가·변경하면 `docs/api-draft.md`를 갱신한다.
 
 ## docs/model-card.md
-화면을 추가·변경할 때마다 갱신한다. 사용자가 확정한 내용만 기록하고, 나머지는 `미정`으로 둔다.
+모델 입력·출력·결과 해석 등 모델 관련 화면의 요구사항이 바뀔 때만 갱신한다. 일반 UI·스타일·인증 수정은 제외한다. 사용자가 확정한 내용만 기록하고, 나머지는 `미정`으로 둔다.
 - 작성 양식은 `docs/model-card-template.md`에 있다. 모델 카드를 작성·갱신할 때만 읽는다. 기존 모델 카드의 다른 내용은 유지한다.

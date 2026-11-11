@@ -15,7 +15,17 @@ import java.util.UUID;
 @Slf4j
 @Component
 public class FileUtil {
-    private static final Path UPLOAD_BASE_DIR = Path.of("uploads").toAbsolutePath().normalize();
+    private static final Path UPLOAD_BASE_DIR = resolveUploadBaseDirectory();
+
+    private static Path resolveUploadBaseDirectory() {
+        Path workingDirectory = Path.of("").toAbsolutePath().normalize();
+        Path backendDirectory = workingDirectory.resolve("back");
+        // 프로젝트 루트에서 실행해도 back에서 실행해도 같은 업로드 폴더를 사용한다.
+        if (Files.isRegularFile(backendDirectory.resolve("build.gradle"))) {
+            return backendDirectory.resolve("uploads");
+        }
+        return workingDirectory.resolve("uploads");
+    }
 
     public static Path getUploadDirectory(String subDir) {
         Path directory = UPLOAD_BASE_DIR.resolve(subDir).normalize();

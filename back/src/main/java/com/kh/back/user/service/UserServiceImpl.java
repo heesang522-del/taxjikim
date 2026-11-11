@@ -10,6 +10,7 @@ import com.kh.back.common.validation.UserInputValidator;
 import com.kh.back.user.dto.UserDto;
 import com.kh.back.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -110,11 +111,31 @@ public class UserServiceImpl implements UserService {
     @Override
     public void updateNickname(String loginId, String nickname) {
         InputValidator.requireText("nickname", nickname);
+        nickname = nickname.trim();
         InputValidator.requireMaxLength("nickname", nickname, 50);
+        UserDto currentUser = userMapper.findByLoginId(loginId);
+        if (currentUser == null) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "회원 정보를 찾을 수 없습니다.");
+        }
+        // 본인의 현재 닉네임은 다른 회원과의 중복과 구분해 변경하지 않는다.
+        if (nickname.equals(currentUser.getNickname())) {
+            throw new ApiException(HttpStatus.BAD_REQUEST, "NICKNAME_UNCHANGED",
+                    "현재 사용 중인 닉네임입니다. 다른 닉네임을 입력해주세요.");
+        }
+        if (userMapper.countByNickname(nickname) > 0) {
+            throw new ApiException(HttpStatus.CONFLICT, "NICKNAME_DUPLICATE",
+                    "이미 사용 중인 닉네임입니다.");
+        }
         UserDto updateDto = new UserDto();
         updateDto.setLoginId(loginId);
         updateDto.setNickname(nickname);
-        userMapper.updateUserFields(updateDto);
+        try {
+            userMapper.updateUserFields(updateDto);
+        } catch (DuplicateKeyException exception) {
+            // 중복 조회 직후 다른 회원이 먼저 저장한 경우에도 같은 안내를 반환한다.
+            throw new ApiException(HttpStatus.CONFLICT, "NICKNAME_DUPLICATE",
+                    "이미 사용 중인 닉네임입니다.");
+        }
         refreshSecurityContext(loginId);
     }
 

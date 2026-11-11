@@ -7,9 +7,9 @@ import { Button } from '../components/common/index';
 import PostForm from '../components/post/PostForm';
 import NoticeCard from '../components/post/NoticeCard';
 import { ROUTES } from '../utils/routes';
-import { useAuth } from '../store/useAuthStore';
-import { usePost } from '../store/usePostStore';
-import { useToast } from '../store/useToastStore';
+import { useAuth } from '../stores/useAuthStore';
+import { usePost } from '../stores/usePostStore';
+import { useToast } from '../stores/useToastStore';
 import { getPost } from '../api/post';
 
 // 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. PostDetailPage와 같은 구분 방식.

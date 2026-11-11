@@ -4,6 +4,17 @@
 
 <mapper namespace="com.kh.back.chat.mapper.ChatMapper">
 
+    <!-- 로그인한 본인의 종료 상담만 종료 시각 최신순으로 조회한다. -->
+    <select id="findClosedRoomsByUserId" resultType="com.kh.back.chat.dto.ChatHistoryRoomDto">
+        SELECT r.ROOM_ID, r.CREATED_AT, r.CLOSED_AT,
+               (SELECT m.CONTENT FROM CHAT_MESSAGES m
+                WHERE m.ROOM_ID = r.ROOM_ID
+                ORDER BY m.MESSAGE_ID DESC LIMIT 1) AS LAST_MESSAGE
+        FROM CHAT_ROOMS r
+        WHERE r.USER_ID = #{userId} AND r.STATUS = 'CLOSED'
+        ORDER BY r.CLOSED_AT DESC, r.ROOM_ID DESC
+    </select>
+
     <!-- 상담 방 생성. 관리자는 입장 시 별도로 배정하므로 여기서는 다루지 않는다. -->
     <insert id="insertRoom" parameterType="com.kh.back.chat.dto.ChatRoomDto"
             useGeneratedKeys="true" keyProperty="roomId">

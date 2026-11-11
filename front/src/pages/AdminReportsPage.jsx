@@ -5,8 +5,8 @@ import { Button, Card, DataTable, Pill } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
 import { useAllReports } from '../utils/useAllReports';
 import { resolveReport as resolveReportApi } from '../api/report';
-import { usePost } from '../store/usePostStore';
-import { useToast } from '../store/useToastStore';
+import { usePost } from '../stores/usePostStore';
+import { useToast } from '../stores/useToastStore';
 
 const snippet = (text, n = 50) => (text.length > n ? `${text.slice(0, n)}…` : text);
 

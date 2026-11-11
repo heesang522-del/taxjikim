@@ -1,11 +1,11 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
+import { getPasswordError, PASSWORD_GUIDE, PASSWORD_MAX_LENGTH, USER_INPUT_LIMITS } from '../../utils/userValidation';
 
 import { useEffect, useState } from 'react';
 import { Button, Icon, KeyValue, Modal, TextField } from '../common/index';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 import {
   sendAccountLookupCode,
   sendPasswordResetCode,
@@ -182,6 +182,7 @@ export function RecoveryForm({ mode, onTab }) {
           placeholder="영문·숫자·특수문자 조합, 공백 없이"
           aria-describedby="reset-password-guide"
           value={pw}
+          maxLength={PASSWORD_MAX_LENGTH}
           onChange={(e) => setPw(e.target.value)}
         />
         <p id="reset-password-guide" className="small muted">
@@ -192,6 +193,7 @@ export function RecoveryForm({ mode, onTab }) {
           label="새 비밀번호 확인"
           type="password"
           value={pw2}
+          maxLength={PASSWORD_MAX_LENGTH}
           onChange={(e) => setPw2(e.target.value)}
         />
         {error && (
@@ -217,6 +219,7 @@ export function RecoveryForm({ mode, onTab }) {
           error={fieldErrors[isId ? 'name' : 'loginId']}
           label={isId ? '이름' : '아이디'}
           value={first}
+          maxLength={isId ? USER_INPUT_LIMITS.name : USER_INPUT_LIMITS.loginId}
           onChange={handleIdentityChange(setFirst)}
           disabled={pending}
         />
@@ -228,6 +231,7 @@ export function RecoveryForm({ mode, onTab }) {
             type="email"
             placeholder="name@example.com"
             value={email}
+            maxLength={USER_INPUT_LIMITS.email}
             onChange={handleIdentityChange(setEmail)}
             disabled={pending}
           />
@@ -241,6 +245,7 @@ export function RecoveryForm({ mode, onTab }) {
           label="인증번호"
           placeholder="6자리"
           value={code}
+          maxLength={USER_INPUT_LIMITS.verificationCode}
           onChange={(e) => setCode(e.target.value)}
         />
         {sent && (
