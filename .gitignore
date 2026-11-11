@@ -171,11 +171,11 @@ workers
 
 # 업로드는 제외하고 현재 저장 위치의 기본 프로필 이미지 하나만 공유한다.
 **/uploads/
-!/uploads/
-/uploads/*
-!/uploads/profile/
-/uploads/profile/*
-!/uploads/profile/default-profile.svg
+!/back/uploads/
+/back/uploads/*
+!/back/uploads/profile/
+/back/uploads/profile/*
+!/back/uploads/profile/default-profile.svg
 /docs/mypage-consultation-history-design.md
 
 # PyInstaller 빌드 중간 파일과 배포 결과물

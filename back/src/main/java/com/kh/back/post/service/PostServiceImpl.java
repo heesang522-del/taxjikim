@@ -3,6 +3,7 @@ package com.kh.back.post.service;
 import com.kh.back.common.dto.ApiResponse;
 import com.kh.back.common.dto.PageMeta;
 import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.util.FileUtil;
 import com.kh.back.common.validation.PostValidator;
 import com.kh.back.notification.service.NotificationService;
 import com.kh.back.post.dto.ChunkDto;
@@ -34,8 +35,8 @@ public class PostServiceImpl implements PostService {
     private final NotificationService notificationService;
     private final PostViewTracker postViewTracker;
 
-    private final Path tempRoot = Path.of(System.getProperty("user.dir"), "uploads", "temp").toAbsolutePath().normalize();
-    private final Path uploadRoot = Path.of(System.getProperty("user.dir"), "uploads", "files").toAbsolutePath().normalize();
+    private final Path tempRoot = FileUtil.getUploadDirectory("temp");
+    private final Path uploadRoot = FileUtil.getUploadDirectory("files");
 
     // 목록 응답 한 페이지에 보여줄 글 수. 클라이언트가 바꿀 수 없는 고정값이라 상수로 둔다.
     private static final int PAGE_SIZE = 9;
