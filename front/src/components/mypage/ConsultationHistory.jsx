@@ -21,35 +21,60 @@ export function ConsultationHistory() {
   const { user } = useAuth();
   const [rooms, setRooms] = useState([]);
   const [openRoom, setOpenRoom] = useState(null);
+  const [openRoomError, setOpenRoomError] = useState('');
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingMessages, setLoadingMessages] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const [messagesError, setMessagesError] = useState('');
 
   useEffect(() => {
-    // 열린 상담은 안내에만 사용하고, 목록에는 본인의 종료 상담만 담는다.
+    // 두 조회를 독립적으로 처리해 한쪽 실패가 다른 영역의 표시를 막지 않게 한다.
+    setRooms([]);
+    setSelectedRoom(null);
+    setMessages([]);
+    setHistoryError('');
+    setMessagesError('');
     setLoading(true);
-    Promise.all([getMyRoom(), getMyChatHistory()])
-      .then(([current, history]) => {
-        setOpenRoom(current.data);
-        setRooms(history.data);
+    setOpenRoom(null);
+    setOpenRoomError('');
+    getMyRoom()
+      .then((result) => setOpenRoom(result.data))
+      .catch((error) => {
+        setOpenRoomError(error.status && error.message ? error.message : '진행 중인 상담을 확인하지 못했습니다.');
+      });
+    getMyChatHistory()
+      .then((result) => setRooms(result.data))
+      .catch((error) => {
+        setHistoryError(error.status && error.message ? error.message : '상담 내역을 불러오지 못했습니다.');
       })
       .finally(() => setLoading(false));
   }, [user?.userId]);
 
   function handleSelect(room) {
+    if (loadingMessages) return;
     // 기록 열람은 GET만 사용하며 읽음 갱신·상담 연결·메시지 전송은 하지 않는다.
     setSelectedRoom(room);
     setMessages([]);
+    setMessagesError('');
     setLoadingMessages(true);
     getMemberMessages(room.roomId)
       .then((result) => setMessages(result.data))
+      .catch((error) => {
+        setMessagesError(error.status && error.message ? error.message : '대화를 불러오지 못했습니다.');
+      })
       .finally(() => setLoadingMessages(false));
   }
 
   return (
     <Card title="상담 내역" icon="messageSquare">
       <HistoryLayout>
+        {openRoomError && (
+          <p className="history-error" role="alert">
+            {openRoomError}
+          </p>
+        )}
         {openRoom && (
           <div className="current-consultation" role="status">
             <Icon name="messageSquare" size={20} />
@@ -66,11 +91,15 @@ export function ConsultationHistory() {
           <aside className="history-sidebar" aria-label="종료된 상담 목록">
             <div className="history-list-title">
               <strong>종료된 상담</strong>
-              <span className="small muted">{rooms.length}건</span>
+              {!loading && !historyError && <span className="small muted">{rooms.length}건</span>}
             </div>
             <div className="history-list">
               {loading ? (
                 <p className="state-msg">상담 내역을 불러오는 중입니다.</p>
+              ) : historyError ? (
+                <p className="history-error" role="alert">
+                  {historyError}
+                </p>
               ) : rooms.length === 0 ? (
                 <p className="state-msg">종료된 상담이 없습니다.</p>
               ) : (
@@ -107,6 +136,10 @@ export function ConsultationHistory() {
                 <div className="history-messages" aria-busy={loadingMessages}>
                   {loadingMessages ? (
                     <p className="state-msg">대화를 불러오는 중입니다.</p>
+                  ) : messagesError ? (
+                    <p className="history-error" role="alert">
+                      {messagesError}
+                    </p>
                   ) : messages.length === 0 ? (
                     <p className="state-msg">저장된 메시지가 없습니다.</p>
                   ) : (
@@ -141,6 +174,11 @@ export function ConsultationHistory() {
 }
 
 const HistoryLayout = styled.div`
+  .history-error {
+    padding: 12px;
+    color: var(--danger);
+    font-size: 14px;
+  }
   .current-consultation {
     display: flex;
     align-items: center;
