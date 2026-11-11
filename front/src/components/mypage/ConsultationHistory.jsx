@@ -161,7 +161,7 @@ export function ConsultationHistory() {
               </>
             ) : (
               <div className="history-empty">
-                <Icon name="messageSquare" size={36} />
+                <Icon name="messageSquare" size={24} />
                 <h3>이전 상담을 확인해보세요</h3>
                 <p className="small muted">왼쪽 목록에서 상담을 선택해주세요.</p>
               </div>
@@ -174,6 +174,12 @@ export function ConsultationHistory() {
 }
 
 const HistoryLayout = styled.div`
+  font-size: 13px;
+
+  strong {
+    font-weight: 600;
+  }
+
   .history-error {
     padding: 12px;
     color: var(--danger);
@@ -213,7 +219,7 @@ const HistoryLayout = styled.div`
     padding: 20px 16px;
   }
   .history-list {
-    max-height: 500px;
+    max-height: 300px;
     overflow-y: auto;
     padding: 0 10px 12px;
   }
@@ -256,7 +262,7 @@ const HistoryLayout = styled.div`
     display: flex;
     flex-direction: column;
     min-width: 0;
-    min-height: 420px;
+    min-height: 280px;
   }
   .conversation-heading {
     display: flex;
@@ -267,7 +273,8 @@ const HistoryLayout = styled.div`
     border-bottom: 1px solid var(--border);
   }
   .conversation-heading h3 {
-    font-size: 17px;
+    font-size: 14px;
+    font-weight: 600;
     margin-bottom: 6px;
   }
   .readonly-label {
@@ -282,7 +289,7 @@ const HistoryLayout = styled.div`
     display: flex;
     flex-direction: column;
     gap: 20px;
-    height: 380px;
+    height: 260px;
     overflow-y: auto;
     padding: 24px 20px;
   }
@@ -306,7 +313,7 @@ const HistoryLayout = styled.div`
   }
   .history-message.mine p {
     background: var(--primary-bg);
-    color: var(--primary);
+    color: var(--text);
   }
   .conversation-footer {
     padding: 14px 20px;
@@ -317,13 +324,17 @@ const HistoryLayout = styled.div`
     display: grid;
     align-content: center;
     justify-items: center;
-    gap: 14px;
+    gap: 8px;
     flex: 1;
-    padding: 36px 20px;
+    padding: 24px 16px;
     text-align: center;
   }
   .history-empty > svg {
     color: var(--primary);
+  }
+  .history-empty h3 {
+    font-size: 14px;
+    font-weight: 500;
   }
   @media (max-width: 640px) {
     .history-panel {
