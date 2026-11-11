@@ -5,7 +5,6 @@ import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation
 
 import { useEffect, useState } from 'react';
 import { Button, Icon, KeyValue, Modal, TextField } from '../common/index';
-import { maskEmail, maskId } from '../../utils/format';
 import { useToast } from '../../store/useToastStore';
 import {
   sendAccountLookupCode,
@@ -25,7 +24,6 @@ export function RecoveryForm({ mode, onTab }) {
   const toast = useToast();
 
   const [foundId, setFoundId] = useState('');
-  const [foundEmail, setFoundEmail] = useState('');
   const isId = mode === 'id';
   const [first, setFirst] = useState('');
   const [email, setEmail] = useState('');
@@ -108,7 +106,6 @@ export function RecoveryForm({ mode, onTab }) {
       if (isId) {
         const result = await findLoginId(first.trim(), email.trim(), code.trim());
         setFoundId(result.data);
-        setFoundEmail(email.trim());
         setModal(true);
       } else {
         await verifyEmail(email.trim(), code.trim());
@@ -270,15 +267,20 @@ export function RecoveryForm({ mode, onTab }) {
             </div>
             <div style={{ width: '100%', textAlign: 'left' }}>
               <KeyValue label="아이디" mono={false}>
-                {maskId(foundId)}
-              </KeyValue>
-              <KeyValue label="가입 이메일" mono={false}>
-                {maskEmail(foundEmail)}
+                {foundId}
               </KeyValue>
             </div>
             <div className="grid" style={{ gap: 8, width: '100%' }}>
               <Button variant="primary" size="lg" autoFocus onClick={() => onTab?.('login')}>
                 로그인하기
+              </Button>
+              <Button
+                variant="soft"
+                size="lg"
+                style={{ border: '1px solid var(--primary-border)' }}
+                onClick={() => onTab?.('findpw')}
+              >
+                비밀번호 찾기
               </Button>
               <Button size="lg" onClick={() => setModal(false)}>
                 닫기
