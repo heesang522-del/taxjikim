@@ -279,9 +279,11 @@ public class ChatServiceImpl implements ChatService {
     }
 
     // 관리자 전용 API용 소유자 검증. 담당 관리자 본인의 방인지 확인한다.
+    // 단, ADMIN_ID가 아직 없는 방(회원이 WAITING 상태에서 바로 상담을 취소해 영원히 배정될 수 없게 된 방)은
+    // 특정 담당자가 없으므로 모든 관리자에게 열어준다.
     private ChatRoomDto requireAdminRoom(Long roomId, Long adminId) {
         ChatRoomDto room = requireRoom(roomId);
-        if (!adminId.equals(room.getAdminId())) {
+        if (room.getAdminId() != null && !adminId.equals(room.getAdminId())) {
             throw new ApiException(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "담당 관리자만 조회할 수 있습니다.");
         }
         return room;
