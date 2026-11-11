@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Card, Icon } from '../common/index';
-import { getMemberMessages, getMyChatHistory, getMyRoom } from '../../api/chat';
+import { getMemberMessages, getMyChatHistory } from '../../api/chat';
 import { useAuth } from '../../store/useAuthStore';
+import { useMemberRoomStore } from '../../store/useMemberRoomStore';
 
 function formatDate(value) {
   return value
@@ -20,8 +21,8 @@ function formatDate(value) {
 export function ConsultationHistory() {
   const { user } = useAuth();
   const [rooms, setRooms] = useState([]);
-  const [openRoom, setOpenRoom] = useState(null);
-  const [openRoomError, setOpenRoomError] = useState('');
+  const { room, roomError: openRoomError, loadRoom } = useMemberRoomStore();
+  const openRoom = room?.status === 'CLOSED' ? null : room;
   const [selectedRoom, setSelectedRoom] = useState(null);
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,27 +31,21 @@ export function ConsultationHistory() {
   const [messagesError, setMessagesError] = useState('');
 
   useEffect(() => {
-    // 두 조회를 독립적으로 처리해 한쪽 실패가 다른 영역의 표시를 막지 않게 한다.
+    // 열린 상담은 채팅창과 같은 상태·요청을 공유하고 종료 상담 목록만 별도로 조회한다.
     setRooms([]);
     setSelectedRoom(null);
     setMessages([]);
     setHistoryError('');
     setMessagesError('');
     setLoading(true);
-    setOpenRoom(null);
-    setOpenRoomError('');
-    getMyRoom()
-      .then((result) => setOpenRoom(result.data))
-      .catch((error) => {
-        setOpenRoomError(error.status && error.message ? error.message : '진행 중인 상담을 확인하지 못했습니다.');
-      });
+    loadRoom(user?.userId);
     getMyChatHistory()
       .then((result) => setRooms(result.data))
       .catch((error) => {
         setHistoryError(error.status && error.message ? error.message : '상담 내역을 불러오지 못했습니다.');
       })
       .finally(() => setLoading(false));
-  }, [user?.userId]);
+  }, [user?.userId, loadRoom]);
 
   function handleSelect(room) {
     if (loadingMessages) return;

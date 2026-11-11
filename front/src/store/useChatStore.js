@@ -23,6 +23,7 @@ import {
 } from '../api/chat';
 import { useChatSocket } from '../utils/useChatSocket';
 import { subscribeChatUnread } from '../utils/chatUnreadBus';
+import { useMemberRoomStore } from './useMemberRoomStore';
 
 const LIST_POLL_MS = 8000; // 관리자 상담 목록·대기 수: 실시간 알림 채널이 없어 주기적으로 다시 불러온다
 const ROOM_PAGE_SIZE = 10; // 상담 목록을 한 번에 불러오는 개수. 서버 기본값(10)과 맞춘다
@@ -40,7 +41,16 @@ export const useChat = () => useChatPanelStore();
  * active가 true인 동안만 연결하며(=실제로 그 화면을 보고 있는 동안), 연결돼 있으면 서버가 상대 메시지를 곧장 읽음 처리한다.
  * WebSocket은 보낸 사람 본인에게는 메시지를 되돌려주지 않으므로, 소켓으로 보낸 내 메시지는 화면에 직접 붙인다(낙관적 갱신).
  */
-function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, markRead, onRoomClosed, checkRoomClosed }) {
+function useRoomMessages({
+  roomId,
+  active,
+  myUserId,
+  fetchMessages,
+  sendRest,
+  markRead,
+  onRoomClosed,
+  checkRoomClosed,
+}) {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -126,7 +136,14 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
     if (sendText(content)) {
       setMessages((prev) => [
         ...prev,
-        { messageId: `local-${Date.now()}`, roomId, senderId: myUserId, content, isRead: false, createdAt: new Date().toISOString() },
+        {
+          messageId: `local-${Date.now()}`,
+          roomId,
+          senderId: myUserId,
+          content,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+        },
       ]);
       return;
     }
@@ -148,28 +165,19 @@ function useRoomMessages({ roomId, active, myUserId, fetchMessages, sendRest, ma
 
 /** 회원 채팅 위젯 전용 훅. open(패널 열림)이 true인 동안만 실시간 연결한다. */
 export function useMemberChat(open, myUserId, loggedIn) {
-  const [room, setRoom] = useState(null);
-  const [roomLoading, setRoomLoading] = useState(true);
-  const [roomError, setRoomError] = useState('');
+  const { room, setRoom, roomLoading, roomError, loadRoom: fetchRoom, resetRoom } = useMemberRoomStore();
   const [badgeCount, setBadgeCount] = useState(0);
 
-  const loadRoom = useCallback(
-    () =>
-      getMyRoom()
-        .then((result) => {
-          setRoom(result.data);
-          setRoomError(''); // 이전 시도가 실패해 남아 있던 에러를 지운다 — 안 그러면 재조회에 성공해도 옛 에러가 계속 보인다.
-        })
-        .catch((cause) => setRoomError(cause.message))
-        .finally(() => setRoomLoading(false)),
-    []
-  );
+  const loadRoom = useCallback(() => fetchRoom(myUserId, true), [fetchRoom, myUserId]);
 
   // 비회원은 어차피 401이 날 것을 알면서 호출할 필요가 없다. 로그인 전에는 방 조회 자체를 하지 않는다.
   useEffect(() => {
-    if (!loggedIn) return;
-    loadRoom();
-  }, [loggedIn, loadRoom]);
+    if (!loggedIn) {
+      resetRoom();
+      return;
+    }
+    fetchRoom(myUserId);
+  }, [loggedIn, myUserId, fetchRoom, resetRoom]);
 
   // 패널을 다시 열 때마다 방 상태(종료 여부 등)를 최신으로 확인한다.
   useEffect(() => {
@@ -188,7 +196,7 @@ export function useMemberChat(open, myUserId, loggedIn) {
   // 알아서 다시 불러오므로, 여기서는 방 상태만 CLOSED로 맞춰 안내문·종료 버튼이 즉시 반영되게 한다.
   const handleClosedByAdmin = useCallback(() => {
     setRoom((prev) => (prev ? { ...prev, status: 'CLOSED' } : prev));
-  }, []);
+  }, [setRoom]);
 
   // 재연결 시 방 상태를 다시 확인한다. getMyRoom()은 열린 방(WAITING/IN_PROGRESS)만 찾으므로,
   // 끊긴 동안 상대가 종료해 더 이상 열린 방이 없다면 이 방이 끊긴 사이에 종료된 것으로 본다.
@@ -223,7 +231,10 @@ export function useMemberChat(open, myUserId, loggedIn) {
       setBadgeCount(0);
       return undefined;
     }
-    const check = () => getMemberUnreadCount(activeRoomId).then((r) => setBadgeCount(r.data)).catch(() => {});
+    const check = () =>
+      getMemberUnreadCount(activeRoomId)
+        .then((r) => setBadgeCount(r.data))
+        .catch(() => {});
     // 방금까지 패널이 열려 있었다면(wasActive) 그 동안은 소켓이 메시지를 실시간으로 읽음 처리했으므로
     // 안읽은 수는 이미 0이다 — 다시 물어볼 필요 없다. 새로고침 등으로 패널이 처음부터 닫힌 채
     // 방을 발견한 경우에만(로그인 전에 쌓였을 수 있는 값이라 SSE로 못 받았으므로) 한 번 확인한다.
@@ -396,7 +407,11 @@ export function useAdminChat(myUserId) {
     }
     let active = true;
     Promise.all(
-      myRooms.map((r) => getAdminRoomUnreadCount(r.roomId).then((result) => [r.roomId, result.data]).catch(() => [r.roomId, 0]))
+      myRooms.map((r) =>
+        getAdminRoomUnreadCount(r.roomId)
+          .then((result) => [r.roomId, result.data])
+          .catch(() => [r.roomId, 0])
+      )
     ).then((pairs) => {
       if (active) setUnreadByRoom(Object.fromEntries(pairs));
     });
@@ -413,7 +428,9 @@ export function useAdminChat(myUserId) {
   const handleRoomClosedByOther = useCallback(() => {
     setNotice('회원이 상담을 종료했습니다.');
     if (selectedRoomId) {
-      getAdminRoom(selectedRoomId).then((result) => setSelectedRoomState(result.data)).catch(() => {});
+      getAdminRoom(selectedRoomId)
+        .then((result) => setSelectedRoomState(result.data))
+        .catch(() => {});
     }
     reloadList();
   }, [selectedRoomId, reloadList]);
@@ -503,7 +520,10 @@ export function useAdminChat(myUserId) {
 export function useWaitingCount() {
   const [count, setCount] = useState(0);
   useEffect(() => {
-    const check = () => getAdminWaitingCount().then((r) => setCount(r.data)).catch(() => {});
+    const check = () =>
+      getAdminWaitingCount()
+        .then((r) => setCount(r.data))
+        .catch(() => {});
     check();
     const timer = setInterval(check, LIST_POLL_MS);
     return () => clearInterval(timer);
