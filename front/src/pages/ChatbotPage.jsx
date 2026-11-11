@@ -12,6 +12,7 @@ import {
 import '../styles/global.css';
 
 const RELOAD_COOLDOWN_MS = 3000;
+const MAX_TITLE_LENGTH = 40;
 
 function formatDate(value, includeTime = false) {
   if (!value) return '';
@@ -286,7 +287,7 @@ export function ChatbotPage() {
     if (!titleEdit || busyRef.current) return;
 
     const title = titleEdit.title.trim();
-    if (!title || Array.from(title).length > 40) {
+    if (!title || titleEdit.exceedsLimit || Array.from(title).length > MAX_TITLE_LENGTH) {
       setTitleError('대화 이름은 1~40자로 입력해주세요.');
       return;
     }
@@ -531,10 +532,15 @@ export function ChatbotPage() {
                       aria-label="대화 이름"
                       aria-invalid={Boolean(titleError)}
                       value={titleEdit.title}
-                      maxLength={80}
                       disabled={busy}
                       onChange={(event) => {
-                        setTitleEdit({ ...titleEdit, title: event.target.value });
+                        const characters = Array.from(event.target.value);
+                        // 표시를 40자로 제한해도 초과 입력 여부는 저장 검증에 사용한다.
+                        setTitleEdit({
+                          ...titleEdit,
+                          title: characters.slice(0, MAX_TITLE_LENGTH).join(''),
+                          exceedsLimit: characters.length > MAX_TITLE_LENGTH,
+                        });
                         setTitleError('');
                       }}
                     />

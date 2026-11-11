@@ -220,6 +220,10 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
   color: var(--text);
 }
 
+.ai-chat-rename-form > [role='alert'] {
+  color: var(--danger);
+}
+
 .ai-chat-rename-form > div {
   display: flex;
   gap: 6px;
