@@ -19,6 +19,8 @@ public interface ChatbotService {
             CustomUserDetails principal
     );
 
+    ConversationResponse renameConversation(CustomUserDetails principal, Long conversationId, String title);
+
     List<MessageResponse> getMessages(
             CustomUserDetails principal,
             Long conversationId

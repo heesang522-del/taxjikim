@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   createConversation,
@@ -6,9 +6,13 @@ import {
   getChatbotUsage,
   getConversations,
   getMessages,
+  renameConversation,
   sendMessage,
 } from '../api/chatbotApi';
 import '../styles/global.css';
+
+const RELOAD_COOLDOWN_MS = 3000;
+const MAX_TITLE_LENGTH = 40;
 
 function formatDate(value, includeTime = false) {
   if (!value) return '';
@@ -46,7 +50,10 @@ export function ChatbotPage() {
   const [action, setAction] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [fieldError, setFieldError] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
+  const [unconfirmedConversations, setUnconfirmedConversations] = useState(new Set());
+  const [reloadCoolingDown, setReloadCoolingDown] = useState(false);
+  const [titleEdit, setTitleEdit] = useState(null);
+  const [titleError, setTitleError] = useState('');
 
   // DB에 저장되기 전의 질문과 중간 답변은 별도 상태로 관리한다.
   const [stream, setStream] = useState(null);
@@ -58,8 +65,12 @@ export function ChatbotPage() {
   const selectedIdRef = useRef(conversationId);
   const messageRequestRef = useRef(0);
   const streamAbortRef = useRef(null);
+  const unconfirmedQuestionsRef = useRef(new Map());
+  const reloadTimerRef = useRef(null);
 
   const busy = action !== '';
+  const hasPendingQuestion = messages.some((message) => message.role === 'USER' && message.status === 'PENDING');
+  const needsStatusCheck = unconfirmedConversations.has(conversationId);
   const selectedConversation = conversations.find((item) => item.conversationId === conversationId);
   const visibleStream = stream?.conversationId === conversationId ? stream : null;
 
@@ -69,6 +80,10 @@ export function ChatbotPage() {
     return () => {
       mountedRef.current = false;
       messageRequestRef.current += 1;
+      if (reloadTimerRef.current !== null) {
+        clearTimeout(reloadTimerRef.current);
+        reloadTimerRef.current = null;
+      }
 
       // 화면을 나가면 현재 SSE 연결을 정리한다.
       streamAbortRef.current?.abort();
@@ -111,17 +126,46 @@ export function ChatbotPage() {
     return () => {
       active = false;
     };
-  }, [reloadKey]);
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    const requestId = ++messageRequestRef.current;
-
     setMessages([]);
     setQuestion('');
     setFieldError('');
     setStream(null);
     composingRef.current = false;
+  }, [conversationId]);
+
+  const applyMessages = useCallback((targetId, nextMessages) => {
+    setMessages(nextMessages);
+    setStream((previous) => (previous?.conversationId === targetId ? null : previous));
+
+    const attempted = unconfirmedQuestionsRef.current.get(targetId);
+    if (!attempted || nextMessages.some((message) => message.role === 'USER' && message.status === 'PENDING')) return;
+
+    // 새로 확인된 완료 기록이 있으면 같은 질문을 다시 보내지 않도록 입력을 비운다.
+    const completed = nextMessages.some((message) =>
+      message.messageId > attempted.lastMessageId
+      && message.role === 'USER'
+      && message.content === attempted.text
+      && message.status === 'COMPLETED'
+    );
+    if (completed) {
+      setQuestion((previous) => previous.trim() === attempted.text ? '' : previous);
+      setErrorMessage('');
+    }
+
+    unconfirmedQuestionsRef.current.delete(targetId);
+    setUnconfirmedConversations((previous) => {
+      const next = new Set(previous);
+      next.delete(targetId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const requestId = ++messageRequestRef.current;
 
     if (!conversationId) {
       setMessagesLoading(false);
@@ -134,7 +178,7 @@ export function ChatbotPage() {
       .then((result) => {
         // 이전 대화의 늦은 응답이 현재 대화를 덮어쓰지 않게 한다.
         if (active && requestId === messageRequestRef.current) {
-          setMessages(result.data);
+          applyMessages(conversationId, result.data);
         }
       })
       .catch((cause) => {
@@ -151,7 +195,7 @@ export function ChatbotPage() {
     return () => {
       active = false;
     };
-  }, [conversationId, reloadKey]);
+  }, [applyMessages, conversationId]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'nearest' });
@@ -221,6 +265,52 @@ export function ChatbotPage() {
     }
   }
 
+  function handleStartRename(conversation) {
+    setTitleError('');
+    setTitleEdit({ conversationId: conversation.conversationId, title: conversation.title ?? '' });
+  }
+
+  function positionConversationMenu(event) {
+    const button = event.currentTarget;
+    const menu = button.nextElementSibling;
+    const bounds = button.getBoundingClientRect();
+
+    // 스크롤 영역 밖에서도 메뉴가 보이도록 버튼 위치를 기준으로 배치한다.
+    menu.style.setProperty('--menu-right', `${Math.max(8, window.innerWidth - bounds.right)}px`);
+    const opensUp = window.innerHeight - bounds.bottom < 112;
+    menu.style.setProperty('--menu-top', opensUp ? 'auto' : `${bounds.bottom + 4}px`);
+    menu.style.setProperty('--menu-bottom', opensUp ? `${window.innerHeight - bounds.top + 4}px` : 'auto');
+  }
+
+  async function handleRename(event) {
+    event.preventDefault();
+    if (!titleEdit || busyRef.current) return;
+
+    const title = titleEdit.title.trim();
+    if (!title || titleEdit.exceedsLimit || Array.from(title).length > MAX_TITLE_LENGTH) {
+      setTitleError('대화 이름은 1~40자로 입력해주세요.');
+      return;
+    }
+
+    if (!beginAction('renaming')) return;
+    setTitleError('');
+
+    try {
+      const result = await renameConversation(titleEdit.conversationId, title);
+      if (!mountedRef.current) return;
+
+      // 서버가 확인한 이름으로 목록과 선택된 대화의 제목을 갱신한다.
+      setConversations((previous) => previous.map((item) =>
+        item.conversationId === titleEdit.conversationId ? result.data : item
+      ));
+      setTitleEdit(null);
+    } catch (cause) {
+      if (mountedRef.current) setTitleError(cause.fields?.title ?? cause.message);
+    } finally {
+      finishAction();
+    }
+  }
+
   async function handleDelete(targetId) {
     if (!beginAction('deleting')) return;
 
@@ -243,27 +333,25 @@ export function ChatbotPage() {
     }
   }
 
-  async function refreshAfterQuestion(targetId) {
+  async function refreshConversation(targetId) {
     if (!mountedRef.current) return;
 
     const requestId = ++messageRequestRef.current;
 
-    // 성공과 실패 모두 DB 상태와 사용량을 다시 확인한다.
-    const results = await Promise.allSettled([getMessages(targetId), getChatbotUsage(), getConversations()]);
+    // 메시지 조회에서 만료된 질문이 정리될 수 있어 그 뒤에 사용량을 읽는다.
+    const [messageResult] = await Promise.allSettled([targetId ? getMessages(targetId) : null]);
+    if (!mountedRef.current) return;
+    const [usageResult, conversationResult] = await Promise.allSettled([getChatbotUsage(), getConversations()]);
 
     if (!mountedRef.current) return;
 
-    const [messageResult, usageResult, conversationResult] = results;
-
     if (
+      targetId &&
       messageResult.status === 'fulfilled' &&
       selectedIdRef.current === targetId &&
       requestId === messageRequestRef.current
     ) {
-      setMessages(messageResult.value.data);
-
-      // DB 기록을 가져온 뒤 임시 답변을 제거해 중복 표시를 방지한다.
-      setStream((previous) => (previous?.conversationId === targetId ? null : previous));
+      applyMessages(targetId, messageResult.value.data);
     }
 
     if (usageResult.status === 'fulfilled') {
@@ -274,7 +362,9 @@ export function ChatbotPage() {
       setConversations(conversationResult.value.data);
     }
 
-    const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason.message);
+    const errors = [messageResult, usageResult, conversationResult]
+      .filter((result) => result.status === 'rejected')
+      .map((result) => result.reason.message);
 
     if (errors.length > 0) {
       setErrorMessage((previous) => [...new Set([previous, ...errors].filter(Boolean))].join(' '));
@@ -284,7 +374,7 @@ export function ChatbotPage() {
   async function handleSubmit(event) {
     event.preventDefault();
 
-    if (busyRef.current || !conversationId || messagesLoading || usage?.remaining === 0) {
+    if (busyRef.current || !conversationId || messagesLoading || hasPendingQuestion || needsStatusCheck || usage?.remaining === 0) {
       return;
     }
 
@@ -353,6 +443,13 @@ export function ChatbotPage() {
       setErrorMessage(cause.message);
 
       if (selectedIdRef.current === targetId) {
+        if (cause.code === 'CHATBOT_REQUEST_STATUS_UNKNOWN' || cause.code === 'CHATBOT_REQUEST_IN_PROGRESS') {
+          unconfirmedQuestionsRef.current.set(targetId, {
+            text: message,
+            lastMessageId: messages.at(-1)?.messageId ?? 0,
+          });
+          setUnconfirmedConversations((previous) => new Set(previous).add(targetId));
+        }
         setFieldError(cause.fields?.message ?? '');
 
         // 일부 출력이 있어도 완료된 답변으로 표시하지 않는다.
@@ -360,7 +457,7 @@ export function ChatbotPage() {
       }
     } finally {
       try {
-        await refreshAfterQuestion(targetId);
+        await refreshConversation(targetId);
       } finally {
         if (streamAbortRef.current === controller) {
           streamAbortRef.current = null;
@@ -386,9 +483,21 @@ export function ChatbotPage() {
     event.currentTarget.form?.requestSubmit();
   }
 
-  function handleReload() {
-    if (busyRef.current) return;
-    setReloadKey((previous) => previous + 1);
+  async function handleReload() {
+    if (busyRef.current || loading || messagesLoading || reloadTimerRef.current !== null) return;
+    if (!beginAction('reloading')) return;
+
+    // 렌더링 전에 연속 클릭이 들어와도 타이머로 중복 조회를 막는다.
+    reloadTimerRef.current = setTimeout(() => {
+      reloadTimerRef.current = null;
+      setReloadCoolingDown(false);
+    }, RELOAD_COOLDOWN_MS);
+    setReloadCoolingDown(true);
+    try {
+      await refreshConversation(conversationId);
+    } finally {
+      finishAction();
+    }
   }
 
   return (
@@ -417,26 +526,84 @@ export function ChatbotPage() {
           <ul className="ai-chat-list">
             {conversations.map((conversation) => (
               <li key={conversation.conversationId} className="ai-chat-list-item">
-                <button
-                  type="button"
-                  className="ai-chat-conversation"
-                  aria-pressed={conversation.conversationId === conversationId}
-                  disabled={busy}
-                  onClick={() => handleSelectConversation(conversation.conversationId)}
-                >
-                  <span className="ai-chat-conversation-title">{conversation.title || '새 대화'}</span>
-                  <span className="small muted">{formatDate(conversation.updatedAt ?? conversation.createdAt)}</span>
-                </button>
+                {titleEdit?.conversationId === conversation.conversationId ? (
+                  <form className="ai-chat-rename-form" onSubmit={handleRename}>
+                    <input
+                      aria-label="대화 이름"
+                      aria-invalid={Boolean(titleError)}
+                      value={titleEdit.title}
+                      disabled={busy}
+                      onChange={(event) => {
+                        const characters = Array.from(event.target.value);
+                        // 표시를 40자로 제한해도 초과 입력 여부는 저장 검증에 사용한다.
+                        setTitleEdit({
+                          ...titleEdit,
+                          title: characters.slice(0, MAX_TITLE_LENGTH).join(''),
+                          exceedsLimit: characters.length > MAX_TITLE_LENGTH,
+                        });
+                        setTitleError('');
+                      }}
+                    />
+                    {titleError && <p className="small" role="alert">{titleError}</p>}
+                    <div>
+                      <button type="submit" disabled={busy}>
+                        {action === 'renaming' ? '저장 중...' : '저장'}
+                      </button>
+                      <button type="button" disabled={busy} onClick={() => setTitleEdit(null)}>취소</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      className="ai-chat-conversation"
+                      aria-pressed={conversation.conversationId === conversationId}
+                      disabled={busy}
+                      onClick={() => handleSelectConversation(conversation.conversationId)}
+                    >
+                      <span className="ai-chat-conversation-title">{conversation.title || '새 대화'}</span>
+                      <span className="small muted">{formatDate(conversation.updatedAt ?? conversation.createdAt)}</span>
+                    </button>
 
-                <button
-                  type="button"
-                  className="ai-chat-delete"
-                  aria-label={`${conversation.title || '새 대화'} 삭제`}
-                  disabled={busy}
-                  onClick={() => handleDelete(conversation.conversationId)}
-                >
-                  삭제
-                </button>
+                    <button
+                      type="button"
+                      className="ai-chat-conversation-more"
+                      aria-label={`${conversation.title || '새 대화'} 더보기`}
+                      popoverTarget={`chatbot-conversation-menu-${conversation.conversationId}`}
+                      disabled={busy}
+                      onClick={positionConversationMenu}
+                    >
+                      <span aria-hidden="true">⋯</span>
+                    </button>
+                    <div
+                      id={`chatbot-conversation-menu-${conversation.conversationId}`}
+                      className="ai-chat-conversation-menu"
+                      popover="auto"
+                    >
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={(event) => {
+                          event.currentTarget.parentElement.hidePopover();
+                          handleStartRename(conversation);
+                        }}
+                      >
+                        이름 변경
+                      </button>
+                      <button
+                        type="button"
+                        className="ai-chat-conversation-delete"
+                        disabled={busy}
+                        onClick={(event) => {
+                          event.currentTarget.parentElement.hidePopover();
+                          void handleDelete(conversation.conversationId);
+                        }}
+                      >
+                        삭제
+                      </button>
+                    </div>
+                  </>
+                )}
               </li>
             ))}
           </ul>
@@ -467,7 +634,11 @@ export function ChatbotPage() {
             {selectedConversation && <p className="ai-chat-current-title">{selectedConversation.title || '새 대화'}</p>}
           </div>
 
-          <button type="button" disabled={busy || loading || messagesLoading} onClick={handleReload}>
+          <button
+            type="button"
+            disabled={busy || loading || messagesLoading || reloadCoolingDown}
+            onClick={handleReload}
+          >
             다시 조회
           </button>
         </header>
@@ -597,11 +768,14 @@ export function ChatbotPage() {
 
             <button
               type="submit"
-              disabled={!conversationId || busy || messagesLoading || !question.trim() || usage?.remaining === 0}
+              disabled={!conversationId || busy || messagesLoading || hasPendingQuestion || needsStatusCheck || !question.trim() || usage?.remaining === 0}
             >
               {action === 'sending' ? '답변 생성 중...' : '질문 보내기'}
             </button>
           </form>
+          {(hasPendingQuestion || needsStatusCheck) && (
+            <p className="small muted" role="status">이전 질문 상태를 확인하려면 다시 조회를 눌러주세요.</p>
+          )}
 
           {fieldError && (
             <p id="ai-chat-question-error" className="ai-chat-error" role="alert">

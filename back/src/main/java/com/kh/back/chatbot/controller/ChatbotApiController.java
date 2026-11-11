@@ -3,8 +3,10 @@ package com.kh.back.chatbot.controller;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chatbot.dto.ChatbotAsyncRequest;
 import com.kh.back.chatbot.dto.ChatbotConversationDto.ConversationResponse;
+import com.kh.back.chatbot.dto.ChatbotConversationDto.RenameRequest;
 import com.kh.back.chatbot.dto.ChatbotMessageDto.MessageResponse;
 import com.kh.back.chatbot.dto.ChatbotSseEvent;
+import com.kh.back.chatbot.service.ChatbotUsageService;
 import com.kh.back.chatbot.service.ChatbotService;
 import com.kh.back.chatbot.service.ChatbotSseService;
 import com.kh.back.chatbot.validator.ChatbotValidator;
@@ -19,6 +21,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -39,10 +42,12 @@ public class ChatbotApiController {
     private final ChatbotSseService chatbotSseService;
     private final ChatbotValidator chatbotValidator;
     private final SseEmitterRegistry sseEmitterRegistry;
+    private final ChatbotUsageService chatbotUsageService;
 
     @GetMapping("/conversations")
     public ApiResponse<List<ConversationResponse>> conversations( @AuthenticationPrincipal CustomUserDetails principal
     ) {
+        chatbotUsageService.checkReadRate(principal.getUserId());
         return ApiResponse.ok(
                 chatbotService.getConversations(principal)
         );
@@ -56,10 +61,21 @@ public class ChatbotApiController {
         );
     } // 로그인한 사용자의 새 챗봇 대화방을 만드는 부분, 화면에서 + 새 대화 버튼 클릭시 호출됨
 
+    @PatchMapping("/conversations/{conversationId}/title")
+    public ApiResponse<ConversationResponse> rename(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @PathVariable("conversationId") Long conversationId,
+            @RequestBody RenameRequest request
+    ) {
+        String title = chatbotValidator.validateAndNormalizeTitle(request.title());
+        return ApiResponse.ok(chatbotService.renameConversation(principal, conversationId, title));
+    }
+
     @GetMapping("/conversations/{conversationId}/messages")
     public ApiResponse<List<MessageResponse>> messages( @AuthenticationPrincipal CustomUserDetails principal,
                                                         @PathVariable("conversationId") Long conversationId
     ) {
+        chatbotUsageService.checkReadRate(principal.getUserId());
         return ApiResponse.ok(
                 chatbotService.getMessages(principal, conversationId)
         );

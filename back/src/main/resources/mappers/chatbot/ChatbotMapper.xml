@@ -104,6 +104,17 @@
         AND deleted_at IS NULL
     </update>
 
+    <!-- 사용자가 설정한 제목은 첫 질문의 자동 제목으로 덮어쓰지 않도록 버전을 증가시킨다. -->
+    <update id="renameConversation">
+        UPDATE chatbot_conversations
+        SET title = #{title},
+            revision = revision + 1,
+            updated_at = UTC_TIMESTAMP(6) + INTERVAL 9 HOUR
+        WHERE conversation_id = #{conversationId}
+        AND user_id = #{userId}
+        AND deleted_at IS NULL
+    </update>
+
     <insert id="insertMessage"
             parameterType="com.kh.back.chatbot.dto.ChatbotMessageDto"
             useGeneratedKeys="true"
