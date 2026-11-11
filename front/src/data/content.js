@@ -2,18 +2,6 @@ export const POST_TABS = ['전체', '정보 공유', '팁', '공지'];
 export const POST_WRITE_TABS = POST_TABS.filter((t) => t !== '전체');
 export const ME = '민준'; // 프로토타입: 로그인한 사용자의 닉네임. 이 닉네임이 쓴 글만 수정·삭제할 수 있다.
 
-// 프로토타입용 계정. 가입하면 localStorage에 계정이 추가된다. 실제 서비스에서는 서버가 비밀번호를 해시로 보관한다.
-// role: 'member' | 'admin'. 관리자 계정은 공지 작성과 /admin 접근이 가능하다.
-// status: '정상' | '정지'. 정지 계정은 로그인할 수 없고(관리자 정지·로그인 반복 실패 자동 정지 모두) 관리자가 해제해야 한다.
-export const ACCOUNT_SEED = [
-  { id: 'minjun', pw: 'taxlab1234', name: '김민준', nickname: ME, birth: '1994-03-02', email: 'minjun@example.com', phone: '', role: 'member', status: '정상', joinedAt: '2025-03-02' },
-  { id: 'admin', pw: 'admin1234', name: '운영팀', nickname: '운영팀', birth: '1990-01-01', email: 'admin@example.com', phone: '', role: 'admin', status: '정상', joinedAt: '2025-01-01' },
-  { id: 'jeolsemon', pw: 'taxlab1234', name: '이절세', nickname: '절세몬', birth: '1991-06-11', email: 'jeolsemon@example.com', phone: '', role: 'member', status: '정상', joinedAt: '2025-01-18' },
-  { id: 'taxnewbie', pw: 'taxlab1234', name: '박세무', nickname: '세무초보', birth: '1996-09-21', email: 'taxnewbie@example.com', phone: '', role: 'member', status: '정상', joinedAt: '2025-02-11' },
-  { id: 'working', pw: 'taxlab1234', name: '최작업', nickname: '작업중', birth: '1993-12-05', email: 'working@example.com', phone: '', role: 'member', status: '정상', joinedAt: '2025-04-27' },
-  { id: 'organizer', pw: 'taxlab1234', name: '정정리', nickname: '정리왕', birth: '1989-04-30', email: 'organizer@example.com', phone: '', role: 'member', status: '정지', joinedAt: '2025-05-30' },
-];
-
 export const HELP_TABS = [['faq', '자주 묻는 질문'], ['lib', '자료실'], ['qna', 'Q&A']];
 // FAQ 예시 글. 관리자 페이지에서 등록·수정하면 이 시드 대신 저장된 값을 쓴다.
 export const FAQ_SEED = [

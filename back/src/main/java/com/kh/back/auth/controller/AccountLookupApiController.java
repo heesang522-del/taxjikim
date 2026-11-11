@@ -40,8 +40,6 @@ public class AccountLookupApiController {
     @PostMapping("/account-lookups")
     public ApiResponse<String> findLoginId(@RequestBody AccountLookupRequestDto request) {
         InputValidator.requireText("name", request.name());
-        InputValidator.requireText("email", request.email());
-        InputValidator.requireText("code", request.code());
         // 서버가 인증번호를 확인한 다음에만 기존 계정 조회 서비스를 호출한다.
         if (!emailVerificationService.verifyCode(request.email(), request.code())) {
             throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_INVALID", "인증번호가 올바르지 않습니다.");

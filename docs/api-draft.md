@@ -14,13 +14,12 @@
 
 ## 인증
 
+현재 인증 API는 로그인·세션 확인·로그아웃을 제공한다. 프론트 미연결 토큰 재발급·휴면 복구 API는 제거했다. 자동 로그인 재발급은 JWT 필터가 `AuthService.reissue()`를 호출해 처리한다. 휴면 자동 전환은 유지하지만 별도의 휴면 복구 API는 제공하지 않는다.
+
 | 메서드 | 경로 | 요청 |
 | --- | --- | --- |
 | POST | `/api/v1/auth/sessions` | JSON `loginId`, `password`, `rememberMe` |
 | DELETE | `/api/v1/auth/sessions/current` | `Authorization: Bearer {accessToken}` 또는 인증 쿠키 |
-| POST | `/api/v1/auth/tokens` | `refreshToken` 쿠키 |
-| POST | `/api/v1/auth/dormancy-recoveries` | JSON `loginId`, `email`, `code` |
-| POST | `/api/v1/auth/account-unlocks` | JSON `token` |
 | POST | `/api/v1/auth/account-lookups/email-verifications` | JSON `name`, `email` |
 | POST | `/api/v1/auth/account-lookups` | JSON `name`, `email`, `code`; data는 로그인 아이디 |
 | POST | `/api/v1/auth/password-resets/email-verifications` | JSON `loginId`, `email` |
@@ -55,7 +54,7 @@
 현재 React 로그인은 `rememberMe: false`로 요청한다. 성공 응답의 토큰과 회원 번호·아이디·권한은 현재 페이지 메모리에만 보관한다. 세션 스토리지 저장·복원은 제거했으며 새로고침 시 GET /users/me로 기존 JWT 쿠키 인증 상태를 확인해 화면을 복원한다.
 React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 브라우저 인증 상태를 비운다. 명시적인 Bearer가 있으면 그 세션을 우선 처리하고, 현재 Redis sid와 일치하는 경우에만 종료한다.
 회원 조회는 실제 테이블 `users`를 사용하고 삭제된 `DELETED_AT`을 조회하지 않는다. 탈퇴는 즉시 DELETE하며 탈퇴 대기·복구·만료 정리 SQL은 제거했다.
-휴면 복구는 이메일·DORMANT 상태 검사와 SQL 조건을 유지한다. 탈퇴 계정 복구 API는 제거했다.
+휴면 복구는 기존 관리자 계정 관리 API에서 DORMANT 상태를 확인해 ACTIVE로 변경한다. 사용자 이메일 기반 복구 API와 탈퇴 계정 복구 API는 제공하지 않는다.
 아이디 찾기·비밀번호 재설정은 2026-10-15에 기존 서비스를 호출하는 API와 화면을 연결했다. 비밀번호 재설정 성공 시 기존 Redis 로그인 세션을 종료한다. 잠금 해제 메일 링크 연결은 후속 작업이다.
 
 ## 회원
@@ -75,7 +74,11 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 
 회원 고유 번호는 `userId`, 로그인 아이디는 `loginId`이다. 가입 성공의 `data`는 생성된 회원 고유 번호이다.
 회원가입은 이름·닉네임·로그인 아이디·비밀번호·이메일을 전송하며 생년월일은 수집하지 않는다. 프로필 이미지가 있으면 multipart 필드 `profile`로 전송한다. 삭제한 전화번호·직군·신고 알림 컬럼은 전송하지 않는다.
-인증번호는 현재 서버 메모리 캐시에서 5분, 인증 완료 기록은 10분간 유지된다. 브라우저에서 인증번호를 생성하거나 응답에 노출하지 않는다.
+아이디는 영문 대소문자·숫자·밑줄 4~20자로 제한한다. 이메일은 최대 255자이며 한글·내부 공백을 허용하지 않고 `주소@도메인.접미사` 형식을 검사한다. 둘 다 앞뒤 공백을 제거하고 대소문자는 유지한다.
+가입·아이디/이메일 중복 확인·이메일 인증 발송/확인·마이페이지 이메일 변경에서 백엔드 공통 검증을 적용한다. 잘못된 값은 DB 조회·저장이나 메일 발송 전에 `400 VALIDATION_ERROR`와 `error.fields.loginId` 또는 `error.fields.email`로 반환한다. 기존 로그인 아이디에는 신규 가입 형식 제한을 추가하지 않는다.
+인증번호와 실패 횟수는 Redis에서 5분, 인증 완료 기록은 10분간 유지된다. 재발송 제한도 Redis에서 관리해 여러 서버가 같은 상태를 사용한다. 브라우저에서 인증번호를 생성하거나 응답에 노출하지 않는다.
+
+이메일별 인증번호 발송은 1분 간격으로 제한한다(`429 VERIFICATION_RESEND_TOO_SOON`). 번호당 5회 오입력 시 해당 번호를 폐기하고 다섯 번째 요청부터 `429 VERIFICATION_ATTEMPTS_EXCEEDED`를 반환한다. 실패 횟수는 응답에 표시하지 않으며, 새 번호 발급 성공 시 초기화한다.
 이메일 변경은 새 이메일의 서버 인증 완료 기록이 필요하며 성공한 뒤 해당 기록을 소비한다.
 탈퇴는 현재 비밀번호 확인 후 users 행을 즉시 삭제하고 로그인 세션과 인증 쿠키를 정리한다. 연결된 FK가 삭제를 막으면 409 오류를 반환한다. 탈퇴 대기 복구와 30일 정리 스케줄러는 제거했다. FK의 삭제 정책은 별도 검토 대상이다.
 중복 검사 `data`는 중복이면 `true`, 사용 가능하면 `false`이다.

@@ -41,8 +41,7 @@ public interface UserMapper {
     // 회원 즉시 삭제
     void deleteUser(@Param("loginId") String loginId);
 
-    // 로그인 시간 및 휴면/복구 관련
+    // 로그인 시간 및 휴면 전환 관련
     int updateLastLoginAt(@Param("loginId") String loginId);
     int convertToDormantAccounts(@Param("cutoffDate") LocalDateTime cutoffDate);
-    int activateDormantAccount(@Param("loginId") String loginId, @Param("email") String email);
 }

@@ -12,7 +12,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 
@@ -467,43 +466,6 @@ public class PostValidator {
     }
 
     /**
-     * 기존 직접 파일 업로드 방식의 등록 검증도 유지한다.
-     */
-    public void validateSave(List<MultipartFile> files) {
-
-        checkFileLimit(0, files);
-
-        checkFileExtensions(files);
-    }
-
-    /**
-     * 기존 직접 파일 업로드 방식의 수정 검증도 유지한다.
-     */
-    public void validateUpdate(
-            List<FileMetadataDto> existingImages,
-            List<Long> deleteImageIds,
-            List<MultipartFile> files
-    ) {
-
-        List<FileMetadataDto> existing =
-                existingImages == null
-                        ? List.of()
-                        : existingImages;
-
-        List<Long> deleteIds = validateDeleteFiles(
-                existing,
-                deleteImageIds
-        );
-
-        int remainingCount =
-                existing.size() - deleteIds.size();
-
-        checkFileLimit(remainingCount, files);
-
-        checkFileExtensions(files);
-    }
-
-    /**
      * 한국어 화면 이름과 영문 코드를 같은 DB 코드로 변환한다.
      */
     private String normalizePostType(String value) {
@@ -574,25 +536,6 @@ public class PostValidator {
     private void validateOriginalFileName(String filename) {
 
         FileValidationUtil.validateFileName(filename, MEDIA_NAME_PATTERN);
-    }
-
-    private void checkFileLimit(
-            int baseCount,
-            List<MultipartFile> files
-    ) {
-
-        FileValidationUtil.validateFileCountWithNewFiles(
-                baseCount,
-                files,
-                MAX_FILE_COUNT
-        );
-    }
-
-    private void checkFileExtensions(
-            List<MultipartFile> files
-    ) {
-
-        FileValidationUtil.validateFileExtensions(files, MEDIA_NAME_PATTERN);
     }
 
     private ApiException invalid(String message) {

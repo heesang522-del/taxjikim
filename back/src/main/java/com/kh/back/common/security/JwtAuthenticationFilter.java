@@ -23,7 +23,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.regex.Matcher;
 
 @Slf4j
 @RequiredArgsConstructor
@@ -41,9 +40,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getServletPath();
 
-        // 재발급은 컨트롤러에서 한 번만 처리
-            if ("/api/v1/auth/account-unlocks".equals(path)
-                    || "/api/v1/auth/tokens".equals(path) || "/api/v1/auth/sessions".equals(path)
+        // 로그인·로그아웃은 각 컨트롤러의 처리 흐름을 사용한다.
+            if ("/api/v1/auth/sessions".equals(path)
                     || "/api/v1/auth/sessions/current".equals(path)) {
                 return true;
             }
@@ -57,7 +55,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     || "/api/v1/auth/password-resets/email-verifications".equals(path)) {
                 return true;
         }
-        // Matcher matcher = ();
 
         return path.endsWith(".css") ||
                 path.endsWith(".js") ||
