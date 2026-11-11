@@ -83,6 +83,8 @@
 
 ## 1:1 채팅 상담 연동 (2026-10-20)
 
+- 마이페이지 상담내역: `getMyChatHistory()`로 `/api/v1/chat/rooms/me/history`의 본인 종료 상담을 조회하고, 선택한 방은 기존 `getMemberMessages(roomId)`로 대화만 조회한다. 입력·전송·읽음 갱신 요청은 하지 않는다. 열린 상담은 `getMyRoom()`으로 조회해 상단에 안내만 표시한다.
+
 - 회원 채팅 위젯(`ChatWidget`)과 관리자 상담 관리 화면(`AdminChatsPage`), 대시보드 대기 수를 `localStorage` mock(`useChatStore`)에서 실제 REST·WebSocket API로 교체했다.
 - `src/api/chat.js`: 회원용(`getMyRoom`, `sendMemberMessage`, `getMemberMessages`, `markMemberRead`, `getMemberUnreadCount`)과 관리자용(`getAdminRooms`, `getAdminWaitingCount`, `enterAdminRoom`, `closeAdminRoom`, `sendAdminMessage`, `getAdminMessages`, `markAdminRead`) 함수. 전체 경로는 루트 `docs/api-draft.md`의 "채팅" 절을 따른다.
 - `GET /api/v1/chat/rooms/me`는 기존에 없던 API로, 이번 작업에서 백엔드에 추가했다(회원이 가진 열린 방을 새로 만들지 않고 조회).

@@ -2,6 +2,7 @@ package com.kh.back.chat.service;
 
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatHistoryRoomDto;
 import com.kh.back.chat.dto.ChatRoomPageDto;
 import com.kh.back.chat.dto.ChatRoomSummaryDto;
 import com.kh.back.chat.event.ChatRoomClosedEvent;
@@ -62,6 +63,12 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public ChatRoomDto findOpenRoom(Long userId) {
         return chatMapper.findOpenRoomByUserId(userId);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<ChatHistoryRoomDto> getClosedRooms(Long userId) {
+        return chatMapper.findClosedRoomsByUserId(userId);
     }
 
     @Override

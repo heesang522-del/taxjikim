@@ -3,6 +3,7 @@ package com.kh.back.chat.controller;
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.chat.dto.ChatMessageDto;
 import com.kh.back.chat.dto.ChatRoomDto;
+import com.kh.back.chat.dto.ChatHistoryRoomDto;
 import com.kh.back.chat.service.ChatService;
 import com.kh.back.common.dto.ApiResponse;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,12 @@ public class ChatApiController {
     @GetMapping("/rooms/me")
     public ApiResponse<ChatRoomDto> getMyRoom(@AuthenticationPrincipal CustomUserDetails principal) {
         return ApiResponse.ok(chatService.findOpenRoom(principal.getUserId()));
+    }
+
+    @GetMapping("/rooms/me/history")
+    public ApiResponse<List<ChatHistoryRoomDto>> getMyHistory(@AuthenticationPrincipal CustomUserDetails principal) {
+        // 요청 파라미터 대신 인증된 회원번호로 본인의 종료 상담만 조회한다.
+        return ApiResponse.ok(chatService.getClosedRooms(principal.getUserId()));
     }
 
     // 메시지 전송. 열린 방이 없으면 대기 방을 새로 만들고 그 방에 저장한다.

@@ -121,6 +121,7 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 | 메서드 | 경로 | 요청 |
 | --- | --- | --- |
 | GET | `/api/v1/chat/rooms/me` | 인증된 회원. 열린 방(WAITING/IN_PROGRESS)이 없으면 `data: null` |
+| GET | `/api/v1/chat/rooms/me/history` | 인증된 본인의 종료(CLOSED) 상담 목록. 종료일 최신순. `roomId`, `lastMessage`, `createdAt`, `closedAt` 반환 |
 | POST | `/api/v1/chat/messages` | JSON `content`. 열린 방이 없으면 새 대기 방을 만들고 그 방에 저장 |
 | GET | `/api/v1/chat/rooms/{roomId}/messages` | 본인 방만 조회 가능 |
 | PATCH | `/api/v1/chat/rooms/{roomId}/messages/read` | 상대(관리자)가 보낸 메시지를 읽음 처리 |
