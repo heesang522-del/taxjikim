@@ -37,7 +37,7 @@ public class TaxUploadController {
     ) {
         boolean createAnalysis = request.getTaxInputId() == null;
         TaxServiceResponse saved = service.save(
-                principal, request.getGuestAccessToken(), request
+                principal, request
         );
         HttpStatus status = createAnalysis ? HttpStatus.CREATED : HttpStatus.OK;
 
@@ -53,7 +53,7 @@ public class TaxUploadController {
             @RequestBody TaxServiceRequest request
     ) {
         return ApiResponse.ok(
-                service.update(principal, request.getGuestAccessToken(), taxInputId, request)
+                service.update(principal, taxInputId, request)
         );
     }
 
@@ -64,20 +64,19 @@ public class TaxUploadController {
             @RequestParam(value = "deleteAll", defaultValue = "false") boolean deleteAll,
             @RequestBody TaxServiceRequest request
     ) {
-        service.delete(principal, request.getGuestAccessToken(), taxInputId, request, deleteAll);
+        service.delete(principal, taxInputId, request, deleteAll);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping(value = "/parse", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<PdfParseResponseDto> parse(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestParam(value = "guestAccessToken", required = false) String guestAccessToken,
             @RequestParam(value = "taxInputId", required = false) Long taxInputId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {
         // 기존 분석을 참조하는 PDF 요청은 해당 분석의 접근 권한을 확인한다.
         return ApiResponse.ok(
-                service.parse(principal, guestAccessToken, taxInputId, file)
+                service.parse(principal, taxInputId, file)
         );
     }
 }

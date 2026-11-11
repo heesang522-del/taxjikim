@@ -1,11 +1,5 @@
 import { client } from './client';
-
-// 저장 응답으로 받은 비회원 토큰을 분석번호별로 보관한다.
-const guestAccessTokens = new Map();
-
-function getGuestAccessToken(taxInputId) {
-  return guestAccessTokens.get(String(taxInputId));
-}
+import { parseDeductedTaxRate, parseWon, taxProfileNumbers } from '../utils/transactionAmount';
 
 // 마이페이지는 본인의 저장 결과 번호·귀속연도·저장 시각만 받는다.
 export async function getSavedTaxResults({ signal } = {}) {
@@ -106,17 +100,6 @@ function optionalNumber(value, label, fallback = null) {
   return number;
 }
 
-function optionalInteger(value, label, fallback = null) {
-  const number = optionalNumber(value, label, fallback);
-
-  if (number !== null && !Number.isSafeInteger(number)) {
-    throw new Error(`${label}는 정수로 입력해주세요.`);
-  }
-
-  return number;
-}
-
-// 분석 기본정보를 서버 요청 형식으로 정리한다.
 function normalizeTaxInput(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new Error('분석 기본정보가 필요합니다.');
@@ -126,9 +109,7 @@ function normalizeTaxInput(input) {
   return {
     taxYear: validateYear(input.taxYear),
     businessRegistered: input.businessRegistered ?? null,
-    dependentCount: optionalInteger(input.dependentCount, '공제 대상 가족 수', 0),
-    generalDonationAmount: optionalNumber(input.generalDonationAmount, '일반기부금', 0),
-    specialDonationAmount: optionalNumber(input.specialDonationAmount, '특례기부금', 0),
+    ...taxProfileNumbers(input),
     saveStatus: input.saveStatus ?? 'TEMP',
   };
 }
@@ -216,7 +197,7 @@ export async function getTaxResult(taxInputId) {
 // taxInputId와 transactions를 보내면 기존 분석에 거래를 저장한다.
 // input과 transactions를 보내면 새 분석과 거래를 함께 저장한다.
 export async function saveTaxData({ input, taxInputId, transactions, expectedTransactionCount } = {}) {
-  const data = { guestAccessToken: getGuestAccessToken(taxInputId) };
+  const data = {};
 
   if (taxInputId == null) {
     data.input = normalizeTaxInput(input);
@@ -250,17 +231,7 @@ export async function saveTaxData({ input, taxInputId, transactions, expectedTra
     data,
   });
 
-  rememberGuestAccessToken(result);
   return result;
-}
-
-function rememberGuestAccessToken(result) {
-  const taxInputId = result?.data?.input?.taxInputId;
-  const token = result?.data?.guestAccessToken;
-
-  if (taxInputId != null && typeof token === 'string' && token) {
-    guestAccessTokens.set(String(taxInputId), token);
-  }
 }
 
 // 기존 화면에서 사용하는 생성 함수 이름과 응답 형식을 유지한다.
@@ -301,7 +272,7 @@ export async function updateTaxData(taxInputId, { input, changes } = {}) {
     throw new Error('수정할 기본정보 또는 카테고리를 전달해주세요.');
   }
 
-  const data = { guestAccessToken: getGuestAccessToken(taxInputId) };
+  const data = {};
 
   if (hasInput) {
     data.input = normalizeTaxInput(input);
@@ -337,7 +308,7 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
     throw new Error('분석 전체 삭제에는 거래번호를 전달할 수 없습니다.');
   }
 
-  const data = { guestAccessToken: getGuestAccessToken(taxInputId) };
+  const data = {};
 
   if (!deleteAll) {
     data.transactionId = transactionId;
@@ -349,11 +320,6 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
     params: { deleteAll },
     data,
   });
-
-  // 분석 전체 삭제가 성공한 경우에만 해당 토큰을 제거한다.
-  if (deleteAll) {
-    guestAccessTokens.delete(String(taxInputId));
-  }
 
   return result;
 }
@@ -377,11 +343,6 @@ export async function parsePdf(file, { signal, taxInputId = null } = {}) {
 
   if (taxInputId !== null) {
     formData.append('taxInputId', String(taxInputId));
-
-    const guestAccessToken = getGuestAccessToken(taxInputId);
-    if (guestAccessToken) {
-      formData.append('guestAccessToken', guestAccessToken);
-    }
   }
 
   return request({
@@ -626,7 +587,6 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
             method: 'POST',
             data: {
               transactionIds: group.map((item) => item.transactionId),
-              guestAccessToken: getGuestAccessToken(operation.taxInputId),
             },
           });
 
@@ -761,16 +721,23 @@ export async function saveInitialTaxRows(
         throw new Error(`${row.memo || '거래'}: 수입·지출 구분을 확인해주세요.`);
       }
 
-      const amount = optionalInteger(row.actualAmount ?? row.amt, '실제 입출금액');
+      const amount = parseWon(row.actualAmount ?? row.amt);
 
       if (amount === null) {
-        throw new Error('실제 입출금액이 필요합니다.');
+        throw new Error('실제 입출금액은 0~9,999,999,999,999원 사이의 정수로 입력해주세요.');
       }
 
       const description = String(row.memo ?? '').trim();
 
       if (!description) {
         throw new Error('거래 설명을 입력해주세요.');
+      }
+
+      // 이전에 작성한 직접 입력 거래도 새 세율 필드로 전송한다.
+      const rateInput = row.deductedTaxRate ?? row.deductionRate;
+      const deductedTaxRate = parseDeductedTaxRate(rateInput);
+      if (rateInput != null && deductedTaxRate === null) {
+        throw new Error('차감 세율은 0~99.9999% 사이에서 소수점 이하 4자리까지 입력해주세요.');
       }
 
       const payload = {
@@ -781,7 +748,7 @@ export async function saveInitialTaxRows(
         amount,
         actualAmount: amount,
         preTaxIncome: optionalNumber(row.preTaxIncome, '세전 금액'),
-        deductedTaxRate: optionalNumber(row.deductedTaxRate, '차감 세율'),
+        deductedTaxRate,
         amountBasis: row.amountBasis ?? 'UNSPECIFIED',
         valueKind: row.valueKind ?? 'DETAIL',
         needsReview: false,

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Button } from '../common/index';
 import { saveInitialTaxRows, saveTaxReview, uploadTaxPdfApi } from '../../api/taxApi';
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
+import { parseDeductedTaxRate, parseWon } from '../../utils/transactionAmount';
 
 function normalizeDate(value) {
   if (Array.isArray(value) && value.length === 3) {
@@ -27,8 +28,16 @@ function isPendingRow(row) {
 
 // 분석 API의 결과를 화면과 저장에서 사용하는 거래 구조로 변환한다.
 function toTransactionRow(item, index, key) {
-  const actualAmount = parseTaxAmount(item.actualAmount ?? item.amount);
-  const needsReview = item.needsReview === true;
+  const actualAmount = parseWon(item.actualAmount ?? item.amount);
+  const deductedTaxRate = parseDeductedTaxRate(item.deductedTaxRate);
+  // 저장 범위를 벗어난 행만 검토 대상으로 보내고 정상 행의 자동 저장은 진행한다.
+  let numberError = null;
+  if (actualAmount === null) {
+    numberError = '실제 입출금액을 확인해주세요.';
+  } else if (item.deductedTaxRate != null && deductedTaxRate === null) {
+    numberError = '차감 세율의 범위와 소수 자릿수를 확인해주세요.';
+  }
+  const needsReview = item.needsReview === true || numberError !== null;
   const excluded = item.excluded === true || needsReview;
 
   return {
@@ -51,14 +60,14 @@ function toTransactionRow(item, index, key) {
     actualAmount,
     preTaxIncome: parseTaxAmount(item.preTaxIncome),
     taxDeducted: parseTaxAmount(item.taxDeducted),
-    deductedTaxRate: item.deductedTaxRate ?? null,
+    deductedTaxRate,
     amountBasis: item.amountBasis ?? 'UNSPECIFIED',
     valueKind: item.valueKind ?? 'DETAIL',
     pageNumber: item.pageNumber ?? null,
     rawText: item.rawText ?? '',
     parseSuccess: item.parseSuccess === true,
     needsReview,
-    failureReason: needsReview ? item.failureReason || '거래 내용을 확인해주세요.' : null,
+    failureReason: needsReview ? item.failureReason || numberError || '거래 내용을 확인해주세요.' : null,
     selected: !excluded,
     excluded,
   };

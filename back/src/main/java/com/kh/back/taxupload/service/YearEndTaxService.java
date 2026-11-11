@@ -13,20 +13,17 @@ public interface YearEndTaxService {
 
     TaxServiceResponse save(
             CustomUserDetails principal,
-            String guestAccessToken,
             TaxServiceRequest request
     );
 
     TaxInputRequest update(
             CustomUserDetails principal,
-            String guestAccessToken,
             Long taxInputId,
             TaxServiceRequest request
     );
 
     void delete(
             CustomUserDetails principal,
-            String guestAccessToken,
             Long taxInputId,
             TaxServiceRequest request,
             boolean deleteAll
@@ -34,7 +31,6 @@ public interface YearEndTaxService {
 
     PdfParseResponseDto parse(
             CustomUserDetails principal,
-            String guestAccessToken,
             Long taxInputId,
             MultipartFile file
     ) throws IOException;

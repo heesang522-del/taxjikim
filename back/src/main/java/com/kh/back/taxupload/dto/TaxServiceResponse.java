@@ -18,9 +18,6 @@ public class TaxServiceResponse {
     // 저장된 분석 기본정보
     private TaxInputRequest input;
 
-    // 새 비회원 분석을 저장할 때만 발급한다.
-    private String guestAccessToken;
-
     // 저장된 거래 목록
     private List<TaxTransactionDto> transactions;
 }

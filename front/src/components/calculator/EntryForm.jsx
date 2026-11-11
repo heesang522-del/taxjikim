@@ -7,12 +7,12 @@ import { Button, Card, Segmented } from '../common/index';
 
 import { INCOME_TRANSACTION_CATEGORIES, EXPENSE_TRANSACTION_CATEGORIES } from '../../data/transactionCategories';
 
-import { useTax, useTaxStore, parseTaxAmount } from '../../store/useTaxStore';
+import { useTax, useTaxStore } from '../../store/useTaxStore';
 
 import { useToast } from '../../store/useToastStore';
 import FileUploader from './FileUploader';
 
-import { calculatePreTaxIncome } from '../../utils/transactionAmount';
+import { calculatePreTaxIncome, parseDeductedTaxRate, parseWon } from '../../utils/transactionAmount';
 
 const UploadArea = styled.div({
   height: '220px',
@@ -103,7 +103,27 @@ export function EntryForm() {
 
   const categories = kind === 'in' ? INCOME_TRANSACTION_CATEGORIES : EXPENSE_TRANSACTION_CATEGORIES;
 
-  const preTaxIncome = calculatePreTaxIncome(parseTaxAmount(amt), deductionRate);
+  const preTaxIncome = calculatePreTaxIncome(parseWon(amt), parseDeductedTaxRate(deductionRate));
+
+  function changeDeductionRate(event) {
+    const value = event.target.value.trim().replace(/^0+(?=[0-9])/, '');
+    const rate = parseDeductedTaxRate(value.replace(/\.$/, ''));
+
+    // 소수점을 입력하는 도중에는 마지막 점을 남기고, 범위를 넘는 입력은 반영하지 않는다.
+    if (value === '' || rate !== null) {
+      setDeductionRate(value);
+    }
+  }
+
+  function changeActualAmount(event) {
+    const value = event.target.value;
+    const amount = parseWon(value);
+
+    // 입력과 붙여넣기에서 상한을 넘으면 이전 금액을 유지한다.
+    if (value === '' || amount !== null) {
+      setAmt(value === '' ? '' : String(amount));
+    }
+  }
 
   function changeKind(value) {
     if (busy) return;
@@ -116,16 +136,27 @@ export function EntryForm() {
 
     if (useTaxStore.getState().taxSaveBusy) return;
 
-    const actualAmount = parseTaxAmount(amt);
-    const grossAmount = calculatePreTaxIncome(actualAmount, deductionRate);
+    const actualAmount = parseWon(amt);
+    const deductedTaxRate = parseDeductedTaxRate(deductionRate);
+    const grossAmount = calculatePreTaxIncome(actualAmount, deductedTaxRate);
 
     if (!date || Number(date.slice(0, 4)) !== Number(profile.taxYear) || !memo.trim()) {
       toast('귀속 연도에 맞는 날짜와 거래 설명을 입력해주세요.');
       return;
     }
 
-    if (actualAmount === null || (kind === 'in' && grossAmount === null)) {
-      toast('금액과 차감 세율을 확인해주세요.');
+    if (actualAmount === null) {
+      toast('실제 입출금액은 0~9,999,999,999,999원 사이의 정수로 입력해주세요.');
+      return;
+    }
+
+    if (kind === 'in' && deductedTaxRate === null) {
+      toast('차감 세율은 0~99.9999% 사이에서 소수점 이하 4자리까지 입력해주세요.');
+      return;
+    }
+
+    if (kind === 'in' && grossAmount === null) {
+      toast('역산한 세전 수입이 저장 범위를 초과합니다.');
       return;
     }
 
@@ -143,7 +174,7 @@ export function EntryForm() {
       amt: kind === 'in' ? grossAmount : actualAmount,
       actualAmount,
       preTaxIncome: kind === 'in' ? grossAmount : null,
-      deductionRate: kind === 'in' ? Number(deductionRate) : null,
+      deductedTaxRate: kind === 'in' ? deductedTaxRate : null,
       taxDeducted: kind === 'in' ? grossAmount - actualAmount : null,
       amountBasis: kind === 'in' ? 'GROSS' : 'CASH',
     });
@@ -214,12 +245,9 @@ export function EntryForm() {
               차감 세율 (%)
               <input
                 id="fDeductionRate"
-                type="number"
-                min="0"
-                max="99.99"
-                step="0.01"
+                inputMode="decimal"
                 value={deductionRate}
-                onChange={(event) => setDeductionRate(event.target.value)}
+                onChange={changeDeductionRate}
                 disabled={busy || kind !== 'in'}
                 required={kind === 'in'}
               />
@@ -231,7 +259,7 @@ export function EntryForm() {
                 id="fAmt"
                 inputMode="numeric"
                 value={amt}
-                onChange={(event) => setAmt(event.target.value)}
+                onChange={changeActualAmount}
                 required
               />
             </label>

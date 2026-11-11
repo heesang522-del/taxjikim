@@ -2,7 +2,6 @@ package com.kh.back.taxupload.service;
 
 import com.kh.back.auth.security.CustomUserDetails;
 import com.kh.back.common.exception.ApiException;
-import com.kh.back.common.security.JwtTokenProvider;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
@@ -12,7 +11,6 @@ import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import com.kh.back.taxupload.mapper.TaxMapper;
 import com.kh.back.taxupload.validator.TaxValidator;
-import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -23,10 +21,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.time.Duration;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -39,12 +34,9 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class YearEndTaxServiceImpl implements YearEndTaxService {
 
-    private static final Duration GUEST_TAX_TOKEN_LIFETIME = Duration.ofHours(24);
-
     private final TaxValidator taxValidator;
     private final TaxMapper taxMapper;
     private final PythonPdfClient pythonPdfClient;
-    private final JwtTokenProvider jwtTokenProvider;
 
     /**
      * 분석 기본정보와 최초 거래 목록을 같은 트랜잭션에서 저장한다.
@@ -53,12 +45,11 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Transactional
     public TaxServiceResponse save(
             CustomUserDetails principal,
-            String guestAccessToken,
             TaxServiceRequest request
     ) {
         taxValidator.validateRequestPresent(request, "저장 요청이 필요합니다.");
 
-        AccessContext access = createAccess(principal, guestAccessToken);
+        AccessContext access = createAccess(principal);
         Long taxInputId = request.getTaxInputId();
         List<TaxTransactionDto> rows = request.getTransactions();
         boolean createAnalysis = taxInputId == null;
@@ -151,17 +142,9 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             }
         }
 
-        String issuedGuestAccessToken = null;
-
-        // 새 비회원 분석에만 해당 분석번호로 토큰을 발급한다.
-        if (createAnalysis && access.getUserId() == null) {
-            issuedGuestAccessToken = issueGuestAccessToken(taxInputId);
-        }
-
         return TaxServiceResponse.builder()
                 .input(input)
                 .transactions(savedRows)
-                .guestAccessToken(issuedGuestAccessToken)
                 .build();
     }
 
@@ -169,7 +152,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Transactional
     public TaxInputRequest update(
             CustomUserDetails principal,
-            String guestAccessToken,
             Long taxInputId,
             TaxServiceRequest request
     ) {
@@ -183,7 +165,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         taxValidator.validateUpdateTargets(updateProfile, updateCategory);
         taxValidator.validateMatchingTaxInputId(taxInputId, request.getTaxInputId());
 
-        AccessContext access = createAccess(principal, guestAccessToken);
+        AccessContext access = createAccess(principal);
 
         // 기본정보와 카테고리가 같은 분석을 기준으로 수정되도록 먼저 잠근다.
         TaxInputRequest existingInput = requireInput(access, taxInputId, true);
@@ -213,7 +195,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Transactional
     public void delete(
             CustomUserDetails principal,
-            String guestAccessToken,
             Long taxInputId,
             TaxServiceRequest request,
             boolean deleteAll
@@ -226,7 +207,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         List<Long> requestedIds = request.getTransactionIds();
         taxValidator.validateDeleteTargets(deleteAll, transactionId, requestedIds);
 
-        AccessContext access = createAccess(principal, guestAccessToken);
+        AccessContext access = createAccess(principal);
 
         // 삭제 전에 분석 접근 권한을 확인하고 분석을 잠근다.
         requireInput(access, taxInputId, true);
@@ -277,11 +258,10 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     @Override
     public PdfParseResponseDto parse(
             CustomUserDetails principal,
-            String guestAccessToken,
             Long taxInputId,
             MultipartFile file
     ) throws IOException {
-        AccessContext access = createAccess(principal, guestAccessToken);
+        AccessContext access = createAccess(principal);
 
         if (taxInputId != null) {
             requireInput(access, taxInputId, false);
@@ -598,36 +578,17 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         return left.compareTo(right) == 0;
     }
 
-    private AccessContext createAccess(
-            CustomUserDetails principal,
-            String guestAccessToken
-    ) {
+    private AccessContext createAccess(CustomUserDetails principal) {
         Long userId = principal == null ? null : principal.getUserId();
 
         boolean admin = principal != null
                 && principal.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
 
-        Long guestTaxInputId = taxValidator.readGuestTaxInputId(guestAccessToken);
-
         return AccessContext.builder()
                 .userId(userId)
                 .admin(admin)
-                .guestTaxInputId(guestTaxInputId)
                 .build();
-    }
-
-    private String issueGuestAccessToken(Long taxInputId) {
-        Instant issuedAt = Instant.now();
-        Instant expiresAt = issuedAt.plus(GUEST_TAX_TOKEN_LIFETIME);
-        // 비회원 토큰의 권한을 해당 분석 한 건으로 제한한다.
-        return Jwts.builder()
-                .claim("type", TaxValidator.GUEST_TAX_TOKEN_TYPE)
-                .claim("taxInputId", taxInputId)
-                .issuedAt(Date.from(issuedAt))
-                .expiration(Date.from(expiresAt))
-                .signWith(jwtTokenProvider.getSecretKey())
-                .compact();
     }
 
     private ApiException invalid(String field, String message) {
