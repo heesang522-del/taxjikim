@@ -98,9 +98,13 @@
     </delete>
 
     <!--
-        관리자용 상태별 목록 커서 페이징 조회. 대기는 오래 기다린 순, 진행중/종료는 최신순으로 보여준다.
-        ROOM_ID는 자동 증가 PK라 생성 순서와 항상 같이 움직여서 정렬·커서 기준으로 그대로 쓸 수 있다.
-        대기(ASC)는 cursorId보다 큰(= 더 나중에 생성된) 방부터, 진행중/종료(DESC)는 cursorId보다 작은(= 더 오래된) 방부터 내려준다.
+        관리자용 상태별 목록 커서 페이징 조회. 대기는 오래 기다린 순, 진행중은 생성 최신순, 종료는 "종료된" 최신순으로 보여준다.
+        ROOM_ID는 자동 증가 PK라 생성 순서와 항상 같이 움직여서 대기/진행중은 정렬·커서 기준으로 그대로 쓴다.
+        대기(ASC)는 cursorId보다 큰(= 더 나중에 생성된) 방부터, 진행중(DESC)은 cursorId보다 작은(= 더 오래된) 방부터 내려준다.
+        종료(CLOSED)는 생성 순서가 아니라 "언제 닫혔는지"가 중요하다(오래 대기만 하던 방이 방금 종료되면 맨 위로 와야 함).
+        그래서 CLOSED_AT DESC로 정렬하고, 커서도 cursorId(ROOM_ID)가 가리키는 방의 CLOSED_AT을 기준으로 그보다 먼저 닫힌 방부터
+        내려준다. CLOSED_AT이 같은 경우(동시 종료)를 대비해 ROOM_ID를 2차 정렬 기준으로 묶어 튜플 비교한다.
+        cursorId 자체는 여전히 마지막으로 내려준 방의 ROOM_ID라 Controller/Service/프런트의 커서 계약은 그대로다.
     -->
     <select id="findRoomsByStatus" resultType="com.kh.back.chat.dto.ChatRoomSummaryDto">
         SELECT
@@ -121,11 +125,17 @@
         <if test="cursorId != null and status == 'WAITING'">
           AND cr.ROOM_ID &gt; #{cursorId}
         </if>
-        <if test="cursorId != null and status != 'WAITING'">
+        <if test="cursorId != null and status == 'IN_PROGRESS'">
           AND cr.ROOM_ID &lt; #{cursorId}
+        </if>
+        <if test="cursorId != null and status == 'CLOSED'">
+          AND (cr.CLOSED_AT, cr.ROOM_ID) &lt; (
+              SELECT c2.CLOSED_AT, c2.ROOM_ID FROM CHAT_ROOMS c2 WHERE c2.ROOM_ID = #{cursorId}
+          )
         </if>
         <choose>
             <when test="status == 'WAITING'">ORDER BY cr.ROOM_ID ASC</when>
+            <when test="status == 'CLOSED'">ORDER BY cr.CLOSED_AT DESC, cr.ROOM_ID DESC</when>
             <otherwise>ORDER BY cr.ROOM_ID DESC</otherwise>
         </choose>
         LIMIT #{limit}
