@@ -36,17 +36,18 @@ public class PostValidator {
             "TIP",
             "NOTICE",
             "FAQ",
-            "QNA"
+            "QNA",
+            "LIBRARY"
     );
 
     private static final String MEDIA_NAME_PATTERN =
-            ".*\\.(jpg|jpeg|png|gif|webp|mp4|webm|mov)$";
+            ".*\\.(jpg|jpeg|png|gif|webp|mp4|webm|mov|pdf)$";
 
     private static final String SAVED_FILE_NAME_PATTERN =
             "(?i)[0-9a-f]{8}-[0-9a-f]{4}-"
                     + "[0-9a-f]{4}-[0-9a-f]{4}-"
                     + "[0-9a-f]{12}\\."
-                    + "(jpg|jpeg|png|gif|webp|mp4|webm|mov)";
+                    + "(jpg|jpeg|png|gif|webp|mp4|webm|mov|pdf)";
 
     /**
      * 현재 로그인한 사용자의 실제 회원 번호를 반환한다.
@@ -165,7 +166,7 @@ public class PostValidator {
 
     /**
      * 관리자와 일반 사용자 모두 게시글을 작성할 수 있다.
-     * 공지사항과 FAQ는 관리자만 작성할 수 있다.
+     * 공지사항·FAQ·자료실은 관리자만 작성할 수 있다.
      */
     public Long requireCreate(PostDto post) {
 
@@ -500,6 +501,7 @@ public class PostValidator {
             case "정보 공유" -> "INFO";
             case "팁" -> "TIP";
             case "공지" -> "NOTICE";
+            case "자료실" -> "LIBRARY";
             default -> trimmed.toUpperCase(Locale.ROOT);
         };
 
@@ -522,13 +524,14 @@ public class PostValidator {
 
         boolean administratorOnly =
                 "NOTICE".equals(postType)
-                        || "FAQ".equals(postType);
+                        || "FAQ".equals(postType)
+                        || "LIBRARY".equals(postType);
 
         if (administratorOnly && !isAdmin()) {
             throw new ApiException(
                     HttpStatus.FORBIDDEN,
                     "ACCESS_DENIED",
-                    "공지사항과 FAQ는 관리자만 변경할 수 있습니다."
+                    "공지사항·FAQ·자료실은 관리자만 변경할 수 있습니다."
             );
         }
     }

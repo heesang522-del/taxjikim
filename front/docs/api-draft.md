@@ -20,11 +20,11 @@
 
 ## 게시글 신고 백엔드 연동 (2026-11-06)
 
-- `src/api/report.js`를 새로 추가했다. `createPostReport(postId, reasonDetail)`: POST `/api/v1/posts/community/{postId}/reports`. `getAdminReports()`: GET `/api/v1/admin/reports`(ADMIN 전용). `resolveReport(reportId, result)`: PATCH `/api/v1/admin/reports/{reportId}`, result는 `DELETE`\|`REJECT`.
+- `src/api/report.js`를 새로 추가했다. `createPostReport(postId, reasonDetail)`: POST `/api/v1/posts/{postId}/reports`. `getAdminReports()`: GET `/api/v1/admin/reports`(ADMIN 전용). `resolveReport(reportId, result)`: PATCH `/api/v1/admin/reports/{reportId}`, result는 `DELETE`\|`REJECT`.
 - 백엔드는 `REPORTS`를 사용한다(`com.kh.back.report` 패키지). 사용하지 않는 별도 제재 이력 테이블은 DB 정리 대상이며 신고 기능에는 필요하지 않다. `TARGET_USER_ID`는 신고 시점의 글 작성자를 그대로 남긴다.
 - 본인 글 신고는 400 `CANNOT_REPORT_OWN_POST`, 중복 신고는 DB의 `UNIQUE(REPORTER_ID, TARGET_TYPE, TARGET_ID)` 위반을 409 `ALREADY_REPORTED`로 변환해 응답한다.
 - 처리(`DELETE`)하면 게시글을 관리자 삭제로 내리고(`POSTS.DELETED_BY_TYPE='ADMIN'`), 같은 글에 대기 중인 다른 신고도 함께 처리됨으로 바꾼다. 기존 자기 삭제(`deleteById`)는 `DELETED_BY_TYPE`을 기록하지 않아 그대로 두었다 — 자기 삭제한 글과 신고 전 삭제된 글은 관리자 화면에서 "삭제된 글"로만 구분되고 "관리자 삭제됨"과는 다르게 표시된다.
-- `CommunityPostPage`의 신고 버튼은 `post.source === 'server'`(실제 서버 글)일 때만 이 API를 호출한다. 브라우저에만 있는 예시 글은 여전히 mock 경로를 쓴다(실제 DB에 없는 postId라 API가 통하지 않기 때문).
+- `PostDetailPage`의 신고 버튼은 `post.source === 'server'`(실제 서버 글)일 때만 이 API를 호출한다. 브라우저에만 있는 예시 글은 여전히 mock 경로를 쓴다(실제 DB에 없는 postId라 API가 통하지 않기 때문).
 - 알려진 제한: 관리자가 삭제한 **서버** 게시글을 다시 열면, `PostMapper.findById`가 `DELETED_AT IS NULL`로 걸러내 그냥 "게시글을 찾을 수 없습니다"(404)로 보인다. 로컬 mock 글에서 보이는 "관리자에 의해 삭제된 게시글입니다" 안내 화면은 서버 글에는 아직 연결되지 않았다 — 하려면 `findById`의 삭제글 필터링 방식을 바꿔야 해서(목록·다른 조회에도 영향) 이번 범위에는 넣지 않았다.
 
 - 2026-11-03 월별 조회 통합: `findMonthlyTransactions`가 월·거래 구분별 합계를 한 번 조회한다. 수입은 세전 금액, 지출은 실제 금액을 합산한다. 서비스에서 기존 수입·지출 응답 목록으로 나누므로 화면 형식은 유지한다. 전체 DB 조회는 기본정보·기간·월별 합계 총 3회이며 아래 4회 조회 기록을 대체한다.
@@ -249,7 +249,7 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 금액 0은 기부금이 없는 입력 예시다. 두 기부금은 각각 음수가 아닌 DECIMAL(15,2) 저장 범위이며, 미입력은 저장 정규화에서 0으로 처리한다.
 - 나이·감면·지역·기존 단일 기부금 필드는 저장 계약에서 제거한다. 요청의 분석번호·소유자는 기존 서버 결정 규칙을 유지한다.
-- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다. 기존 DB 변경 방법은 `docs/tax-input-migration.md`를 따른다.
+- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다.
 # 결과 JSON 보관 (TJK-202)
 
 - `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.

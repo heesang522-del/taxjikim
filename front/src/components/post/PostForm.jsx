@@ -48,7 +48,7 @@ export default function PostForm({ heading, initial, submitLabel, onCancel, post
     const selectedFiles = filterBlockedFiles(pickedFiles);
 
     if (selectedFiles.length !== pickedFiles.length) {
-      toast('사진·동영상만 첨부할 수 있습니다. PDF·ZIP·실행파일은 차단됩니다.');
+      toast('사진·동영상만 첨부할 수 있습니다. ZIP·실행파일은 차단됩니다.');
     }
     e.target.value = '';
 

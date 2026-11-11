@@ -3,13 +3,13 @@
 
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '../components/common/index';
-import PostForm from '../components/community/PostForm';
-import NoticeCard from '../components/community/NoticeCard';
+import PostForm from '../components/post/PostForm';
+import NoticeCard from '../components/post/NoticeCard';
 import { ROUTES } from '../utils/routes';
 import { POST_WRITE_TABS } from '../data/content';
 import { useAuth } from '../store/useAuthStore';
 
-export default function PostWritePage() {
+export function PostCreatePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { loggedIn, isAdmin } = useAuth();
