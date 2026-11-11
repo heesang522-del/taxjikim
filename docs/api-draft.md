@@ -72,6 +72,8 @@ React 로그아웃은 Bearer 헤더를 전달하며, 서버 응답 성공 후 �
 | PUT | `/api/v1/users/me/profile-image` | 폼 `deleteProfile`, 선택 파일 `profile` |
 | DELETE | `/api/v1/users/me` | JSON `currentPassword` |
 
+`GET /api/v1/users/me`는 `MyProfileResponseDto`로 `userId`, `loginId`, `email`, `nickname`, `profileImageUrl`, `userRole`만 반환한다. 서버 내부 인증용 `UserDto`와 `CustomUserDetails`는 유지하며 이름·계정 상태·가입/수정/최근 로그인 일시는 이 응답에 포함하지 않는다.
+
 회원 고유 번호는 `userId`, 로그인 아이디는 `loginId`이다. 가입 성공의 `data`는 생성된 회원 고유 번호이다.
 회원가입은 이름·닉네임·로그인 아이디·비밀번호·이메일을 전송하며 생년월일은 수집하지 않는다. 프로필 이미지가 있으면 multipart 필드 `profile`로 전송한다. 삭제한 전화번호·직군·신고 알림 컬럼은 전송하지 않는다.
 아이디는 영문 대소문자·숫자·밑줄 4~20자로 제한한다. 이메일은 최대 255자이며 한글·내부 공백을 허용하지 않고 `주소@도메인.접미사` 형식을 검사한다. 둘 다 앞뒤 공백을 제거하고 대소문자는 유지한다.
