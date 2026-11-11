@@ -21,7 +21,7 @@ const listOf = (tab) => `${ROUTES.postList}?tab=${encodeURIComponent(tab)}`;
 // 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. SupportQnaPostPage와 같은 구분 방식.
 const isServerId = (id) => /^\d+$/.test(id);
 
-export default function PostDetailPage() {
+export function PostDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();

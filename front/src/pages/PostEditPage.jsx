@@ -12,10 +12,10 @@ import { usePost } from '../store/usePostStore';
 import { useToast } from '../store/useToastStore';
 import { getPost } from '../api/post';
 
-// 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. CommunityPostPage와 같은 구분 방식.
+// 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. PostDetailPage와 같은 구분 방식.
 const isServerId = (id) => /^\d+$/.test(id);
 
-export default function PostEditPage() {
+export function PostEditPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const toast = useToast();

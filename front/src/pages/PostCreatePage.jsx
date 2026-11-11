@@ -9,7 +9,7 @@ import { ROUTES } from '../utils/routes';
 import { POST_WRITE_TABS } from '../data/content';
 import { useAuth } from '../store/useAuthStore';
 
-export default function PostWritePage() {
+export function PostCreatePage() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const { loggedIn, isAdmin } = useAuth();

@@ -8,10 +8,10 @@ import CalcLayout from './components/calculator/CalcLayout';
 import HomePage from './pages/HomePage';
 import AuthPage from './pages/AuthPage';
 import MyPage from './pages/MyPage';
-import CommunityPage from './pages/CommunityPage';
-import CommunityPostPage from './pages/CommunityPostPage';
-import CommunityWritePage from './pages/CommunityWritePage';
-import CommunityEditPage from './pages/CommunityEditPage';
+import { PostListPage } from './pages/PostListPage';
+import { PostDetailPage } from './pages/PostDetailPage';
+import { PostCreatePage } from './pages/PostCreatePage';
+import { PostEditPage } from './pages/PostEditPage';
 import SupportPage from './pages/SupportPage';
 import SupportQnaPostPage from './pages/SupportQnaPostPage';
 import AdminPage from './pages/AdminPage';
@@ -42,10 +42,10 @@ function App() {
         <Route path="signup" element={<AuthPage key="signup" />} />
         <Route path="find-account" element={<AuthPage key="find-account" />} />
         <Route path="mypage" element={<MyPage />} />
-        <Route path="community" element={<CommunityPage />} />
-        <Route path="community/new" element={<CommunityWritePage />} />
-        <Route path="community/:id" element={<CommunityPostPage />} />
-        <Route path="community/:id/edit" element={<CommunityEditPage />} />
+        <Route path="posts" element={<PostListPage />} />
+        <Route path="posts/new" element={<PostCreatePage />} />
+        <Route path="posts/:id" element={<PostDetailPage />} />
+        <Route path="posts/:id/edit" element={<PostEditPage />} />
         <Route path="support" element={<SupportPage />} />
         <Route path="chatbot" element={<ChatbotPage />} />
         <Route path="support/qna/:id" element={<SupportQnaPostPage />} />
