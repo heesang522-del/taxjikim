@@ -1,64 +1,110 @@
 package com.kh.back.auth.service;
 
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
+import com.kh.back.common.exception.ApiException;
+import com.kh.back.common.validation.InputValidator;
+import com.kh.back.common.validation.UserInputValidator;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.http.HttpStatus;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
 
-import java.util.concurrent.TimeUnit;
-import com.kh.back.common.exception.ApiException;
-import org.springframework.http.HttpStatus;
-import com.kh.back.common.validation.InputValidator;
+import java.security.SecureRandom;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
 
 @Service
 public class EmailVerificationServiceImpl implements EmailVerificationService {
+    private static final int MAX_FAILURES = 5;
+    private static final int CODE_TTL_SECONDS = 300;
+    private static final int VERIFIED_TTL_SECONDS = 600;
+    private static final Duration RESEND_COOLDOWN = Duration.ofMinutes(1);
+    private static final SecureRandom RANDOM = new SecureRandom();
 
     private final JavaMailSender mailSender;
+    private final StringRedisTemplate redisTemplate;
     private final String senderEmail;
     private final String senderPassword;
 
-    public EmailVerificationServiceImpl(JavaMailSender mailSender,
+    // KEYS는 순서대로 재발송 제한·인증번호·인증 완료 키다.
+    // 메일 발송을 예약한 요청만 새 번호를 저장하고, 저장 성공 시점부터 1분 제한을 시작한다.
+    private static final DefaultRedisScript<Long> SAVE_CODE_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('GET', KEYS[1]) ~= ARGV[1] then
+                return 0
+            end
+            redis.call('HSET', KEYS[2], 'code', ARGV[2], 'failures', 0)
+            redis.call('EXPIRE', KEYS[2], ARGV[3])
+            redis.call('DEL', KEYS[3])
+            redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[4])
+            return 1
+            """, Long.class);
+
+    // 발송 실패 시 본인 예약만 해제해, 뒤에 들어온 다른 요청의 제한을 삭제하지 않는다.
+    private static final DefaultRedisScript<Long> RELEASE_SEND_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('GET', KEYS[1]) == ARGV[1] then
+                return redis.call('DEL', KEYS[1])
+            end
+            return 0
+            """, Long.class);
+
+    // 조회·실패 증가·차단·성공을 Lua로 묶어 여러 서버의 동시 요청에도 한 번만 인증한다.
+    // 결과: 0 만료, 1 성공, 2 불일치, 3 횟수 초과. 오입력은 번호의 5분 만료를 연장하지 않는다.
+    private static final DefaultRedisScript<Long> VERIFY_CODE_SCRIPT = new DefaultRedisScript<>("""
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return 0
+            end
+            local failures = tonumber(redis.call('HGET', KEYS[1], 'failures') or '0')
+            if failures >= tonumber(ARGV[2]) then
+                return 3
+            end
+            if redis.call('HGET', KEYS[1], 'code') == ARGV[1] then
+                redis.call('DEL', KEYS[1])
+                redis.call('SET', KEYS[2], 'true', 'EX', ARGV[3])
+                return 1
+            end
+            failures = redis.call('HINCRBY', KEYS[1], 'failures', 1)
+            if failures >= tonumber(ARGV[2]) then
+                redis.call('HDEL', KEYS[1], 'code')
+                return 3
+            end
+            return 2
+            """, Long.class);
+
+    public EmailVerificationServiceImpl(JavaMailSender mailSender, StringRedisTemplate redisTemplate,
                                         @Value("${spring.mail.username:}") String senderEmail,
                                         @Value("${spring.mail.password:}") String senderPassword) {
         this.mailSender = mailSender;
+        this.redisTemplate = redisTemplate;
         this.senderEmail = senderEmail;
         this.senderPassword = senderPassword;
     }
 
-    /* [수정] DB Repository 삭제 후 Caffeine In-Memory Cache 객체 생성
-     * - verificationCodes: (이메일 -> 인증번호) 저장 (유효기간: 5분)
-     * - verifiedEmails: (이메일 -> 인증완료여부(Boolean)) 저장 (유효기간: 10분)
-     */
-    private final Cache<String, String> verificationCodes = Caffeine.newBuilder()
-            .expireAfterWrite(5, TimeUnit.MINUTES)
-            .build();
-
-    private final Cache<String, Boolean> verifiedEmails = Caffeine.newBuilder()
-            .expireAfterWrite(10, TimeUnit.MINUTES)
-            .build();
-
-    // 6자리 랜덤 인증번호 생성
-    @Override
-    public String createAuthCode() {
-        return String.valueOf((int) (Math.random() * 899999) + 100000);
-    }
-
-    // 메일 발송 및 메모리 캐시 저장 처리 (DB 관련 @Transactional 제거)
     @Override
     public void sendVerificationCode(String email) {
-        InputValidator.requireText("email", email);
-        // 메일 계정이 없는 개발 환경에서도 서버는 실행하되, 발송 요청은 명확히 실패시킨다.
+        email = UserInputValidator.normalizeEmail(email);
         if (senderEmail.isBlank() || senderPassword.isBlank()) {
             throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "MAIL_UNAVAILABLE",
                     "메일 발송 설정이 준비되지 않았습니다. 관리자에게 문의해주세요.");
         }
-        String authCode = createAuthCode();
 
-        // 이메일 발송
+        String cooldownKey = key(email, "cooldown");
+        String requestId = UUID.randomUUID().toString();
+        // SET NX와 만료 시간을 함께 지정해 같은 이메일의 동시 발송도 제한한다.
+        Boolean reserved = redisTemplate.opsForValue()
+                .setIfAbsent(cooldownKey, requestId, RESEND_COOLDOWN);
+        if (reserved == null) {
+            throw new IllegalStateException("Redis 이메일 발송 예약에 실패했습니다.");
+        }
+        if (!reserved) {
+            throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "VERIFICATION_RESEND_TOO_SOON",
+                    "인증번호는 1분 후에 다시 받을 수 있습니다.");
+        }
+
+        String authCode = Integer.toString(RANDOM.nextInt(900000) + 100000);
         SimpleMailMessage message = new SimpleMailMessage();
-        // 실제 발신 주소는 기존 메일 계정을 사용하고, 수신자에게 서비스 이름을 함께 표시한다.
         message.setFrom("TaxJiKim <" + senderEmail + ">");
         message.setTo(email);
         message.setSubject("[TaxJiKim] 이메일 인증번호 안내");
@@ -71,44 +117,63 @@ public class EmailVerificationServiceImpl implements EmailVerificationService {
                 직접 요청하지 않았다면 이 메일을 무시해주세요.
                 """.formatted(authCode));
 
-        mailSender.send(message);
-        // 실제 발송에 성공한 인증번호만 저장하고, 이 시점부터 유효시간을 계산한다.
-        verificationCodes.put(email, authCode);
+        try {
+            mailSender.send(message);
+        } catch (RuntimeException exception) {
+            // 발송 실패는 즉시 재시도할 수 있도록 본인 예약만 해제한다.
+            try {
+                redisTemplate.execute(RELEASE_SEND_SCRIPT, List.of(cooldownKey), requestId);
+            } catch (RuntimeException cleanupException) {
+                exception.addSuppressed(cleanupException);
+            }
+            throw exception;
+        }
+
+        // 새 번호 저장·실패 횟수 초기화·이전 인증 완료 삭제를 한 번에 처리한다.
+        Long saved = redisTemplate.execute(SAVE_CODE_SCRIPT,
+                List.of(cooldownKey, key(email, "code"), key(email, "verified")),
+                requestId, authCode, Integer.toString(CODE_TTL_SECONDS),
+                Long.toString(RESEND_COOLDOWN.toSeconds()));
+        if (!Long.valueOf(1).equals(saved)) {
+            throw new ApiException(HttpStatus.SERVICE_UNAVAILABLE, "VERIFICATION_SEND_FAILED",
+                    "인증번호를 저장하지 못했습니다. 잠시 후 다시 받아 주세요.");
+        }
     }
 
-    // 인증번호 검증 처리 (DB 관련 @Transactional 제거)
     @Override
     public boolean verifyCode(String email, String inputCode) {
-        InputValidator.requireText("email", email);
+        email = UserInputValidator.normalizeEmail(email);
         InputValidator.requireText("code", inputCode);
-        /* Caffeine Cache에서 해당 이메일의 인증번호 조회 */
-        String storedCode = verificationCodes.getIfPresent(email);
-
-        if (storedCode == null) {
-            throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_EXPIRED", "인증번호가 요청되지 않았거나 만료되었습니다.");
+        Long result = redisTemplate.execute(VERIFY_CODE_SCRIPT,
+                List.of(key(email, "code"), key(email, "verified")),
+                inputCode, Integer.toString(MAX_FAILURES), Integer.toString(VERIFIED_TTL_SECONDS));
+        if (result == null) {
+            throw new IllegalStateException("Redis 이메일 인증 결과를 확인하지 못했습니다.");
         }
-
-        if (!storedCode.equals(inputCode)) {
-            return false; // 인증번호 불일치
-        }
-
-        // 인증번호 캐시 삭제
-        verificationCodes.invalidate(email);
-        // 인증 완료 상태 저장
-        verifiedEmails.put(email, true);
-        return true;
+        return switch (result.intValue()) {
+            case 0 -> throw new ApiException(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_EXPIRED",
+                    "인증번호가 요청되지 않았거나 만료되었습니다.");
+            case 1 -> true;
+            case 2 -> false;
+            case 3 -> throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, "VERIFICATION_ATTEMPTS_EXCEEDED",
+                    "인증번호 입력 횟수를 초과했습니다. 인증번호를 다시 받아 주세요.");
+            default -> throw new IllegalStateException("알 수 없는 Redis 이메일 인증 결과입니다.");
+        };
     }
 
-    // 인증 완료 여부 확인 (최종 회원가입/비밀번호 변경 직전에 확인용)
     @Override
     public boolean isVerified(String email) {
-        Boolean isVerified = verifiedEmails.getIfPresent(email);
-        return Boolean.TRUE.equals(isVerified);
+        return "true".equals(redisTemplate.opsForValue().get(key(email, "verified")));
     }
 
-    // 사용 완료된 인증 데이터 삭제
     @Override
     public void removeVerification(String email) {
-        verifiedEmails.invalidate(email);
+        // 최종 가입·변경 성공 후 인증 완료 기록만 소비한다. 재발송 제한은 유지한다.
+        redisTemplate.delete(key(email, "verified"));
+    }
+
+    private String key(String email, String type) {
+        // 같은 이메일의 키를 Redis Cluster에서도 같은 슬롯에 두어 Lua로 함께 처리한다.
+        return "EMAIL_VERIFICATION:{" + UserInputValidator.normalizeEmail(email) + "}:" + type;
     }
 }
