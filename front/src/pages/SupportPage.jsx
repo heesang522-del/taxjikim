@@ -10,10 +10,10 @@ import { useToast } from '../store/useToastStore';
 import { useAuth } from '../store/useAuthStore';
 import { useInquiry } from '../store/useInquiryStore';
 import { toDateLabel } from '../utils/format';
-import { createPost, getFaqs, getInquiriesPage, getLibraryItems } from '../api/post.js';
+import { createPost, getFaqsPage, getInquiriesPage, getLibraryItems } from '../api/post.js';
 
 const VISIBILITY_OPTIONS = [{ value: 'public', label: '공개' }, { value: 'private', label: '비공개' }];
-const QNA_PAGE_WINDOW_SIZE = 9; // 페이지 번호 버튼은 한 번에 최대 이만큼만 보여준다 (게시판과 동일)
+const PAGE_WINDOW_SIZE = 9; // 페이지 번호 버튼은 한 번에 최대 이만큼만 보여준다 (게시판과 동일, FAQ·Q&A 공용)
 
 // 전체 페이지가 많아져도 버튼이 끝없이 늘어나지 않도록, 현재 페이지를 중심으로 최대 size개만 잘라 보여준다.
 function getPageWindow(current, total, size) {
@@ -76,7 +76,9 @@ export default function HelpPage() {
   const [qnaTotalPages, setQnaTotalPages] = useState(1);
   const [loadingInquiries, setLoadingInquiries] = useState(true);
   const [inquiriesError, setInquiriesError] = useState('');
+  const [faqPage, setFaqPage] = useState(Math.max(Number(params.get('page')) || 1, 1));
   const [faqs, setFaqs] = useState([]);
+  const [faqTotalPages, setFaqTotalPages] = useState(1);
   const [loadingFaqs, setLoadingFaqs] = useState(true);
   const [faqsError, setFaqsError] = useState('');
   const [libraryItems, setLibraryItems] = useState([]);
@@ -117,20 +119,33 @@ export default function HelpPage() {
     const next = {};
     if (tab !== 'faq') next.tab = tab;
     if (tab === 'qna' && qnaPage !== 1) next.page = String(qnaPage);
+    if (tab === 'faq' && faqPage !== 1) next.page = String(faqPage);
     setParams(next, { replace: true });
-  }, [tab, qnaPage, setParams]);
+  }, [tab, qnaPage, faqPage, setParams]);
 
-  // FAQ 탭에 들어올 때 DB의 FAQ 게시글을 불러온다.
+  // FAQ 목록 1페이지를 서버에서 받아온다. Q&A와 같은 방식(fetchQnaPage)으로 범위를 벗어난 페이지는 되돌린다.
+  const fetchFaqPage = useCallback(async (targetPage) => {
+    const { posts: items, meta } = await getFaqsPage({ page: targetPage });
+    const totalPages = meta.totalPages || 1;
+    setFaqTotalPages(totalPages);
+    if (items.length === 0 && targetPage > totalPages) {
+      setFaqPage(Math.max(totalPages, 1));
+      return;
+    }
+    setFaqs(items);
+  }, []);
+
+  // FAQ 탭에 들어오거나 페이지를 넘기면 그 페이지의 FAQ만 서버에서 받아온다(Q&A와 동일한 방식).
   useEffect(() => {
     if (tab !== 'faq') return undefined;
     let active = true;
     setLoadingFaqs(true);
-    getFaqs()
-      .then((list) => { if (active) setFaqs(list); })
+    setFaqsError('');
+    fetchFaqPage(faqPage)
       .catch(() => { if (active) setFaqsError('FAQ를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); })
       .finally(() => { if (active) setLoadingFaqs(false); });
     return () => { active = false; };
-  }, [tab]);
+  }, [tab, faqPage, fetchFaqPage]);
 
   // 자료실 탭에 들어올 때 DB의 자료실 게시글(관리자가 올린 PDF)을 불러온다.
   useEffect(() => {
@@ -150,7 +165,8 @@ export default function HelpPage() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const visibleServerInquiries = filterVisible(serverInquiries, { isAdmin, loggedIn, user });
   const visibleInquiries = qnaPage === 1 ? [...visibleLocalInquiries, ...visibleServerInquiries] : visibleServerInquiries;
-  const qnaPageNumbers = getPageWindow(qnaPage, qnaTotalPages, QNA_PAGE_WINDOW_SIZE);
+  const qnaPageNumbers = getPageWindow(qnaPage, qnaTotalPages, PAGE_WINDOW_SIZE);
+  const faqPageNumbers = getPageWindow(faqPage, faqTotalPages, PAGE_WINDOW_SIZE);
 
   // 문의 등록은 실제 백엔드 QNA 게시글 생성 API로 보낸다. 생성 응답에 postId가 없어 등록 후 목록을 다시 불러온다.
   const submitQna = async ({ title, body, visibility }) => {
@@ -184,7 +200,20 @@ export default function HelpPage() {
         loadingFaqs ? <p className="state-msg" role="status">FAQ를 불러오는 중입니다.</p>
           : faqsError ? <p className="state-msg" role="alert">{faqsError}</p>
           : faqs.length
-          ? faqs.map((f) => <details key={f.id}><summary>{f.q}</summary><p>{f.a}</p></details>)
+          ? (
+            <>
+              {faqs.map((f) => <details key={f.id}><summary>{f.q}</summary><p>{f.a}</p></details>)}
+              {faqTotalPages > 1 && (
+                <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
+                  <Button size="sm" variant="ghost" disabled={faqPage <= 1} onClick={() => setFaqPage((p) => p - 1)}>이전</Button>
+                  {faqPageNumbers.map((n) => (
+                    <Button key={n} size="sm" variant={n === faqPage ? 'primary' : 'ghost'} onClick={() => setFaqPage(n)}>{n}</Button>
+                  ))}
+                  <Button size="sm" variant="ghost" disabled={faqPage >= faqTotalPages} onClick={() => setFaqPage((p) => p + 1)}>다음</Button>
+                </div>
+              )}
+            </>
+          )
           : <p className="state-msg">등록된 FAQ가 없습니다</p>
       )}
       {tab === 'lib' && (

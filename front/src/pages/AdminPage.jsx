@@ -124,21 +124,20 @@ function FaqRow({ faq, onSave, onDelete }) {
   );
 }
 
-function FaqAddForm({ onAdd }) {
-  const [open, setOpen] = useState(false);
+// 추가 버튼은 카드 헤더(aside)에 두고, 폼 자체는 이 컴포넌트가 열려 있을 때 본문에 그린다(공지·자료실과 같은 위치).
+function FaqAddForm({ onAdd, onCancel }) {
   const [q, setQ] = useState('');
   const [a, setA] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
 
-  if (!open) return <Button size="sm" variant="soft" onClick={() => setOpen(true)}>새 FAQ 추가</Button>;
   const submit = async () => {
     if (isSubmitting) return;
     if (!q.trim() || !a.trim()) { toast('질문과 답변을 입력하세요'); return; }
     setIsSubmitting(true);
     try {
       await onAdd({ q, a });
-      setQ(''); setA(''); setOpen(false);
+      setQ(''); setA(''); onCancel();
     } catch {
       // 실패 토스트는 onAdd(상위)가 띄운다.
     } finally {
@@ -146,11 +145,11 @@ function FaqAddForm({ onAdd }) {
     }
   };
   return (
-    <div className="grid" style={{ gap: 8 }}>
+    <div className="grid" style={{ gap: 8, marginTop: 12 }}>
       <input className="in" placeholder="질문" value={q} onChange={(e) => setQ(e.target.value)} disabled={isSubmitting} />
       <textarea className="in" rows={3} placeholder="답변" value={a} onChange={(e) => setA(e.target.value)} disabled={isSubmitting} />
       <div className="row">
-        <Button size="sm" onClick={() => setOpen(false)} disabled={isSubmitting}>취소</Button>
+        <Button size="sm" onClick={onCancel} disabled={isSubmitting}>취소</Button>
         <Button size="sm" variant="primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? '등록 중...' : '등록'}</Button>
       </div>
     </div>
@@ -169,14 +168,12 @@ function LibraryRow({ item, onDelete }) {
   );
 }
 
-function LibraryAddForm({ onAdd }) {
-  const [open, setOpen] = useState(false);
+// FaqAddForm과 같은 이유로, 추가 버튼은 카드 헤더(aside)에 두고 폼은 열려 있을 때 본문에 그린다.
+function LibraryAddForm({ onAdd, onCancel }) {
   const [title, setTitle] = useState('');
   const [file, setFile] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const toast = useToast();
-
-  if (!open) return <Button size="sm" variant="soft" onClick={() => setOpen(true)}>새 자료 올리기</Button>;
 
   const submit = async () => {
     if (isSubmitting) return;
@@ -184,7 +181,7 @@ function LibraryAddForm({ onAdd }) {
     setIsSubmitting(true);
     try {
       await onAdd({ title, file });
-      setTitle(''); setFile(null); setOpen(false);
+      setTitle(''); setFile(null); onCancel();
     } catch {
       // 실패 토스트는 onAdd(상위)가 띄운다.
     } finally {
@@ -193,7 +190,7 @@ function LibraryAddForm({ onAdd }) {
   };
 
   return (
-    <div className="grid" style={{ gap: 8 }}>
+    <div className="grid" style={{ gap: 8, marginTop: 12 }}>
       <input className="in" placeholder="자료 제목" value={title} onChange={(e) => setTitle(e.target.value)} disabled={isSubmitting} />
       <input
         className="in"
@@ -203,7 +200,7 @@ function LibraryAddForm({ onAdd }) {
         onChange={(e) => setFile(e.target.files[0] || null)}
       />
       <div className="row">
-        <Button size="sm" onClick={() => setOpen(false)} disabled={isSubmitting}>취소</Button>
+        <Button size="sm" onClick={onCancel} disabled={isSubmitting}>취소</Button>
         <Button size="sm" variant="primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? '업로드 중...' : '등록'}</Button>
       </div>
     </div>
@@ -251,6 +248,10 @@ export default function AdminPage() {
   // 자료실도 FAQ와 같은 이유로 로컬 예시 데이터 없이 서버 목록만 보여준다.
   const [libraryItems, setLibraryItems] = useState([]);
   const loadLibraryItems = () => getLibraryItems().then(setLibraryItems).catch(() => {});
+
+  // FAQ·자료실 추가 버튼을 공지 관리와 같은 위치(카드 오른쪽 상단)에 두기 위해 폼 열림 상태를 여기서 관리한다.
+  const [faqFormOpen, setFaqFormOpen] = useState(false);
+  const [libraryFormOpen, setLibraryFormOpen] = useState(false);
 
   useEffect(() => { loadNotices(noticePage); }, [loadNotices, noticePage]);
   useEffect(() => { loadFaqs(faqPage); }, [loadFaqs, faqPage]);
@@ -394,7 +395,7 @@ export default function AdminPage() {
             <p className="small muted" style={{ marginTop: 8 }}>답변 등록 시 사용자에게 알림이 전송됩니다.</p>
             <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminInquiries}?tab=support`}>전체보기</Button></div>
           </Card>
-          <Card title="공지 관리" icon="megaphone" aside={<Button size="sm" variant="soft" to={`${ROUTES.postWrite}?tab=${encodeURIComponent('공지')}`}>새 공지 올리기</Button>}>
+          <Card title="공지 관리" icon="megaphone" aside={<Button size="sm" variant="soft" to={`${ROUTES.postWrite}?tab=${encodeURIComponent('공지')}`}>새 공지 추가</Button>}>
             {notices.length
               ? notices.map((p) => (
                 <NoticeRow key={p.id} post={p} onSave={(v) => saveNotice(p, v)} />
@@ -402,7 +403,11 @@ export default function AdminPage() {
               : <p className="state-msg">등록된 공지가 없습니다</p>}
             <Pager page={noticePage} totalPages={noticeTotalPages} onChange={setNoticePage} />
           </Card>
-          <Card title="FAQ 관리" icon="fileText">
+          <Card
+            title="FAQ 관리"
+            icon="fileText"
+            aside={!faqFormOpen && <Button size="sm" variant="soft" onClick={() => setFaqFormOpen(true)}>새 FAQ 추가</Button>}
+          >
             {faqs.length
               ? faqs.map((f) => (
                 <FaqRow
@@ -414,11 +419,13 @@ export default function AdminPage() {
               ))
               : <p className="state-msg">등록된 FAQ가 없습니다</p>}
             <Pager page={faqPage} totalPages={faqTotalPages} onChange={setFaqPage} />
-            <div style={{ marginTop: 12 }}>
-              <FaqAddForm onAdd={addFaq} />
-            </div>
+            {faqFormOpen && <FaqAddForm onAdd={addFaq} onCancel={() => setFaqFormOpen(false)} />}
           </Card>
-          <Card title="자료실 관리" icon="fileText">
+          <Card
+            title="자료실 관리"
+            icon="fileText"
+            aside={!libraryFormOpen && <Button size="sm" variant="soft" onClick={() => setLibraryFormOpen(true)}>새 자료 추가</Button>}
+          >
             {libraryItems.length
               ? libraryItems.map((item) => (
                 <LibraryRow
@@ -428,9 +435,7 @@ export default function AdminPage() {
                 />
               ))
               : <p className="state-msg">등록된 자료가 없습니다</p>}
-            <div style={{ marginTop: 12 }}>
-              <LibraryAddForm onAdd={addLibraryItem} />
-            </div>
+            {libraryFormOpen && <LibraryAddForm onAdd={addLibraryItem} onCancel={() => setLibraryFormOpen(false)} />}
           </Card>
         </div>
       )}
