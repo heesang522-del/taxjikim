@@ -7,18 +7,15 @@ import com.kh.back.taxupload.dto.TaxServiceResponse;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import com.kh.back.taxupload.service.YearEndTaxService;
-import com.kh.back.taxupload.validator.TaxValidator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,19 +33,11 @@ public class TaxUploadController {
     @PostMapping("/save")
     public ResponseEntity<ApiResponse<TaxServiceResponse>> save(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestHeader(
-                    name = TaxValidator.GUEST_ACCESS_TOKEN_HEADER,
-                    required = false
-            ) String guestAccessToken,
-            @RequestHeader(
-                    name = TaxValidator.TAX_SAVE_RECEIPT_HEADER,
-                    required = false
-            ) String receipt,
             @RequestBody TaxServiceRequest request
     ) {
         boolean createAnalysis = request.getTaxInputId() == null;
-        TaxServiceResponse saved = service.saveWithReceipt(
-                principal, guestAccessToken, receipt, request
+        TaxServiceResponse saved = service.save(
+                principal, request.getGuestAccessToken(), request
         );
         HttpStatus status = createAnalysis ? HttpStatus.CREATED : HttpStatus.OK;
 
@@ -57,53 +46,32 @@ public class TaxUploadController {
                 .body(ApiResponse.ok(saved));
     }
 
-    @GetMapping("/save-status")
-    public ResponseEntity<ApiResponse<TaxServiceResponse>> findSaveResult(
-            @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestHeader(name = TaxValidator.TAX_SAVE_RECEIPT_HEADER) String receipt
-    ) {
-        return ResponseEntity.ok()
-                .cacheControl(CacheControl.noStore())
-                .body(ApiResponse.ok(service.findSaveResult(principal, receipt)));
-    }
-
     @PostMapping("/inputs/{taxInputId}/update")
     public ApiResponse<TaxInputRequest> update(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestHeader(
-                    name = TaxValidator.GUEST_ACCESS_TOKEN_HEADER,
-                    required = false
-            ) String guestAccessToken,
             @PathVariable("taxInputId") Long taxInputId,
             @RequestBody TaxServiceRequest request
     ) {
         return ApiResponse.ok(
-                service.update(principal, guestAccessToken, taxInputId, request)
+                service.update(principal, request.getGuestAccessToken(), taxInputId, request)
         );
     }
 
     @PostMapping("/inputs/{taxInputId}/delete")
     public ResponseEntity<Void> delete(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestHeader(
-                    name = TaxValidator.GUEST_ACCESS_TOKEN_HEADER,
-                    required = false
-            ) String guestAccessToken,
             @PathVariable("taxInputId") Long taxInputId,
             @RequestParam(value = "deleteAll", defaultValue = "false") boolean deleteAll,
             @RequestBody TaxServiceRequest request
     ) {
-        service.delete(principal, guestAccessToken, taxInputId, request, deleteAll);
+        service.delete(principal, request.getGuestAccessToken(), taxInputId, request, deleteAll);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping(value = "/parse", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<PdfParseResponseDto> parse(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @RequestHeader(
-                    name = TaxValidator.GUEST_ACCESS_TOKEN_HEADER,
-                    required = false
-            ) String guestAccessToken,
+            @RequestParam(value = "guestAccessToken", required = false) String guestAccessToken,
             @RequestParam(value = "taxInputId", required = false) Long taxInputId,
             @RequestParam("file") MultipartFile file
     ) throws IOException {

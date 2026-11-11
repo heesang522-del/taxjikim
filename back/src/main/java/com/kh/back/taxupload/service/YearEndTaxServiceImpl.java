@@ -6,7 +6,6 @@ import com.kh.back.common.security.JwtTokenProvider;
 import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
-import com.kh.back.taxupload.dto.TaxServiceResponse.SaveReceipt;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
 import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
@@ -16,28 +15,19 @@ import com.kh.back.taxupload.validator.TaxValidator;
 import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataAccessException;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.multipart.MultipartFile;
-import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.math.BigDecimal;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -50,11 +40,7 @@ import java.util.Set;
 public class YearEndTaxServiceImpl implements YearEndTaxService {
 
     private static final Duration GUEST_TAX_TOKEN_LIFETIME = Duration.ofHours(24);
-    private static final String SAVE_RECEIPT_PREFIX = "tax:save-receipt:";
-    private static final String SAVE_RECEIPT_PENDING = "PENDING";
 
-    private final StringRedisTemplate redisTemplate;
-    private final ObjectMapper objectMapper;
     private final TaxValidator taxValidator;
     private final TaxMapper taxMapper;
     private final PythonPdfClient pythonPdfClient;
@@ -179,156 +165,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 .build();
     }
 
-    @Override
-    @Transactional
-    public TaxServiceResponse saveWithReceipt(
-            CustomUserDetails principal,
-            String guestAccessToken,
-            String receipt,
-            TaxServiceRequest request
-    ) {
-        if (receipt == null) {
-            return save(principal, guestAccessToken, request);
-        }
-
-        taxValidator.validateSaveReceipt(receipt);
-
-        String redisKey = saveReceiptKey(receipt);
-        Instant expiresAt = Instant.now().plus(GUEST_TAX_TOKEN_LIFETIME);
-        Boolean reserved;
-
-        try {
-            // 같은 확인 키의 첫 요청만 DB 저장을 진행한다.
-            reserved = redisTemplate.opsForValue().setIfAbsent(
-                    redisKey,
-                    SAVE_RECEIPT_PENDING,
-                    GUEST_TAX_TOKEN_LIFETIME
-            );
-        } catch (DataAccessException exception) {
-            throw new ApiException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "TAX_SAVE_CONFIRMATION_UNAVAILABLE",
-                    "저장 확인 서비스를 사용할 수 없어 거래 저장을 시작하지 못했습니다."
-            );
-        }
-
-        if (!Boolean.TRUE.equals(reserved)) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT,
-                    "TAX_SAVE_RECEIPT_ALREADY_USED",
-                    "이미 접수한 저장 요청입니다. 저장 결과를 확인해주세요."
-            );
-        }
-
-        TaxServiceResponse saved = save(principal, guestAccessToken, request);
-
-        // 조회용 응답에는 비회원 토큰 원문을 보관하지 않는다.
-        TaxServiceResponse storedResult = TaxServiceResponse.builder()
-                .input(saved.getInput())
-                .transactions(saved.getTransactions())
-                .build();
-
-        SaveReceipt record = new SaveReceipt(
-                principal == null ? null : principal.getUserId(),
-                saved.getInput().getTaxInputId(),
-                saved.getGuestAccessToken() != null,
-                expiresAt.getEpochSecond(),
-                storedResult
-        );
-
-        String recordJson = objectMapper.writeValueAsString(record);
-
-        TransactionSynchronizationManager.registerSynchronization(
-                new TransactionSynchronization() {
-                    @Override
-                    public void afterCommit() {
-                        // MySQL 커밋이 완료된 후에만 성공 기록을 공개한다.
-                        Duration remaining = Duration.between(Instant.now(), expiresAt);
-
-                        if (remaining.isZero() || remaining.isNegative()) {
-                            return;
-                        }
-
-                        try {
-                            redisTemplate.opsForValue().set(redisKey, recordJson, remaining);
-                        } catch (DataAccessException exception) {
-                            log.warn("거래는 저장됐지만 저장 확인 기록을 남기지 못했습니다.", exception);
-                        }
-                    }
-                }
-        );
-
-        return saved;
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public TaxServiceResponse findSaveResult(CustomUserDetails principal, String receipt) {
-        taxValidator.validateSaveReceipt(receipt);
-
-        String recordJson;
-
-        try {
-            recordJson = redisTemplate.opsForValue().get(saveReceiptKey(receipt));
-        } catch (DataAccessException exception) {
-            throw new ApiException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "TAX_SAVE_CONFIRMATION_UNAVAILABLE",
-                    "현재 저장 결과를 조회할 수 없습니다."
-            );
-        }
-
-        if (recordJson == null || SAVE_RECEIPT_PENDING.equals(recordJson)) {
-            return null;
-        }
-
-        SaveReceipt record = objectMapper.readValue(recordJson, SaveReceipt.class);
-        Long userId = principal == null ? null : principal.getUserId();
-
-        if (record.ownerUserId() != null && !Objects.equals(record.ownerUserId(), userId)) {
-            return null;
-        }
-
-        Instant now = Instant.now();
-        Instant expiresAt = Instant.ofEpochSecond(record.expiresAtEpoch());
-
-        if (!expiresAt.isAfter(now)) {
-            return null;
-        }
-
-        TaxInputRequest currentInput = taxMapper.findInput(record.taxInputId());
-
-        if (currentInput == null
-                || (currentInput.getUserId() != null
-                && !Objects.equals(currentInput.getUserId(), userId))) {
-            return null;
-        }
-
-        TaxServiceResponse result = record.result();
-
-        // 첫 비회원 저장 응답을 받지 못한 경우 남은 유효기간으로 토큰을 복구한다.
-        if (record.guestTokenIssued() && currentInput.getUserId() == null) {
-            result.setGuestAccessToken(
-                    issueGuestAccessToken(record.taxInputId(), now, expiresAt)
-            );
-        }
-
-        return result;
-    }
-
-    private String saveReceiptKey(String receipt) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(receipt.getBytes(StandardCharsets.US_ASCII));
-            return SAVE_RECEIPT_PREFIX + HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException exception) {
-            throw new IllegalStateException("저장 확인 키를 처리할 수 없습니다.", exception);
-        }
-    }
-
-    /**
-     * 기본정보와 거래 카테고리를 한 요청에서 수정한다.
-     */
     @Override
     @Transactional
     public TaxInputRequest update(
@@ -782,11 +618,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     }
 
     private String issueGuestAccessToken(Long taxInputId) {
-        Instant now = Instant.now();
-        return issueGuestAccessToken(taxInputId, now, now.plus(GUEST_TAX_TOKEN_LIFETIME));
-    }
-
-    private String issueGuestAccessToken(Long taxInputId, Instant issuedAt, Instant expiresAt) {
+        Instant issuedAt = Instant.now();
+        Instant expiresAt = issuedAt.plus(GUEST_TAX_TOKEN_LIFETIME);
         // 비회원 토큰의 권한을 해당 분석 한 건으로 제한한다.
         return Jwts.builder()
                 .claim("type", TaxValidator.GUEST_TAX_TOKEN_TYPE)

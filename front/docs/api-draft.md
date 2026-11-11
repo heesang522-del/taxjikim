@@ -233,6 +233,9 @@ ALTER TABLE TAX_TRANSACTIONS
 
 저장 `POST /api/v1/tax/save`의 `input`과 수정 `POST /api/v1/tax/inputs/{taxInputId}/update`의 `input`은 같은 필드를 사용한다.
 
+- 기존 비회원 분석의 저장·수정·삭제 요청은 JSON 본문에 `guestAccessToken`을 담는다. PDF 추출에서 기존 분석번호를 전달할 때는 multipart 폼에 같은 이름의 필드를 담는다.
+- 비회원 첫 저장 응답에서 토큰을 발급한다. 저장 응답을 받지 못하면 별도 저장 결과 조회 없이 화면에 저장 여부가 불명확하다고 표시한다.
+
 ```json
 {
   "input": {

@@ -1,19 +1,10 @@
 import { client } from './client';
 
-const GUEST_ACCESS_TOKEN_HEADER = 'X-Guest-Access-Token';
-const TAX_SAVE_RECEIPT_HEADER = 'X-Tax-Save-Receipt';
-
-// 같은 화면에서 이어지는 요청에 사용할 비회원 토큰을 분석번호별로 보관한다.
+// 저장 응답으로 받은 비회원 토큰을 분석번호별로 보관한다.
 const guestAccessTokens = new Map();
 
-function guestAccessHeaders(taxInputId) {
-  const token = guestAccessTokens.get(String(taxInputId));
-
-  if (!token) {
-    return undefined;
-  }
-
-  return { [GUEST_ACCESS_TOKEN_HEADER]: token };
+function getGuestAccessToken(taxInputId) {
+  return guestAccessTokens.get(String(taxInputId));
 }
 
 // 마이페이지는 본인의 저장 결과 번호·귀속연도·저장 시각만 받는다.
@@ -224,14 +215,8 @@ export async function getTaxResult(taxInputId) {
 // input만 보내면 새 분석을 생성한다.
 // taxInputId와 transactions를 보내면 기존 분석에 거래를 저장한다.
 // input과 transactions를 보내면 새 분석과 거래를 함께 저장한다.
-export async function saveTaxData({
-                                    input,
-                                    taxInputId,
-                                    transactions,
-                                    expectedTransactionCount,
-                                    receipt,
-                                  } = {}) {
-  const data = {};
+export async function saveTaxData({ input, taxInputId, transactions, expectedTransactionCount } = {}) {
+  const data = { guestAccessToken: getGuestAccessToken(taxInputId) };
 
   if (taxInputId == null) {
     data.input = normalizeTaxInput(input);
@@ -259,16 +244,9 @@ export async function saveTaxData({
     }
   }
 
-  const headers = { ...guestAccessHeaders(taxInputId) };
-
-  if (receipt) {
-    headers[TAX_SAVE_RECEIPT_HEADER] = receipt;
-  }
-
   const result = await request({
     url: '/tax/save',
     method: 'POST',
-    headers,
     data,
   });
 
@@ -283,23 +261,6 @@ function rememberGuestAccessToken(result) {
   if (taxInputId != null && typeof token === 'string' && token) {
     guestAccessTokens.set(String(taxInputId), token);
   }
-}
-
-function createSaveReceipt() {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
-}
-
-// 저장 성공 기록을 조회하고, 새 비회원 분석의 토큰이 있으면 보관한다.
-export async function getTaxSaveResult(receipt) {
-  const result = await request({
-    url: '/tax/save-status',
-    method: 'GET',
-    headers: { [TAX_SAVE_RECEIPT_HEADER]: receipt },
-  });
-
-  rememberGuestAccessToken(result);
-  return result?.data ?? null;
 }
 
 // 기존 화면에서 사용하는 생성 함수 이름과 응답 형식을 유지한다.
@@ -340,7 +301,7 @@ export async function updateTaxData(taxInputId, { input, changes } = {}) {
     throw new Error('수정할 기본정보 또는 카테고리를 전달해주세요.');
   }
 
-  const data = {};
+  const data = { guestAccessToken: getGuestAccessToken(taxInputId) };
 
   if (hasInput) {
     data.input = normalizeTaxInput(input);
@@ -356,7 +317,6 @@ export async function updateTaxData(taxInputId, { input, changes } = {}) {
   return request({
     url,
     method: 'POST',
-    headers: guestAccessHeaders(taxInputId),
     data,
   });
 }
@@ -377,7 +337,7 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
     throw new Error('분석 전체 삭제에는 거래번호를 전달할 수 없습니다.');
   }
 
-  const data = {};
+  const data = { guestAccessToken: getGuestAccessToken(taxInputId) };
 
   if (!deleteAll) {
     data.transactionId = transactionId;
@@ -386,7 +346,6 @@ export async function deleteTaxData(taxInputId, { deleteAll = false, transaction
   const result = await request({
     url,
     method: 'POST',
-    headers: guestAccessHeaders(taxInputId),
     params: { deleteAll },
     data,
   });
@@ -418,12 +377,16 @@ export async function parsePdf(file, { signal, taxInputId = null } = {}) {
 
   if (taxInputId !== null) {
     formData.append('taxInputId', String(taxInputId));
+
+    const guestAccessToken = getGuestAccessToken(taxInputId);
+    if (guestAccessToken) {
+      formData.append('guestAccessToken', guestAccessToken);
+    }
   }
 
   return request({
     url: '/tax/parse',
     method: 'POST',
-    headers: guestAccessHeaders(taxInputId),
     data: formData,
     timeout: 180000,
     signal,
@@ -661,8 +624,10 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
           await request({
             url: `${inputPath(operation.taxInputId)}/delete`,
             method: 'POST',
-            headers: guestAccessHeaders(operation.taxInputId),
-            data: { transactionIds: group.map((item) => item.transactionId) },
+            data: {
+              transactionIds: group.map((item) => item.transactionId),
+              guestAccessToken: getGuestAccessToken(operation.taxInputId),
+            },
           });
 
           deletionsByInput.delete(operation.taxInputId);
@@ -708,7 +673,7 @@ export async function saveTaxReview(proposed, { originalState, onOperationSucces
 }
 
 // 정상 응답과 조회로 확인한 응답에 같은 거래 연결 규칙을 적용한다.
-export function bindSavedTaxGroup(taxYear, taxInputId, entries, savedRows, previousRows = []) {
+function bindSavedTaxGroup(taxYear, taxInputId, entries, savedRows, previousRows = []) {
   if (!Number.isSafeInteger(taxInputId) || taxInputId <= 0) {
     throw new Error('저장 결과의 분석번호가 올바르지 않습니다.');
   }
@@ -766,11 +731,10 @@ export function bindSavedTaxGroup(taxYear, taxInputId, entries, savedRows, previ
 // 신규 정상 거래를 귀속연도별로 저장하고 DB 거래번호를 화면에 연결한다.
 export async function saveInitialTaxRows(
   state,
-  { onInputCreated, onGroupSaved, onPdfSaveRequest } = {}
+  { onInputCreated, onGroupSaved, saveInputWithTransactions = false } = {}
 ) {
-  const trackPdfSave = typeof onPdfSaveRequest === 'function';
 
-  if (typeof onGroupSaved !== 'function' || (!trackPdfSave && typeof onInputCreated !== 'function')) {
+  if (typeof onGroupSaved !== 'function' || (!saveInputWithTransactions && typeof onInputCreated !== 'function')) {
     throw new Error('저장 결과를 반영할 함수가 필요합니다.');
   }
 
@@ -860,18 +824,12 @@ export async function saveInitialTaxRows(
     const transactions = entries.map(({ payload }) => payload);
     let savedRows;
 
-    if (trackPdfSave) {
-      const receipt = createSaveReceipt();
-
-      // 요청을 보내기 전에 확인 키와 이 요청에 포함된 화면 거래를 보관한다.
-      onPdfSaveRequest({ receipt, taxYear: year, entries });
-
+    if (saveInputWithTransactions) {
       const response = await saveTaxData({
         input: taxInputId == null ? { ...profile, taxYear: year, saveStatus: 'TEMP' } : undefined,
         taxInputId,
         transactions,
         expectedTransactionCount: previousRows.length,
-        receipt,
       });
 
       taxInputId = response?.data?.input?.taxInputId;

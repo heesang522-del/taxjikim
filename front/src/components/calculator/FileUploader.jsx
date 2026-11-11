@@ -2,13 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Button } from '../common/index';
-import {
-  bindSavedTaxGroup,
-  getTaxSaveResult,
-  saveInitialTaxRows,
-  saveTaxReview,
-  uploadTaxPdfApi,
-} from '../../api/taxApi';
+import { saveInitialTaxRows, saveTaxReview, uploadTaxPdfApi } from '../../api/taxApi';
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
 
 function normalizeDate(value) {
@@ -96,13 +90,6 @@ function requiresSaveCheck(file) {
   return file.saveOutcomeUnknown === true;
 }
 
-// 응답이 끊길 때 조회할 수 있도록 저장 요청 전에 확인 키와 거래를 보관한다.
-function rememberPdfSaveRequest(key, pendingSave) {
-  useTaxStore.setState((current) => ({
-    uploadedFiles: (current.uploadedFiles ?? []).map((file) => (file.key === key ? { ...file, pendingSave } : file)),
-  }));
-}
-
 // DB 거래번호를 화면에 표시할 행에 연결한다.
 function bindPdfRow(row, saved) {
   return {
@@ -130,7 +117,6 @@ function commitPdfGroup(key, { taxYear, taxInputId, rows: savedRows, bindings })
 
       return {
         ...file,
-        pendingSave: undefined,
         stagedRows: (file.stagedRows ?? []).map((row) => {
           const saved = savedById.get(row.id);
           return saved ? bindPdfRow(row, saved) : row;
@@ -158,14 +144,10 @@ function publishPdfRows(key, saveError = null) {
   }
 
   const unconfirmedCount = saveError ? pendingCount : 0;
-  const rejectedStatuses = [400, 401, 403, 404, 413, 422];
+  const status = saveError?.status;
 
-  // 명시적으로 거절된 응답과 DB 반영 여부를 확인할 수 없는 응답을 구분한다.
-  const saveOutcomeUnknown =
-    unconfirmedCount > 0 &&
-    record.pendingSave != null &&
-    saveError?.code !== 'TAX_SAVE_CONFIRMATION_UNAVAILABLE' &&
-    !rejectedStatuses.includes(saveError?.status);
+  // 응답이 끊기면 DB 반영 여부를 알 수 없어 같은 파일의 재업로드를 제한한다.
+  const saveOutcomeUnknown = unconfirmedCount > 0 && (status == null || status === 408 || status >= 500);
 
   // 저장이 중단되면 성공 응답을 받은 거래와 원래 검토 대상만 목록에 표시한다.
   const visibleRows = saveError ? stagedRows.filter((row) => isSavedRow(row) || isReviewRow(row)) : stagedRows;
@@ -189,8 +171,6 @@ function publishPdfRows(key, saveError = null) {
               published: true,
               stagedRows: undefined,
               savedGroups: undefined,
-              pendingSave: saveOutcomeUnknown ? file.pendingSave : undefined,
-              unconfirmedRows: saveOutcomeUnknown ? stagedRows.filter(isPendingRow) : undefined,
               unconfirmedCount,
               saveOutcomeUnknown,
             }
@@ -242,65 +222,11 @@ async function saveParsedPdf(key) {
   };
 
   await saveInitialTaxRows(scopedState, {
-    onPdfSaveRequest: (pendingSave) => rememberPdfSaveRequest(key, pendingSave),
+    saveInputWithTransactions: true,
     onGroupSaved: (group) => commitPdfGroup(key, group),
   });
 
   return publishPdfRows(key);
-}
-
-function applyConfirmedPdfSave(key, group) {
-  useTaxStore.setState((current) => {
-    const file = (current.uploadedFiles ?? []).find((entry) => entry.key === key);
-    const savedById = new Map(group.bindings.map(({ rowId, saved }) => [rowId, saved]));
-
-    const confirmedRows = (file?.unconfirmedRows ?? []).flatMap((row) => {
-      const saved = savedById.get(row.id);
-      return saved ? [bindPdfRow(row, saved)] : [];
-    });
-
-    if (confirmedRows.length !== group.bindings.length) {
-      throw new Error('저장 결과를 화면 거래와 연결하지 못했습니다.');
-    }
-
-    const snapshots = current.taxSavedSnapshots ?? [];
-    const previous = snapshots.find((item) => item.taxInputId === group.taxInputId);
-    const rowsById = new Map((previous?.rows ?? []).map((row) => [row.transactionId, row]));
-
-    for (const { saved } of group.bindings) {
-      rowsById.set(saved.transactionId, saved);
-    }
-
-    const idsByYear = { ...(current.taxInputIdsByYear ?? {}) };
-    idsByYear[group.taxYear] ??= group.taxInputId;
-
-    // 기존 화면 거래에 이번 조회로 확인한 행만 추가한다.
-    return {
-      fileRows: [...(current.fileRows ?? []), ...confirmedRows],
-      uploadedFiles: (current.uploadedFiles ?? []).map((entry) =>
-        entry.key === key
-          ? {
-              ...entry,
-              pendingSave: undefined,
-              unconfirmedRows: undefined,
-              unconfirmedCount: Math.max(0, (entry.unconfirmedCount ?? 0) - confirmedRows.length),
-              saveOutcomeUnknown: false,
-            }
-          : entry
-      ),
-      taxInputIdsByYear: idsByYear,
-      taxSavedSnapshots: [
-        ...snapshots.filter((item) => item.taxInputId !== group.taxInputId),
-        {
-          taxYear: group.taxYear,
-          taxInputId: group.taxInputId,
-          rows: [...rowsById.values()],
-        },
-      ],
-      taxLastSavedSignature: null,
-      calculated: false,
-    };
-  });
 }
 
 // DB 삭제가 성공한 거래를 화면과 저장 스냅샷에서 제거한다.
@@ -357,7 +283,7 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
 
     if (existingFile) {
       if (existingFile.saveOutcomeUnknown) {
-        setError('이 PDF는 저장 결과를 확인해야 합니다. 파일명 옆의 저장 결과 확인을 눌러주세요.');
+        setError('이 PDF의 일부 거래는 저장 여부를 확인할 수 없습니다.');
       } else {
         setMessage('이미 불러온 PDF입니다. 아래 파일 내역을 확인해주세요.');
       }
@@ -429,44 +355,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
 
     if (resultInfo) {
       await notifySuccess(resultInfo);
-    }
-  }
-
-  async function handleCheckSave(key) {
-    const current = useTaxStore.getState();
-
-    if (uploadingRef.current || current.taxSaveBusy) return;
-
-    const pendingSave = (current.uploadedFiles ?? []).find((file) => file.key === key)?.pendingSave;
-
-    if (!pendingSave) return;
-
-    setError('');
-    setMessage('저장 결과를 확인하고 있습니다.');
-    useTaxStore.setState({ taxSaveBusy: true });
-
-    try {
-      const result = await getTaxSaveResult(pendingSave.receipt);
-
-      if (!result) {
-        setMessage('아직 저장 성공 기록을 확인할 수 없습니다.');
-        return;
-      }
-
-      const group = bindSavedTaxGroup(
-        pendingSave.taxYear,
-        result.input?.taxInputId,
-        pendingSave.entries,
-        result.transactions
-      );
-
-      applyConfirmedPdfSave(key, group);
-      setMessage(`저장이 확인된 거래 ${group.bindings.length}건을 목록에 반영했습니다.`);
-    } catch (cause) {
-      setMessage('');
-      setError(cause?.message ?? '저장 결과를 확인하지 못했습니다.');
-    } finally {
-      useTaxStore.setState({ taxSaveBusy: false });
     }
   }
 
@@ -588,12 +476,6 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
           <section className="tax-upload__file" key={file.key}>
             <div className="tax-upload__file-header">
               <p className="tax-upload__file-name">{file.name}</p>
-
-              {file.saveOutcomeUnknown && file.pendingSave && (
-                <Button type="button" size="sm" disabled={busy} onClick={() => void handleCheckSave(file.key)}>
-                  저장 결과 확인
-                </Button>
-              )}
 
               <Button
                 type="button"

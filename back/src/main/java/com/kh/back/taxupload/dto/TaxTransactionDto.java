@@ -97,6 +97,7 @@ public class TaxTransactionDto {
         private String target;
 
         private Long taxInputId;
+        private String guestAccessToken; // 기존 비회원 분석 접근에 사용하는 토큰
         private Long transactionId;
         private java.util.List<Long> transactionIds;
         private Integer taxYear;

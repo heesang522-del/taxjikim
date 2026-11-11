@@ -23,13 +23,4 @@ public class TaxServiceResponse {
 
     // 저장된 거래 목록
     private List<TaxTransactionDto> transactions;
-
-    public record SaveReceipt(
-            Long ownerUserId,
-            Long taxInputId,
-            boolean guestTokenIssued,
-            long expiresAtEpoch,
-            TaxServiceResponse result
-    ) {
-    }
 }

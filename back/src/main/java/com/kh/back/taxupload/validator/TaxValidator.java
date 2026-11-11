@@ -28,12 +28,10 @@ import java.util.Set;
 @RequiredArgsConstructor
 public class TaxValidator {
 
-    public static final String GUEST_ACCESS_TOKEN_HEADER = "X-Guest-Access-Token";
     public static final String GUEST_TAX_TOKEN_TYPE = "guest-tax-access";
 
     // DECIMAL(15, 2)의 DB 저장 범위다.
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999999.99");
-    public static final String TAX_SAVE_RECEIPT_HEADER = "X-Tax-Save-Receipt";
 
     // 세율 필드에 저장할 수 있는 퍼센트 값의 상한이다.
     private static final BigDecimal MAX_RATE = new BigDecimal("100");
@@ -61,12 +59,6 @@ public class TaxValidator {
     public void validateId(Long value, String field) {
         if (value == null || value <= 0) {
             throw invalid(field, "유효한 번호가 필요합니다.");
-        }
-    }
-
-    public void validateSaveReceipt(String receipt) {
-        if (receipt == null || !receipt.matches("[0-9a-f]{64}")) {
-            throw invalid("saveReceipt", "유효한 저장 확인 키가 필요합니다.");
         }
     }
 
