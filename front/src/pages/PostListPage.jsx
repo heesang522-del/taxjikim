@@ -21,7 +21,7 @@ function getPageWindow(current, total, size) {
   return Array.from({ length: size }, (_, i) => start + i);
 }
 
-export default function PostListPage() {
+export function PostListPage() {
   const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState(POST_TABS.includes(params.get('tab')) ? params.get('tab') : POST_TABS[0]);
   const [queryInput, setQueryInput] = useState(params.get('q') ?? '');

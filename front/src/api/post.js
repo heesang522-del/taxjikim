@@ -32,6 +32,7 @@ export function toPost(post) {
     INFO: '정보 공유',
     TIP: '팁',
     NOTICE: '공지',
+    LIBRARY: '자료실',
   };
 
   return {
@@ -56,14 +57,18 @@ export function toPost(post) {
         name,
         storedFileName: storedName,
         previewUrl: storedName ? `/uploads/files/${encodeURIComponent(storedName)}` : null,
-        mediaType: /\.(mp4|webm|mov)$/i.test(storedName || name) ? 'video' : 'image',
+        mediaType: /\.(mp4|webm|mov)$/i.test(storedName || name)
+          ? 'video'
+          : /\.pdf$/i.test(storedName || name)
+            ? 'pdf'
+            : 'image',
       };
     }),
   };
 }
 
 // 서버가 페이지 단위로 내려주는 목록을 처음부터 끝까지 모아 하나의 배열로 돌려준다.
-// getNotices(공지 전체)·getInquiries(Q&A 전체 목록)처럼 서버 페이징 UI 없이 전체를 한 번에 보여주는
+// getLibraryItems(자료실 전체)·getInquiries(Q&A 전체 목록)처럼 서버 페이징 UI 없이 전체를 한 번에 보여주는
 // 화면이 쓴다. 페이지 단위로 보여주는 화면은 getPostsPage를 쓴다.
 async function fetchAllPages(params, mapItem, fallbackMessage) {
   const items = [];
@@ -88,9 +93,49 @@ async function fetchAllPages(params, mapItem, fallbackMessage) {
   return items;
 }
 
-// 관리자 "공지 관리"가 전체 공지를 한 번에 보여주는 데 쓴다.
-export function getNotices() {
-  return fetchAllPages({ postType: '공지' }, toPost, '공지 목록을 불러오지 못했습니다.');
+// 관리자 "공지 관리"가 한 페이지씩 보여주는 데 쓴다.
+export async function getNoticesPage({ page = 1 } = {}) {
+  const fallbackMessage = '공지 목록을 불러오지 못했습니다.';
+  const result = await unwrapRequest(
+    client.get('', { baseURL: POST_API_BASE, params: { page, postType: '공지' } }),
+    fallbackMessage
+  );
+
+  if (!Array.isArray(result.data)) {
+    throw new Error(fallbackMessage);
+  }
+
+  return { posts: result.data.map(toPost), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
+}
+
+// 서버의 FAQ 게시글을 고객센터 화면에서 쓰는 질문/답변 필드로 변환한다.
+export function toFaq(post) {
+  return {
+    id: String(post.postId),
+    q: post.title || '',
+    a: post.content || '',
+  };
+}
+
+// 고객센터 FAQ 탭·관리자 "FAQ 관리"가 한 페이지씩 보여주는 데 쓴다. 서버가 등록순(오래된 글부터)으로 정렬해서 내려준다.
+export async function getFaqsPage({ page = 1 } = {}) {
+  const fallbackMessage = 'FAQ 목록을 불러오지 못했습니다.';
+  const result = await unwrapRequest(
+    client.get('', { baseURL: POST_API_BASE, params: { page, postType: 'FAQ' } }),
+    fallbackMessage
+  );
+
+  if (!Array.isArray(result.data)) {
+    throw new Error(fallbackMessage);
+  }
+
+  return { posts: result.data.map(toFaq), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
+}
+
+// 자료실도 FAQ·공지와 같은 "관리자만 작성, 개수 적음" 게시판이라 페이지 UI 없이 전체를 한 번에 불러온다.
+// 첨부된 PDF는 toPost가 만들어주는 attachments[0].previewUrl 그대로 연다(다른 게시글 첨부와 같은 방식).
+export function getLibraryItems() {
+  return fetchAllPages({ postType: 'LIBRARY' }, toPost, '자료실 목록을 불러오지 못했습니다.');
 }
 
 // 게시판 목록을 한 페이지만 받아온다. 탭(postType)·검색어(keyword)·페이지 번호를 그대로 서버에 넘기고,
@@ -141,6 +186,21 @@ export function toInquiry(post) {
 
 export function getInquiries() {
   return fetchAllPages({ postType: 'QNA' }, toInquiry, 'Q&A 목록을 불러오지 못했습니다.');
+}
+
+// Q&A 목록을 한 페이지만 받아온다. 고객센터 화면이 게시판처럼 페이지 번호 UI로 보여줄 때 쓴다.
+export async function getInquiriesPage({ page = 1, sort = 'latest' } = {}) {
+  const fallbackMessage = 'Q&A 목록을 불러오지 못했습니다.';
+  const result = await unwrapRequest(
+    client.get('', { baseURL: POST_API_BASE, params: { page, sort, postType: 'QNA' } }),
+    fallbackMessage
+  );
+
+  if (!Array.isArray(result.data)) {
+    throw new Error(fallbackMessage);
+  }
+
+  return { posts: result.data.map(toInquiry), meta: result.meta ?? { page, size: result.data.length, total: result.data.length, totalPages: 1 } };
 }
 
 export async function getInquiryDetail(postId) {

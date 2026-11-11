@@ -2,11 +2,9 @@
 'use no memo';
 
 import { create } from 'zustand';
-import { ACCOUNT_SEED } from '../data/content.js';
 import { loginSession, logoutSession, checkSession as checkSessionRequest } from '../api/authApi.js';
 import { getMyProfile } from '../api/userApi.js';
 
-const ACCOUNTS_KEY = 'taxlab.accounts.v1';
 const PRESENCE_KEY = 'taxlab.presence.v1';
 
 /** 접속 중으로 보는 시간(ms). 로그인한 탭이 이 주기로 접속 표시를 갱신한다. */
@@ -17,14 +15,6 @@ export const PRESENCE_BEAT = 15_000;
 const mockMemory = new Map();
 const readJson = (key, fallback) => mockMemory.get(key) ?? fallback;
 const writeJson = (key, value) => mockMemory.set(key, value);
-
-// MOCK: 실제 로그인과 분리된 예시 계정은 현재 페이지의 메모리에서만 관리한다.
-const readAccounts = () => {
-  const saved = readJson(ACCOUNTS_KEY, null);
-  if (!Array.isArray(saved)) return ACCOUNT_SEED;
-  const list = saved.map((a) => ({ status: '정상', ...a }));
-  return [...list, ...ACCOUNT_SEED.filter((seed) => !list.some((a) => a.id === seed.id))];
-};
 
 /** 현재 탭의 메모리에 기록된 예시 접속 상태만 확인한다. */
 export const isOnline = (nickname) => {
@@ -52,22 +42,7 @@ function toScreenUser(profile) {
 export const useAuthStore = create((set, get) => {
   let authRevision = 0;
   let initialRequest = null;
-  // 예시 계정 변경은 메모리에만 반영하며 실제 서버 인증 상태와 구분한다.
-  const mutateAccounts = (fn) => {
-    const next = fn(readAccounts());
-    writeJson(ACCOUNTS_KEY, next);
-    set({ accounts: next });
-  };
-  const findDuplicate = ({ id, nickname, email }) => {
-    const { accounts } = get();
-    if (accounts.some((a) => a.id === id)) return 'id';
-    if (accounts.some((a) => a.nickname === nickname)) return 'nickname';
-    if (accounts.some((a) => a.email.toLowerCase() === email.toLowerCase())) return 'email';
-    return null;
-  };
-
   return {
-    accounts: readAccounts(),
     userId: null,
     authStatus: 'checking',
     authError: '',
@@ -154,39 +129,6 @@ export const useAuthStore = create((set, get) => {
         if (revision === authRevision && error.status === 401) get().clearAuth();
         throw error;
       }
-    },
-
-    /** MOCK: 예시 회원 목록의 표시 상태만 변경한다. 실제 계정 해제는 관리자 API를 사용한다. */
-    setAccountStatus: (id, status) => {
-      mutateAccounts((list) =>
-        list.map((a) => {
-          if (a.id !== id) return a;
-          const { suspendedBy: _suspendedBy, ...rest } = a;
-          return status === '정지' ? { ...rest, status, suspendedBy: 'admin' } : { ...rest, status };
-        })
-      );
-    },
-
-    /** 이미 쓰고 있는 값이면 어떤 항목인지 돌려준다 ('id' | 'nickname' | 'email'). */
-    findDuplicate,
-
-    signup: (data) => {
-      const dup = findDuplicate(data);
-      if (dup) return { ok: false, field: dup };
-      const joinedAt = new Date().toLocaleDateString('sv-SE');
-      mutateAccounts((list) => [...list, { ...data, role: 'member', status: '정상', joinedAt }]);
-      return { ok: true };
-    },
-
-    findIdByNameEmail: (name, email) =>
-      get().accounts.find((a) => a.name === name.trim() && a.email.toLowerCase() === email.trim().toLowerCase()) ??
-      null,
-
-    hasIdEmail: (id, email) =>
-      get().accounts.some((a) => a.id === id.trim() && a.email.toLowerCase() === email.trim().toLowerCase()),
-
-    resetPassword: (id, pw) => {
-      mutateAccounts((list) => list.map((a) => (a.id === id.trim() ? { ...a, pw } : a)));
     },
   };
 });

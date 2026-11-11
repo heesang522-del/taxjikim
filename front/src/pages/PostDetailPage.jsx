@@ -4,9 +4,9 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button, Card, Modal, Pill } from '../components/common/index';
-import NoticeCard from '../components/community/NoticeCard';
-import CommentSection from '../components/community/CommentSection';
-import ReportModal from '../components/community/ReportModal';
+import NoticeCard from '../components/post/NoticeCard';
+import CommentSection from '../components/post/CommentSection';
+import ReportModal from '../components/post/ReportModal';
 import { DELETED_POST } from '../data/options';
 import { ROUTES } from '../utils/routes';
 import { useAuth } from '../store/useAuthStore';
@@ -21,7 +21,7 @@ const listOf = (tab) => `${ROUTES.postList}?tab=${encodeURIComponent(tab)}`;
 // 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. SupportQnaPostPage와 같은 구분 방식.
 const isServerId = (id) => /^\d+$/.test(id);
 
-export default function PostDetailPage() {
+export function PostDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -172,6 +172,10 @@ export default function PostDetailPage() {
                       preload="metadata"
                       style={{ maxWidth: '100%', maxHeight: 560, borderRadius: 8 }}
                     />
+                  ) : file.mediaType === 'pdf' ? (
+                    <a href={file.previewUrl} target="_blank" rel="noopener noreferrer">
+                      📄 {file.name || `첨부파일 ${index + 1}`}
+                    </a>
                   ) : (
                     <img
                       {...imagePreviewProps}

@@ -1,8 +1,8 @@
 {
   "data_versions": {
-    "data\\expense\\training\\training_data.csv": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
-    "data\\expense\\user_approved\\category_feedback.csv": "2b53271f81654845b41081b1ada28f5a2e598b4b3dde95040e679e13f563fad0"
+    "data/expense/training/training_data.csv": "ce62021578ea7fe0ca54edf078638412c216f64c96ac24b209e7f66a2537c336",
+    "data/expense/user_approved/category_feedback.csv": "e9a426a7661a66a58e28e739b0f9f04ab7b172d42de08adc3bfac5549f773a9a"
   },
-  "trained_at": "2026-11-10T11:12:28.433553+09:00",
-  "duration_seconds": 2.41
+  "trained_at": "2026-11-10T16:36:08.108179+09:00",
+  "duration_seconds": 1.56
 }

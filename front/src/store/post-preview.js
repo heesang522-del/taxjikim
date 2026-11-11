@@ -17,15 +17,15 @@ export const videoPreviewProps = {
 };
 
 export function filterBlockedFiles(files) {
-  // 사진·동영상만 허용해 PDF, 압축파일, 스크립트, 실행파일을 모두 제외한다.
-  const validFiles = files.filter((file) => /\.(jpe?g|png|gif|webp|mp4|webm|mov)$/i.test(file.name));
+  // 사진·동영상·PDF만 허용해 압축파일·스크립트·실행파일을 모두 제외한다.
+  const validFiles = files.filter((file) => /\.(jpe?g|png|gif|webp|mp4|webm|mov|pdf)$/i.test(file.name));
   return validFiles;
 }
 
 export async function uploadFileChunks(file) {
   if (!file.size) throw new Error('빈 파일은 업로드할 수 없습니다.');
   if (!filterBlockedFiles([file]).length)
-    throw new Error('사진·동영상만 업로드할 수 있습니다. PDF·ZIP·실행파일은 차단됩니다.');
+    throw new Error('사진·동영상·PDF만 업로드할 수 있습니다. ZIP·실행파일은 차단됩니다.');
   const CHUNK_SIZE = 1024 * 1024 * 2; // 2MB
   const uploadId = 'upload_' + Date.now() + '_' + Math.random().toString(36).substring(2, 9);
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE);

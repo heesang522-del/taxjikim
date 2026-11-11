@@ -2,6 +2,7 @@
 'use no memo';
 
 import { useState } from 'react';
+import styled from 'styled-components';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, Icon, Modal } from '../components/common/index';
 import { LoginForm } from '../components/auth/LoginForm';
@@ -75,12 +76,12 @@ export default function AuthPage() {
           <h2 style={{ fontSize: 22, textAlign: 'center', marginBottom: 24 }}>{TITLES[tab]}</h2>
         </>
       )}
-      <Card>
+      <AuthCard data-compact={tab !== 'signup'}>
         {tab === 'login' && <LoginForm onSuccess={enter} onTab={handleTab} />}
         {tab === 'signup' && <SignupForm onDone={() => setSignedUp(true)} />}
         {tab === 'findid' && <RecoveryForm key="findid" mode="id" onTab={handleTab} />}
         {tab === 'findpw' && <RecoveryForm key="findpw" mode="pw" onTab={handleTab} />}
-      </Card>
+      </AuthCard>
       {tab !== 'login' && (
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <Button variant="link" onClick={() => handleTab('login')}>
@@ -122,3 +123,18 @@ export default function AuthPage() {
     </div>
   );
 }
+
+const AuthCard = styled(Card)`
+  /* 카드 안 기본 폼의 높이를 맞추고 마지막 주 버튼을 같은 하단 위치에 둔다. */
+  &[data-compact='true'] > form,
+  &[data-compact='true'] > .grid {
+    display: flex;
+    flex-direction: column;
+    min-height: 286px;
+  }
+
+  &[data-compact='true'] > form > .btn.primary,
+  &[data-compact='true'] > .grid > .btn.primary {
+    margin-top: auto;
+  }
+`;

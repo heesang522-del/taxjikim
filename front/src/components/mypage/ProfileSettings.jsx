@@ -1,6 +1,7 @@
 'use no memo';
 
 import { getPasswordError, PASSWORD_GUIDE } from '../../utils/passwordValidation';
+import { getEmailError } from '../../utils/userValidation';
 
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -71,8 +72,9 @@ export function ProfileSettings() {
   }
 
   function handleSendCode() {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError('이메일 형식을 확인하세요.');
+    const emailError = getEmailError(email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
       return;
     }
     setVerifiedEmail(null);
@@ -84,6 +86,11 @@ export function ProfileSettings() {
   }
 
   function handleVerify() {
+    const emailError = getEmailError(email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
+      return;
+    }
     handleAction('verify', async () => {
       await verifyEmail(email.trim(), code.trim());
       setVerifiedEmail(email.trim());
@@ -92,6 +99,11 @@ export function ProfileSettings() {
   }
 
   function handleEmail() {
+    const emailError = getEmailError(email);
+    if (emailError) {
+      setFieldErrors((previous) => ({ ...previous, email: emailError }));
+      return;
+    }
     if (verifiedEmail !== email.trim()) {
       setError('새 이메일 인증을 완료하세요.');
       return;

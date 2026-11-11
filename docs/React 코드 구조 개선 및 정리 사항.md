@@ -47,12 +47,12 @@
 
 | 구분 | 쉬운 설명 | 프로젝트 예시 |
 | --- | --- | --- |
-| URL | 목적지 주소 | `/community` |
+| URL | 목적지 주소 | `/posts` |
 | 네비게이션 | 목적지로 이동하는 링크나 메뉴 | 헤더의 게시판 메뉴 |
 | 라우터 | 주소에 맞는 화면을 찾아 연결 | `App.jsx`의 Route 설정 |
-| 페이지 | 실제로 보여주는 화면 | `CommunityPage.jsx` |
+| 페이지 | 실제로 보여주는 화면 | `PostListPage.jsx` |
 
-게시판 메뉴 클릭 → URL이 `/community`로 변경 → 라우터가 `CommunityPage`를 선택 → 게시판 화면이 표시되는 순서다. 페이지 파일을 만들기만 해서는 주소와 자동으로 연결되지 않는다.
+게시판 메뉴 클릭 → URL이 `/posts`로 변경 → 라우터가 `PostListPage`를 선택 → 게시판 화면이 표시되는 순서다. 페이지 파일을 만들기만 해서는 주소와 자동으로 연결되지 않는다.
 
 네비게이션 컴포넌트는 메뉴 표시와 이동을 담당하게 한다. 현재 `Header.jsx`에는 메뉴뿐 아니라 로그아웃, 알림, 알림 모달 처리가 함께 있어 분리할지 검토할 수 있다. 헤더에는 각 기능을 배치하고, 세부 처리는 해당 컴포넌트와 기능 로직에 맡기는 방향이다.
 
@@ -70,7 +70,7 @@
 
 - `front/src/pages/CalculatorInputPage.jsx`: 입력 폼·목록·요약 컴포넌트를 조합하는 페이지 구조.
 - `front/src/components/common/Modal.jsx`: 공통 모달의 틀.
-- `front/src/components/community/ReportModal.jsx`: 공통 모달에 신고 입력 기능을 구성.
+- `../front/src/components/post/ReportModal.jsx`: 공통 모달에 신고 입력 기능을 구성.
 - `front/src/pages/MyPage.jsx`: 페이지 안의 카드·차트 구현을 별도 컴포넌트로 분리할지 검토할 후보. 확정된 오류는 아니다.
 
 ### 화면 영역 분리와 그리드 배치

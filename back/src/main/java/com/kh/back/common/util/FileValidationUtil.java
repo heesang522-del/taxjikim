@@ -76,28 +76,7 @@ public final class FileValidationUtil {
         }
 
         if (!filename.toLowerCase(Locale.ROOT).matches(allowedExtensionPattern)) {
-            throw invalid("file", "사진·동영상만 업로드할 수 있습니다.");
-        }
-    }
-
-    /** 목록의 각 파일(비어있지 않은 것만)에 validateFileName을 적용한다. */
-    public static void validateFileExtensions(List<MultipartFile> files, String allowedExtensionPattern) {
-
-        if (files == null) {
-            return;
-        }
-
-        for (MultipartFile file : files) {
-
-            if (file == null) {
-                throw invalid("files", "첨부파일 입력값을 확인해주세요.");
-            }
-
-            if (file.isEmpty()) {
-                continue;
-            }
-
-            validateFileName(file.getOriginalFilename(), allowedExtensionPattern);
+            throw invalid("file", "사진·동영상·PDF만 업로드할 수 있습니다.");
         }
     }
 
@@ -105,33 +84,6 @@ public final class FileValidationUtil {
     public static void validateFileCount(int count, int maxCount) {
 
         if (count < 0 || count > maxCount) {
-            throw invalid("files", "첨부파일은 최대 " + maxCount + "개까지 등록할 수 있습니다.");
-        }
-    }
-
-    /** 기존 첨부 개수 + 새로 올리는(비어있지 않은) 파일 수가 최대 개수를 넘지 않는지 검사한다. */
-    public static void validateFileCountWithNewFiles(int baseCount, List<MultipartFile> newFiles, int maxCount) {
-
-        if (baseCount < 0) {
-            throw invalid("files", "기존 첨부파일 개수가 올바르지 않습니다.");
-        }
-
-        long newFileCount = 0;
-
-        if (newFiles != null) {
-            for (MultipartFile file : newFiles) {
-
-                if (file == null) {
-                    throw invalid("files", "첨부파일 입력값을 확인해주세요.");
-                }
-
-                if (!file.isEmpty()) {
-                    newFileCount++;
-                }
-            }
-        }
-
-        if (baseCount + newFileCount > maxCount) {
             throw invalid("files", "첨부파일은 최대 " + maxCount + "개까지 등록할 수 있습니다.");
         }
     }
@@ -164,7 +116,7 @@ public final class FileValidationUtil {
 
     /**
      * 병합된 파일의 내용이 확장자가 주장하는 형식(매직바이트)과 실제로 맞는지 검사한다.
-     * jpg·png·gif·webp·mp4·mov·webm만 지원한다 — 다른 확장자는 전부 불일치로 처리한다.
+     * jpg·png·gif·webp·mp4·mov·webm·pdf만 지원한다 — 다른 확장자는 전부 불일치로 처리한다.
      */
     public static void validateMediaSignature(Path file, String extension) throws IOException {
 
@@ -214,11 +166,15 @@ public final class FileValidationUtil {
                             new byte[]{26, 69, (byte) 223, (byte) 163}
                     );
 
+            case ".pdf" ->
+                    header.length >= 4
+                            && signature.startsWith("%PDF");
+
             default -> false;
         };
 
         if (!valid) {
-            throw invalid("file", "파일 내용이 허용된 사진·동영상 형식과 일치하지 않습니다.");
+            throw invalid("file", "파일 내용이 허용된 사진·동영상·PDF 형식과 일치하지 않습니다.");
         }
     }
 

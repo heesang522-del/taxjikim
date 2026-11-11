@@ -25,10 +25,6 @@ public class FileUtil {
         return directory;
     }
 
-    public SavedFile save(MultipartFile file, String subDir, String webPrefix) throws IOException {
-        return save(file, subDir, webPrefix, null);
-    }
-
     public SavedFile save(MultipartFile file, String subDir, String webPrefix,
                           String oldWebPath) throws IOException {
         if (file == null || file.isEmpty()) {

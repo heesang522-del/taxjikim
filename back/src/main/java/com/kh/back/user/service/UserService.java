@@ -23,8 +23,6 @@ public interface UserService {
 
     void deleteUser(String loginId);
 
-    void restoreDormantAccount(String loginId, String email);
-
     UserDto getUserById(Long userId);
 
     boolean checkPassword(String loginId, String rawPassword);

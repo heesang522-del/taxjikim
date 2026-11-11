@@ -20,11 +20,11 @@
 
 ## 게시글 신고 백엔드 연동 (2026-11-06)
 
-- `src/api/report.js`를 새로 추가했다. `createPostReport(postId, reasonDetail)`: POST `/api/v1/posts/community/{postId}/reports`. `getAdminReports()`: GET `/api/v1/admin/reports`(ADMIN 전용). `resolveReport(reportId, result)`: PATCH `/api/v1/admin/reports/{reportId}`, result는 `DELETE`\|`REJECT`.
+- `src/api/report.js`를 새로 추가했다. `createPostReport(postId, reasonDetail)`: POST `/api/v1/posts/{postId}/reports`. `getAdminReports()`: GET `/api/v1/admin/reports`(ADMIN 전용). `resolveReport(reportId, result)`: PATCH `/api/v1/admin/reports/{reportId}`, result는 `DELETE`\|`REJECT`.
 - 백엔드는 `REPORTS`를 사용한다(`com.kh.back.report` 패키지). 사용하지 않는 별도 제재 이력 테이블은 DB 정리 대상이며 신고 기능에는 필요하지 않다. `TARGET_USER_ID`는 신고 시점의 글 작성자를 그대로 남긴다.
 - 본인 글 신고는 400 `CANNOT_REPORT_OWN_POST`, 중복 신고는 DB의 `UNIQUE(REPORTER_ID, TARGET_TYPE, TARGET_ID)` 위반을 409 `ALREADY_REPORTED`로 변환해 응답한다.
 - 처리(`DELETE`)하면 게시글을 관리자 삭제로 내리고(`POSTS.DELETED_BY_TYPE='ADMIN'`), 같은 글에 대기 중인 다른 신고도 함께 처리됨으로 바꾼다. 기존 자기 삭제(`deleteById`)는 `DELETED_BY_TYPE`을 기록하지 않아 그대로 두었다 — 자기 삭제한 글과 신고 전 삭제된 글은 관리자 화면에서 "삭제된 글"로만 구분되고 "관리자 삭제됨"과는 다르게 표시된다.
-- `CommunityPostPage`의 신고 버튼은 `post.source === 'server'`(실제 서버 글)일 때만 이 API를 호출한다. 브라우저에만 있는 예시 글은 여전히 mock 경로를 쓴다(실제 DB에 없는 postId라 API가 통하지 않기 때문).
+- `PostDetailPage`의 신고 버튼은 `post.source === 'server'`(실제 서버 글)일 때만 이 API를 호출한다. 브라우저에만 있는 예시 글은 여전히 mock 경로를 쓴다(실제 DB에 없는 postId라 API가 통하지 않기 때문).
 - 알려진 제한: 관리자가 삭제한 **서버** 게시글을 다시 열면, `PostMapper.findById`가 `DELETED_AT IS NULL`로 걸러내 그냥 "게시글을 찾을 수 없습니다"(404)로 보인다. 로컬 mock 글에서 보이는 "관리자에 의해 삭제된 게시글입니다" 안내 화면은 서버 글에는 아직 연결되지 않았다 — 하려면 `findById`의 삭제글 필터링 방식을 바꿔야 해서(목록·다른 조회에도 영향) 이번 범위에는 넣지 않았다.
 
 - 2026-11-03 월별 조회 통합: `findMonthlyTransactions`가 월·거래 구분별 합계를 한 번 조회한다. 수입은 세전 금액, 지출은 실제 금액을 합산한다. 서비스에서 기존 수입·지출 응답 목록으로 나누므로 화면 형식은 유지한다. 전체 DB 조회는 기본정보·기간·월별 합계 총 3회이며 아래 4회 조회 기록을 대체한다.
@@ -112,7 +112,7 @@
 - POST /auth/sessions: 1~5회 안내, 6회 30초·7회 1분·8회 3분·9회 5분 차단, 10회 LOCKED. 성공·관리자 해제 시만 초기화한다.
 - 실패 응답의 error.details는 failedAttempts, remainingAttempts, blockedUntil, serverTime, locked를 포함한다. 일시 차단은 429 / LOGIN_TEMPORARILY_BLOCKED다.
 - 별도 차단 상태 조회 API는 사용하지 않는다. 로그인 버튼 클릭 시 POST /auth/sessions 응답으로 차단 여부와 남은 시간을 확인한다.
-- GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED 목록, 최대 100개.
+- GET /admin/account-locks: ADMIN 전용 실제 LOCKED/BANNED/DORMANT 목록. 같은 관리자 해제 API로 휴면 계정도 복구한다. 휴면 복구 시 즉시 재전환되지 않도록 LAST_LOGIN_AT을 갱신한다.
 - DELETE /admin/account-locks/{loginId}: ADMIN 전용 제한 해제, 기존 로그인 종료, 실패 기록 초기화.
 - POST /auth/account-unlocks: 이전 이메일 잠금 해제 기능 종료, 410 / EMAIL_UNLOCK_DISABLED.
 
@@ -138,6 +138,7 @@
 
 - 회원가입: SignupForm → userApi의 중복 확인·이메일 발송/확인·가입 요청. mock 계정 저장과 브라우저 인증번호 생성은 사용하지 않는다.
 - 요청 필드: loginId, password, name, nickname, email. 프로필 선택 시 multipart의 profile 파일로 보낸다. 전화번호 입력은 제거했다.
+- 아이디는 영문·숫자·밑줄 4~20자, 이메일은 최대 255자·한글 및 내부 공백 불허·이메일 형식 검사로 백엔드와 통일한다. 앞뒤 공백은 제거한다. 가입·중복 확인·이메일 발송/확인·마이페이지 이메일 변경에서 필드별 `VALIDATION_ERROR`를 처리한다.
 - 인증번호 안내는 5분, 인증 완료 후 가입 안내는 10분이며, 최종 유효성은 서버가 판단한다. 이메일을 바꾸면 화면의 이전 인증 상태를 초기화한다.
 - 계정 찾기: 이름·이메일·인증번호로 로그인 아이디를 조회하고 화면에서 마스킹한다.
 - 비밀번호 재설정: 계정과 이메일 일치 및 메일 인증 후 서버에 새 비밀번호를 전송한다. 성공하면 기존 Redis 세션도 종료한다.
@@ -255,7 +256,7 @@ ALTER TABLE TAX_TRANSACTIONS
 
 - 금액 0은 기부금이 없는 입력 예시다. 두 기부금은 각각 음수가 아닌 DECIMAL(15,2) 저장 범위이며, 미입력은 저장 정규화에서 0으로 처리한다.
 - 나이·감면·지역·기존 단일 기부금 필드는 저장 계약에서 제거한다. 요청의 분석번호·소유자는 기존 서버 결정 규칙을 유지한다.
-- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다. 기존 DB 변경 방법은 `docs/tax-input-migration.md`를 따른다.
+- 기본정보 조회 응답도 generalDonationAmount·specialDonationAmount를 반환한다.
 # 결과 JSON 보관 (TJK-202)
 
 - `PUT /api/v1/tax/inputs/{taxInputId}/result`: 로그인 사용자의 결과 저장. 본문은 결과 페이지의 `result` 객체 전체다. 같은 분석번호는 덮어쓰며 성공 시 204를 반환한다.

@@ -272,10 +272,4 @@ public class AuthServiceImpl implements AuthService {
         return null;
     }
 
-    @Transactional
-    @Override
-    public void unlockAccount(String token) {
-        // 이전에 발급된 이메일 토큰으로 관리자 전용 해제를 우회할 수 없도록 종료한다.
-        throw new ApiException(HttpStatus.GONE, "EMAIL_UNLOCK_DISABLED", "계정 잠금은 관리자만 해제할 수 있습니다.");
-    }
 }
