@@ -46,18 +46,14 @@ class LayoutConfig:
 
             if not invalid:
                 invalid = (
-                    value <= minimum
-                    if exclusive
-                    else value < minimum
+                    value <= minimum if exclusive else value < minimum
                 )
 
             if not invalid and maximum is not None:
                 invalid = value > maximum
 
             if invalid:
-                raise ValueError(
-                    f"{name}: 설정값이 허용 범위를 벗어났습니다."
-                )
+                raise ValueError(f"{name}: 설정값이 허용 범위를 벗어났습니다.")
 
 
 DEFAULT_CONFIG = LayoutConfig()
@@ -79,48 +75,30 @@ def prepare_word(
         return None
 
     value = str(
-        word.get("text")
-        if word.get("text") is not None
-        else ""
+        word.get("text") if word.get("text") is not None else ""
     ).strip()
 
     if (
         not value
         or "\ufffd" in value
         or any(
-            ord(character) < 32
-            and not character.isspace()
+            ord(character) < 32 and not character.isspace()
             for character in value
         )
     ):
         return None
 
     try:
-        left = float(
-            word["left"]
-            if "left" in word
-            else word["x0"]
-        )
+        left = float(word["left"] if "left" in word else word["x0"])
         top = float(word["top"])
-        right = float(
-            word["right"]
-            if "right" in word
-            else word["x1"]
-        )
+        right = float(word["right"] if "right" in word else word["x1"])
         bottom = float(word["bottom"])
-
-    except (
-        KeyError,
-        TypeError,
-        ValueError,
-        OverflowError,
-    ):
+    except (KeyError, TypeError, ValueError, OverflowError):
         return None
 
     if (
         not all(
-            math.isfinite(number)
-            for number in (left, top, right, bottom)
+            math.isfinite(number) for number in (left, top, right, bottom)
         )
         or right <= left
         or bottom <= top
@@ -135,7 +113,6 @@ def prepare_word(
 
             if math.isfinite(candidate):
                 confidence = candidate
-
     except (TypeError, ValueError, OverflowError):
         pass
 
@@ -151,9 +128,7 @@ def prepare_word(
 
     # 행 복원 단계에서도 병합 검토 사유를 유지한다.
     if word.get("reviewReasons"):
-        result["reviewReasons"] = list(
-            word["reviewReasons"]
-        )
+        result["reviewReasons"] = list(word["reviewReasons"])
 
     return result
 
@@ -165,15 +140,11 @@ def _prepare_words(
     return [
         prepared
         for word in words
-        if (
-            prepared := prepare_word(word, source)
-        ) is not None
+        if (prepared := prepare_word(word, source)) is not None
     ]
 
 
-def _bounds(
-    words: list[dict[str, Any]],
-) -> list[float]:
+def _bounds(words: list[dict[str, Any]]) -> list[float]:
     return [
         min(word["left"] for word in words),
         min(word["top"] for word in words),
@@ -182,9 +153,7 @@ def _bounds(
     ]
 
 
-def _area(
-    rectangle: list[float] | tuple[float, ...],
-) -> float:
+def _area(rectangle: list[float] | tuple[float, ...]) -> float:
     left, top, right, bottom = rectangle
     return (right - left) * (bottom - top)
 
@@ -246,18 +215,12 @@ def _union_area(
                 height += end - start
                 start, end = top, bottom
 
-        total += (
-            (right - left)
-            * (height + end - start)
-        )
+        total += (right - left) * (height + end - start)
 
     return total
 
 
-def _mark_review(
-    words: list[dict[str, Any]],
-    reason: str,
-) -> None:
+def _mark_review(words: list[dict[str, Any]], reason: str) -> None:
     for word in words:
         reasons = list(word.get("reviewReasons") or [])
 
@@ -276,23 +239,17 @@ def merge_words(
     """내장 텍스트를 우선하고 OCR로 누락 영역을 보완한다."""
 
     result: list[dict[str, Any]] = []
-
     native_words = _prepare_words(native, "PDF_TEXT")
 
     ocr_words = sorted(
         _prepare_words(ocr, "OCR"),
         key=lambda word: (
-            word["confidence"]
-            if word["confidence"] is not None
-            else -1.0
+            word["confidence"] if word["confidence"] is not None else -1.0
         ),
         reverse=True,
     )
 
-    for is_ocr, words in (
-        (False, native_words),
-        (True, ocr_words),
-    ):
+    for is_ocr, words in ((False, native_words), (True, ocr_words)):
         for word in words:
             overlaps = []
 
@@ -303,13 +260,9 @@ def merge_words(
                     overlaps.append((existing, rectangle))
 
             duplicate = any(
-                _normalize(word["text"])
-                == _normalize(existing["text"])
+                _normalize(word["text"]) == _normalize(existing["text"])
                 and _area(rectangle)
-                / min(
-                    _area(_bounds([word])),
-                    _area(_bounds([existing])),
-                )
+                / min(_area(_bounds([word])), _area(_bounds([existing])))
                 >= config.same_text_overlap
                 for existing, rectangle in overlaps
             )
@@ -321,18 +274,9 @@ def merge_words(
                 result.append(word)
                 continue
 
-            existing_words = [
-                existing
-                for existing, _ in overlaps
-            ]
-
+            existing_words = [existing for existing, _ in overlaps]
             coverage = (
-                _union_area(
-                    [
-                        rectangle
-                        for _, rectangle in overlaps
-                    ]
-                )
+                _union_area([rectangle for _, rectangle in overlaps])
                 / _area(_bounds([word]))
             )
 
@@ -340,15 +284,11 @@ def merge_words(
                 combined_text = "".join(
                     existing["text"]
                     for existing in sorted(
-                        existing_words,
-                        key=lambda item: item["left"],
+                        existing_words, key=lambda item: item["left"]
                     )
                 )
 
-                if (
-                    _normalize(combined_text)
-                    != _normalize(word["text"])
-                ):
+                if _normalize(combined_text) != _normalize(word["text"]):
                     _mark_review(
                         existing_words,
                         "같은 위치의 기존 텍스트와 "
@@ -359,10 +299,8 @@ def merge_words(
 
             _mark_review(
                 existing_words + [word],
-                "단어 영역이 일부 겹쳐 "
-                "중복 여부 확인이 필요합니다.",
+                "단어 영역이 일부 겹쳐 중복 여부 확인이 필요합니다.",
             )
-
             result.append(word)
 
     return sorted(
@@ -379,21 +317,11 @@ def _row_statistics(
 ) -> tuple[float, float, float, float]:
     return (
         statistics.median(
-            (word["top"] + word["bottom"]) / 2
-            for word in words
+            (word["top"] + word["bottom"]) / 2 for word in words
         ),
-        statistics.median(
-            word["bottom"] - word["top"]
-            for word in words
-        ),
-        statistics.median(
-            word["top"]
-            for word in words
-        ),
-        statistics.median(
-            word["bottom"]
-            for word in words
-        ),
+        statistics.median(word["bottom"] - word["top"] for word in words),
+        statistics.median(word["top"] for word in words),
+        statistics.median(word["bottom"] for word in words),
     )
 
 
@@ -417,20 +345,16 @@ def _group_rows(
         best_distance = float("inf")
 
         for row in rows:
-            row_center, row_height, top, bottom = (
-                _row_statistics(row)
-            )
+            row_center, row_height, top, bottom = _row_statistics(row)
 
             tolerance = max(
                 config.min_row_tolerance,
-                min(height, row_height)
-                * config.row_tolerance_factor,
+                min(height, row_height) * config.row_tolerance_factor,
             )
 
             overlap = max(
                 0.0,
-                min(word["bottom"], bottom)
-                - max(word["top"], top),
+                min(word["bottom"], bottom) - max(word["top"], top),
             ) / min(height, bottom - top)
 
             distance = abs(center - row_center)
@@ -451,10 +375,7 @@ def _group_rows(
     for row in rows:
         row.sort(key=lambda word: word["left"])
 
-    return sorted(
-        rows,
-        key=lambda row: _row_statistics(row)[0],
-    )
+    return sorted(rows, key=lambda row: _row_statistics(row)[0])
 
 
 def _build_cells(
@@ -516,14 +437,11 @@ def words_to_rows(
 
     for row in _group_rows(prepared, config):
         cells = _build_cells(row, config)
-
         reasons = sorted(
             {
                 reason
                 for word in row
-                for reason in (
-                    word.get("reviewReasons") or []
-                )
+                for reason in (word.get("reviewReasons") or [])
             }
         )
 
@@ -533,9 +451,7 @@ def words_to_rows(
                 "cells": cells,
                 "bbox": _bounds(row),
                 "words": row,
-                "sources": sorted(
-                    {word["source"] for word in row}
-                ),
+                "sources": sorted({word["source"] for word in row}),
                 "needsReview": bool(reasons),
                 "reviewReasons": reasons,
             }
