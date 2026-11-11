@@ -68,7 +68,7 @@ export function toPost(post) {
 }
 
 // 서버가 페이지 단위로 내려주는 목록을 처음부터 끝까지 모아 하나의 배열로 돌려준다.
-// getFaqs(FAQ 전체)·getInquiries(Q&A 전체 목록)처럼 서버 페이징 UI 없이 전체를 한 번에 보여주는
+// getLibraryItems(자료실 전체)·getInquiries(Q&A 전체 목록)처럼 서버 페이징 UI 없이 전체를 한 번에 보여주는
 // 화면이 쓴다. 페이지 단위로 보여주는 화면은 getPostsPage를 쓴다.
 async function fetchAllPages(params, mapItem, fallbackMessage) {
   const items = [];
@@ -117,13 +117,7 @@ export function toFaq(post) {
   };
 }
 
-// FAQ는 관리자만 작성하고 개수가 적어, 공지와 마찬가지로 페이지 UI 없이 전체를 한 번에 불러온다.
-// 서버가 등록순(오래된 글부터)으로 정렬해서 내려준다.
-export function getFaqs() {
-  return fetchAllPages({ postType: 'FAQ' }, toFaq, 'FAQ 목록을 불러오지 못했습니다.');
-}
-
-// 관리자 "FAQ 관리"가 한 페이지씩 보여주는 데 쓴다.
+// 고객센터 FAQ 탭·관리자 "FAQ 관리"가 한 페이지씩 보여주는 데 쓴다. 서버가 등록순(오래된 글부터)으로 정렬해서 내려준다.
 export async function getFaqsPage({ page = 1 } = {}) {
   const fallbackMessage = 'FAQ 목록을 불러오지 못했습니다.';
   const result = await unwrapRequest(
