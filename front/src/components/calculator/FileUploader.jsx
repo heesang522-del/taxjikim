@@ -1,98 +1,21 @@
 'use no memo';
 
 import { useRef, useState } from 'react';
-import styled from 'styled-components';
 import { Button } from '../common/index';
-import { uploadTaxPdfApi, saveInitialTaxRows } from '../../api/taxApi';
+import { saveInitialTaxRows, saveTaxReview, uploadTaxPdfApi } from '../../api/taxApi';
 import { normalizeTaxKind, parseTaxAmount, useTaxStore } from '../../store/useTaxStore';
-
-const Container = styled.div`
-  min-width: 0;
-  max-width: 100%;
-`;
-
-const StatusArea = styled.div`
-  height: 54px;
-  padding-top: 8px;
-  overflow: auto;
-  scrollbar-gutter: stable;
-  font-size: 13px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-`;
-
-const FileSection = styled.section`
-  margin-top: 12px;
-  padding: 14px;
-  border: 1px solid #dce3ed;
-  border-radius: 12px;
-  background: #fff;
-  min-width: 0;
-`;
-
-const FileHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 10px;
-  min-width: 0;
-`;
-
-const FileName = styled.p`
-  margin: 0;
-  min-width: 0;
-  flex: 1 1 160px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-`;
-
-const Notice = styled.p`
-  margin: 8px 0 0;
-  color: #536476;
-  font-size: 13px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-`;
-
-const ErrorMessage = styled.div`
-  padding: 8px 10px;
-  border-radius: 8px;
-  background: #fff4f3;
-  color: #a82020;
-`;
-
-const ReviewList = styled.ul`
-  margin: 8px 0 0;
-  padding-left: 20px;
-  max-height: 220px;
-  overflow: auto;
-  font-size: 13px;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-`;
+import { parseDeductedTaxRate, parseWon } from '../../utils/transactionAmount';
 
 function normalizeDate(value) {
   if (Array.isArray(value) && value.length === 3) {
     return value.map((part, index) => String(part).padStart(index === 0 ? 4 : 2, '0')).join('-');
   }
 
-  return typeof value === 'string' ? value.trim() : '';
-}
-
-function normalizeCategory(value) {
-  const category = String(value ?? '').trim();
-
-  return /^[A-Z][A-Z0-9_]{0,49}$/.test(category) ? category : 'UNCLASSIFIED';
+  return value ?? '';
 }
 
 function isSavedRow(row) {
-  return (
-    Number.isSafeInteger(row.transactionId) &&
-    row.transactionId > 0 &&
-    Number.isSafeInteger(row.taxInputId) &&
-    row.taxInputId > 0
-  );
+  return row.persisted === true && row.transactionId != null && row.taxInputId != null;
 }
 
 function isReviewRow(row) {
@@ -103,11 +26,18 @@ function isPendingRow(row) {
   return !isSavedRow(row) && !isReviewRow(row) && row.selected !== false;
 }
 
-// 파싱 결과를 저장 전 임시 거래 구조로 변환한다.
+// 분석 API의 결과를 화면과 저장에서 사용하는 거래 구조로 변환한다.
 function toTransactionRow(item, index, key) {
-  const date = normalizeDate(item.transactionDate);
-  const actualAmount = parseTaxAmount(item.actualAmount ?? item.amount);
-  const needsReview = item.needsReview === true || item.parseSuccess !== true;
+  const actualAmount = parseWon(item.actualAmount ?? item.amount);
+  const deductedTaxRate = parseDeductedTaxRate(item.deductedTaxRate);
+  // 저장 범위를 벗어난 행만 검토 대상으로 보내고 정상 행의 자동 저장은 진행한다.
+  let numberError = null;
+  if (actualAmount === null) {
+    numberError = '실제 입출금액을 확인해주세요.';
+  } else if (item.deductedTaxRate != null && deductedTaxRate === null) {
+    numberError = '차감 세율의 범위와 소수 자릿수를 확인해주세요.';
+  }
+  const needsReview = item.needsReview === true || numberError !== null;
   const excluded = item.excluded === true || needsReview;
 
   return {
@@ -120,24 +50,24 @@ function toTransactionRow(item, index, key) {
     taxInputId: null,
     persisted: false,
     kind: normalizeTaxKind(item.transactionType),
-    date,
+    date: normalizeDate(item.transactionDate),
     month: null,
     year: null,
     documentYear: item.documentYear ?? null,
     memo: item.description ?? '',
-    cat: normalizeCategory(item.category),
+    cat: item.category || 'UNCLASSIFIED',
     amt: actualAmount ?? '',
     actualAmount,
     preTaxIncome: parseTaxAmount(item.preTaxIncome),
     taxDeducted: parseTaxAmount(item.taxDeducted),
-    deductedTaxRate: item.deductedTaxRate ?? null,
+    deductedTaxRate,
     amountBasis: item.amountBasis ?? 'UNSPECIFIED',
     valueKind: item.valueKind ?? 'DETAIL',
     pageNumber: item.pageNumber ?? null,
     rawText: item.rawText ?? '',
     parseSuccess: item.parseSuccess === true,
     needsReview,
-    failureReason: needsReview ? item.failureReason || '거래 내용을 확인해주세요.' : null,
+    failureReason: needsReview ? item.failureReason || numberError || '거래 내용을 확인해주세요.' : null,
     selected: !excluded,
     excluded,
   };
@@ -157,25 +87,34 @@ function getFileRecord(key) {
   return record;
 }
 
-// 파일별 분석번호를 기록하여 저장 재시도에 사용한다.
-function rememberPdfInput(key, { taxYear, taxInputId }) {
-  useTaxStore.setState((current) => ({
-    uploadedFiles: (current.uploadedFiles ?? []).map((file) => {
-      if (file.key !== key) return file;
+function getFileRows(file, fileRows) {
+  if (file.published === false) {
+    return file.stagedRows ?? [];
+  }
 
-      return {
-        ...file,
-        pendingInputIdsByYear: {
-          ...(file.pendingInputIdsByYear ?? {}),
-          [taxYear]: taxInputId,
-        },
-      };
-    }),
-  }));
+  return fileRows.filter((row) => row.sourceFileKey === file.key);
 }
 
-// 저장 응답의 거래번호를 임시 거래에 연결한다.
-// 모든 정상 거래가 저장되기 전에는 편집 목록에 공개하지 않는다.
+function requiresSaveCheck(file) {
+  return file.saveOutcomeUnknown === true;
+}
+
+// DB 거래번호를 화면에 표시할 행에 연결한다.
+function bindPdfRow(row, saved) {
+  return {
+    ...row,
+    taxInputId: saved.taxInputId,
+    transactionId: saved.transactionId,
+    cat: saved.category,
+    persisted: true,
+    needsReview: false,
+    excluded: false,
+    selected: true,
+    failureReason: null,
+  };
+}
+
+// 저장 성공 응답의 거래번호를 임시 거래에 연결한다.
 function commitPdfGroup(key, { taxYear, taxInputId, rows: savedRows, bindings }) {
   const savedById = new Map(
     bindings.filter((binding) => binding.source === 'file').map((binding) => [binding.rowId, binding.saved])
@@ -185,33 +124,11 @@ function commitPdfGroup(key, { taxYear, taxInputId, rows: savedRows, bindings })
     uploadedFiles: (current.uploadedFiles ?? []).map((file) => {
       if (file.key !== key) return file;
 
-      const pending = {
-        ...(file.pendingInputIdsByYear ?? {}),
-      };
-
-      if (pending[taxYear] === taxInputId) {
-        delete pending[taxYear];
-      }
-
       return {
         ...file,
-        pendingInputIdsByYear: pending,
         stagedRows: (file.stagedRows ?? []).map((row) => {
           const saved = savedById.get(row.id);
-
-          if (!saved) return row;
-
-          return {
-            ...row,
-            taxInputId: saved.taxInputId,
-            transactionId: saved.transactionId,
-            cat: saved.category,
-            persisted: true,
-            needsReview: false,
-            excluded: false,
-            selected: true,
-            failureReason: null,
-          };
+          return saved ? bindPdfRow(row, saved) : row;
         }),
         savedGroups: [
           ...(file.savedGroups ?? []).filter((group) => group.taxInputId !== taxInputId),
@@ -226,21 +143,28 @@ function commitPdfGroup(key, { taxYear, taxInputId, rows: savedRows, bindings })
   }));
 }
 
-// 저장된 거래를 화면과 저장 스냅샷에 공개한다.
-function publishPdfRows(key) {
+function publishPdfRows(key, saveError = null) {
   const record = getFileRecord(key);
   const stagedRows = record.stagedRows ?? [];
+  const pendingCount = stagedRows.filter(isPendingRow).length;
 
-  if (stagedRows.some(isPendingRow)) {
-    throw new Error('저장되지 않은 거래가 남아 있습니다. 저장 재시도를 눌러주세요.');
+  if (!saveError && pendingCount > 0) {
+    throw new Error('저장 완료를 확인하지 못한 거래가 있습니다.');
   }
+
+  const unconfirmedCount = saveError ? pendingCount : 0;
+  const status = saveError?.status;
+
+  // 응답이 끊기면 DB 반영 여부를 알 수 없어 같은 파일의 재업로드를 제한한다.
+  const saveOutcomeUnknown = unconfirmedCount > 0 && (status == null || status === 408 || status >= 500);
+
+  // 저장이 중단되면 성공 응답을 받은 거래와 원래 검토 대상만 목록에 표시한다.
+  const visibleRows = saveError ? stagedRows.filter((row) => isSavedRow(row) || isReviewRow(row)) : stagedRows;
 
   const savedGroups = record.savedGroups ?? [];
 
   useTaxStore.setState((current) => {
-    const idsByYear = {
-      ...(current.taxInputIdsByYear ?? {}),
-    };
+    const idsByYear = { ...(current.taxInputIdsByYear ?? {}) };
     const groupIds = new Set(savedGroups.map((group) => group.taxInputId));
 
     for (const group of savedGroups) {
@@ -248,8 +172,7 @@ function publishPdfRows(key) {
     }
 
     return {
-      // 다른 파일의 기존 거래는 유지한다.
-      fileRows: [...(current.fileRows ?? []).filter((row) => row.sourceFileKey !== key), ...stagedRows],
+      fileRows: [...(current.fileRows ?? []).filter((row) => row.sourceFileKey !== key), ...visibleRows],
       uploadedFiles: (current.uploadedFiles ?? []).map((file) =>
         file.key === key
           ? {
@@ -257,7 +180,8 @@ function publishPdfRows(key) {
               published: true,
               stagedRows: undefined,
               savedGroups: undefined,
-              pendingInputIdsByYear: {},
+              unconfirmedCount,
+              saveOutcomeUnknown,
             }
           : file
       ),
@@ -272,8 +196,8 @@ function publishPdfRows(key) {
     };
   });
 
-  const savedCount = stagedRows.filter(isSavedRow).length;
-  const reviewCount = stagedRows.filter(isReviewRow).length;
+  const savedCount = visibleRows.filter(isSavedRow).length;
+  const reviewCount = visibleRows.filter(isReviewRow).length;
   const taxInputIdsByYear = {};
 
   for (const group of savedGroups) {
@@ -290,34 +214,47 @@ function publishPdfRows(key) {
   };
 }
 
-// 현재 파일의 정상 거래 전체를 DB에 저장한다.
-// 이미 저장된 거래는 거래번호가 있으므로 재저장 대상에서 제외된다.
 async function saveParsedPdf(key) {
   const current = useTaxStore.getState();
   const record = getFileRecord(key);
 
   if (record.published === true) {
-    throw new Error('이미 저장이 완료된 파일입니다.');
+    throw new Error('이미 처리가 완료된 파일입니다.');
   }
 
   const scopedState = {
     ...current,
-    // 다른 파일이나 수동 입력 거래가 함께 저장되지 않도록 제한한다.
+    // 이 PDF에서 가져온 거래만 자동 저장 대상으로 전달한다.
     manualRows: [],
     fileRows: record.stagedRows ?? [],
     evidenceDocuments: [],
-    taxPendingInputIdsByYear: {
-      ...(current.taxPendingInputIdsByYear ?? {}),
-      ...(record.pendingInputIdsByYear ?? {}),
-    },
   };
 
   await saveInitialTaxRows(scopedState, {
-    onInputCreated: (input) => rememberPdfInput(key, input),
+    saveInputWithTransactions: true,
     onGroupSaved: (group) => commitPdfGroup(key, group),
   });
 
   return publishPdfRows(key);
+}
+
+// DB 삭제가 성공한 거래를 화면과 저장 스냅샷에서 제거한다.
+function removeSavedPdfRow(key, { rowId, taxInputId, transactionId }) {
+  useTaxStore.setState((current) => ({
+    fileRows: (current.fileRows ?? []).filter((row) => row.sourceFileKey !== key || row.id !== rowId),
+    taxSavedSnapshots: (current.taxSavedSnapshots ?? []).map((snapshot) => {
+      if (snapshot.taxInputId !== taxInputId) {
+        return snapshot;
+      }
+
+      return {
+        ...snapshot,
+        rows: (snapshot.rows ?? []).filter((row) => row.transactionId !== transactionId),
+      };
+    }),
+    taxLastSavedSignature: null,
+    calculated: false,
+  }));
 }
 
 export function FileUploader({ compact = false, onUploadSuccess }) {
@@ -350,38 +287,32 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
     setError('');
     setMessage('');
 
-    if (!/\.pdf$/i.test(file.name)) {
-      setError('PDF 파일을 선택해주세요.');
-      return;
-    }
-
-    if (file.size === 0 || file.size > 6 * 1024 * 1024) {
-      setError('비어 있지 않은 6MB 이하 PDF를 선택해주세요.');
-      return;
-    }
-
     const key = fileKey(file);
-    const alreadyUploaded = (useTaxStore.getState().uploadedFiles ?? []).some((entry) => entry.key === key);
+    const existingFile = (useTaxStore.getState().uploadedFiles ?? []).find((entry) => entry.key === key);
 
-    if (alreadyUploaded) {
-      setError('이미 불러온 파일입니다. 저장 실패 상태라면 해당 파일의 저장 재시도를 눌러주세요.');
+    if (existingFile) {
+      if (existingFile.saveOutcomeUnknown) {
+        setError('이 PDF의 일부 거래는 저장 여부를 확인할 수 없습니다.');
+      } else {
+        setMessage('이미 불러온 PDF입니다. 아래 파일 내역을 확인해주세요.');
+      }
+
       return;
     }
 
     uploadingRef.current = true;
     setLoading(true);
     setMessage('PDF를 분석하고 있습니다.');
-    useTaxStore.setState({
-      taxSaveBusy: true,
-    });
+    useTaxStore.setState({ taxSaveBusy: true });
 
     let resultInfo = null;
+    let analysisCompleted = false;
 
     try {
       const result = await uploadTaxPdfApi(file);
       const transactionRows = result.transactions.map((item, index) => toTransactionRow(item, index, key));
 
-      // 저장 전에는 파싱 결과를 임시로 보관한다.
+      // 분석 응답을 보관한 뒤 정상 거래의 자동 저장을 시작한다.
       useTaxStore.setState((current) => ({
         uploadedFiles: [
           ...(current.uploadedFiles ?? []),
@@ -393,12 +324,12 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
             published: false,
             stagedRows: transactionRows,
             savedGroups: [],
-            pendingInputIdsByYear: {},
           },
         ],
       }));
 
-      setMessage('분석한 정상 거래를 DB에 저장하고 있습니다.');
+      analysisCompleted = true;
+      setMessage('분석한 정상 거래를 저장하고 있습니다.');
 
       resultInfo = await saveParsedPdf(key);
 
@@ -408,16 +339,27 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
           ` · 검토 ${resultInfo.reviewCount}건`
       );
     } catch (cause) {
-      setError((cause.message ?? 'PDF 분석 또는 거래 저장에 실패했습니다.') + (cause.code ? ` [${cause.code}]` : ''));
+      const detail = cause?.message ?? 'PDF 처리 중 오류가 발생했습니다.';
+      const code = cause?.code ? ` [${cause.code}]` : '';
+
+      setMessage('');
+
+      if (analysisCompleted) {
+        const partial = publishPdfRows(key, cause ?? new Error(detail));
+
+        setError(
+          `거래 자동 저장을 완료하지 못했습니다. ${detail}${code}` +
+            (partial.savedCount > 0 ? ` 저장이 확인된 ${partial.savedCount}건은 목록에 표시했습니다.` : '')
+        );
+      } else {
+        setError(`PDF를 분석하지 못했습니다. ${detail}${code}`);
+      }
     } finally {
       uploadingRef.current = false;
       setLoading(false);
 
-      // 저장 결과를 화면에 연결한 뒤 잠금을 해제한다.
-      // 기존 내역 컴포넌트가 새 거래를 감지하여 팝업을 연다.
-      useTaxStore.setState({
-        taxSaveBusy: false,
-      });
+      // 확인된 거래를 화면에 반영한 뒤 처리 잠금을 해제한다.
+      useTaxStore.setState({ taxSaveBusy: false });
     }
 
     if (resultInfo) {
@@ -425,44 +367,10 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
     }
   }
 
-  async function handleRetrySave(key) {
-    if (uploadingRef.current || useTaxStore.getState().taxSaveBusy) {
-      return;
-    }
-
-    uploadingRef.current = true;
-    setLoading(true);
-    setError('');
-    setMessage('저장되지 않은 거래를 다시 저장하고 있습니다.');
-    useTaxStore.setState({
-      taxSaveBusy: true,
-    });
-
-    let resultInfo = null;
-
-    try {
-      resultInfo = await saveParsedPdf(key);
-
-      setMessage(`DB 저장 ${resultInfo.savedCount}건` + ` · 검토 ${resultInfo.reviewCount}건`);
-    } catch (cause) {
-      setError((cause.message ?? '거래 저장 재시도에 실패했습니다.') + (cause.code ? ` [${cause.code}]` : ''));
-    } finally {
-      uploadingRef.current = false;
-      setLoading(false);
-      useTaxStore.setState({
-        taxSaveBusy: false,
-      });
-    }
-
-    if (resultInfo) {
-      await notifySuccess(resultInfo);
-    }
-  }
-
-  function handleRemoveFile(key) {
+  async function handleRemoveFile(key) {
     const current = useTaxStore.getState();
 
-    if (busy || uploadingRef.current || current.taxSaveBusy) {
+    if (uploadingRef.current || current.taxSaveBusy) {
       return;
     }
 
@@ -476,36 +384,66 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
       return;
     }
 
-    const rows =
-      record.published === false
-        ? (record.stagedRows ?? [])
-        : (current.fileRows ?? []).filter((row) => row.sourceFileKey === key);
+    const rows = getFileRows(record, current.fileRows ?? []);
 
-    const hasSavedRows = rows.some(isSavedRow);
-    const hasUnconfirmedSave = Object.keys(record.pendingInputIdsByYear ?? {}).length > 0;
-
-    // 저장된 거래를 화면에서만 제거하여 DB와 불일치하지 않도록 한다.
-    if (hasSavedRows || hasUnconfirmedSave) {
-      setError(
-        hasUnconfirmedSave
-          ? '저장 결과 확인이 필요한 파일입니다. 저장 재시도를 먼저 진행해주세요.'
-          : 'DB에 저장된 거래가 있습니다. 내역 확인·수정에서 거래를 삭제 반영한 뒤 파일을 제외해주세요.'
-      );
+    if (requiresSaveCheck(record)) {
+      setError('일부 거래의 DB 저장 여부를 확인할 수 없어 파일 내역을 제외할 수 없습니다.');
       return;
     }
 
-    useTaxStore.setState((state) => ({
-      uploadedFiles: (state.uploadedFiles ?? []).filter((entry) => entry.key !== key),
-      fileRows: (state.fileRows ?? []).filter((row) => row.sourceFileKey !== key),
-      taxLastSavedSignature: null,
-      calculated: false,
-    }));
+    const savedRows = rows.filter(isSavedRow);
 
-    setMessage('미저장 파일 내역을 화면에서 제외했습니다.');
+    if (
+      savedRows.length > 0 &&
+      !window.confirm(`"${record.name}"에서 저장한 거래 ${savedRows.length}건을 삭제할까요?`)
+    ) {
+      return;
+    }
+
+    useTaxStore.setState({ taxSaveBusy: true });
+
+    try {
+      if (savedRows.length > 0) {
+        setMessage('이 파일에서 저장한 거래를 삭제하고 있습니다.');
+
+        // 기존 일괄 삭제 API에 이 PDF의 저장 거래만 전달한다.
+        await saveTaxReview(
+          { fileRows: [] },
+          {
+            originalState: { fileRows: savedRows },
+            onOperationSuccess: (operation) => removeSavedPdfRow(key, operation),
+          }
+        );
+      }
+
+      // DB 삭제가 끝나면 파일 표시와 남아 있는 미저장 거래를 제거한다.
+      useTaxStore.setState((state) => ({
+        uploadedFiles: (state.uploadedFiles ?? []).filter((entry) => entry.key !== key),
+        fileRows: (state.fileRows ?? []).filter((row) => row.sourceFileKey !== key),
+        taxLastSavedSignature: null,
+        calculated: false,
+      }));
+
+      setMessage(
+        savedRows.length > 0
+          ? `DB 거래 ${savedRows.length}건을 삭제하고 파일 내역을 제외했습니다.`
+          : '파일 내역을 화면에서 제외했습니다.'
+      );
+    } catch (cause) {
+      const deletedCount = cause.completedOperations?.length ?? 0;
+
+      setMessage('');
+      setError(
+        (cause.message ?? '파일 내역을 제외하지 못했습니다.') +
+          (deletedCount > 0 ? ` 삭제된 ${deletedCount}건은 화면에 반영했습니다. 남은 거래를 다시 시도해주세요.` : '')
+      );
+    } finally {
+      useTaxStore.setState({ taxSaveBusy: false });
+    }
   }
 
   return (
-    <Container style={compact ? undefined : { padding: 16 }}>
+    <div className={compact ? 'tax-upload tax-upload--compact' : 'tax-upload'}>
       <Button type="button" size="sm" disabled={busy} onClick={() => inputRef.current?.click()}>
         {loading ? 'PDF 처리 중…' : 'PDF 불러오기'}
       </Button>
@@ -519,66 +457,73 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
         onChange={(event) => {
           const file = event.target.files?.[0];
 
-          // 같은 파일도 다시 선택할 수 있도록 입력값을 비운다.
+          // PDF 분석 자체가 실패하면 같은 파일을 다시 선택할 수 있게 한다.
           event.target.value = '';
           void handleUpload(file);
         }}
       />
 
-      <StatusArea aria-live="polite">
-        {error ? <ErrorMessage role="alert">{error}</ErrorMessage> : <span>{message}</span>}
-      </StatusArea>
+      <div className="tax-upload__status" aria-live="polite">
+        {error ? (
+          <div className="tax-upload__error" role="alert">
+            {error}
+          </div>
+        ) : (
+          <span>{message}</span>
+        )}
+      </div>
 
       {uploadedFiles.map((file) => {
-        const unpublished = file.published === false;
-        const rows = unpublished ? (file.stagedRows ?? []) : fileRows.filter((row) => row.sourceFileKey === file.key);
+        const rows = getFileRows(file, fileRows);
         const reviewRows = rows.filter(isReviewRow);
         const savedCount = rows.filter(isSavedRow).length;
         const pendingCount = rows.filter(isPendingRow).length;
-        const hasUnconfirmedSave = Object.keys(file.pendingInputIdsByYear ?? {}).length > 0;
-        const cannotRemove = savedCount > 0 || hasUnconfirmedSave;
+        const unconfirmedCount = file.unconfirmedCount ?? 0;
+        const saveCheckRequired = requiresSaveCheck(file);
 
         return (
-          <FileSection key={file.key}>
-            <FileHeader>
-              <FileName>{file.name}</FileName>
-
-              {unpublished && (
-                <Button type="button" size="sm" disabled={busy} onClick={() => void handleRetrySave(file.key)}>
-                  저장 재시도
-                </Button>
-              )}
+          <section className="tax-upload__file" key={file.key}>
+            <div className="tax-upload__file-header">
+              <p className="tax-upload__file-name">{file.name}</p>
 
               <Button
                 type="button"
                 size="sm"
-                disabled={busy || cannotRemove}
-                onClick={() => handleRemoveFile(file.key)}
+                variant={savedCount > 0 ? 'danger' : undefined}
+                disabled={busy || saveCheckRequired}
+                onClick={() => void handleRemoveFile(file.key)}
               >
                 파일 내역 제외
               </Button>
-            </FileHeader>
+            </div>
 
-            <Notice>
-              전체 {rows.length}건{' · '}
+            <p className="tax-upload__notice">
+              전체 {rows.length + unconfirmedCount}건{' · '}
               DB 저장 {savedCount}건{' · '}
-              저장 대기 {pendingCount}건{' · '}
-              검토 {reviewRows.length}건
-            </Notice>
+              검토 {reviewRows.length}건{pendingCount > 0 && ` · 저장 대기 ${pendingCount}건`}
+              {unconfirmedCount > 0 &&
+                (file.saveOutcomeUnknown
+                  ? ` · 저장 미확인 ${unconfirmedCount}건`
+                  : ` · 저장 실패 ${unconfirmedCount}건`)}
+            </p>
 
-            <Notice>PDF 분석 후 정상 거래를 DB에 저장합니다. 저장된 거래는 팝업에서 수정할 수 있습니다.</Notice>
-
-            {unpublished && (
-              <Notice>저장이 완료되지 않았습니다. 저장 재시도를 눌러 남은 거래의 저장을 진행해주세요.</Notice>
+            {saveCheckRequired ? (
+              <p className="tax-upload__notice">
+                저장 여부를 확인할 수 없는 거래가 있어 파일 제외가 제한됩니다. 저장이 확인된 거래는 내역 확인·수정에서
+                편집할 수 있습니다.
+              </p>
+            ) : (
+              <p className="tax-upload__notice">
+                저장된 거래는 내역 확인·수정에서 편집할 수 있습니다. 파일 내역을 제외하면 이 PDF의 저장 거래도
+                삭제됩니다.
+              </p>
             )}
-
-            {cannotRemove && <Notice>저장된 거래 또는 저장 확인이 필요한 거래가 있어 파일 제외가 제한됩니다.</Notice>}
 
             {reviewRows.length > 0 && (
               <details>
                 <summary>검토 사유 {reviewRows.length}건 확인</summary>
 
-                <ReviewList>
+                <ul className="tax-upload__review-list">
                   {reviewRows.map((row) => (
                     <li key={row.id}>
                       {row.pageNumber ? `${row.pageNumber}페이지 · ` : ''}
@@ -589,13 +534,13 @@ export function FileUploader({ compact = false, onUploadSuccess }) {
                       {row.failureReason || '거래 내용을 확인해주세요.'}
                     </li>
                   ))}
-                </ReviewList>
+                </ul>
               </details>
             )}
-          </FileSection>
+          </section>
         );
       })}
-    </Container>
+    </div>
   );
 }
 

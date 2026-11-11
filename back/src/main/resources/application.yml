@@ -64,15 +64,6 @@ python:
   api-url: ${PYTHON_API_URL:http://127.0.0.1:8000}
 
 
-tax:
-  ocr:
-    # 백엔드 실행 작업 디렉터리를 back/으로 맞춰 학습 데이터 폴더를 찾는다.
-    tessdata-path: ./tessdata
-    language: kor+eng
-    dpi: 200
-    max-pages: 50
-    max-rendered-pixels: 12000000
-
 # 회원 정리·휴면 처리 주기. 실제 실행에는 @EnableScheduling이 필요하다.
 # 별도 zone 지정이 없으므로 JVM의 시간대를 기준으로 실행한다.
 custom:

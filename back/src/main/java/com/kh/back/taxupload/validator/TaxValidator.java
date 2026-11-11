@@ -3,7 +3,6 @@ package com.kh.back.taxupload.validator;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
-import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import org.springframework.http.HttpStatus;
@@ -24,11 +23,16 @@ public class TaxValidator {
 
     // DECIMAL(15, 2)의 DB 저장 범위다.
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999999.99");
+    // 세전 수입은 더 넓은 컬럼에 저장하되 JSON 숫자로 정확히 표현할 수 있는 범위까지 허용한다.
+    private static final BigDecimal MAX_PRE_TAX_INCOME = new BigDecimal("9007199254740991");
 
     // 세율 필드에 저장할 수 있는 퍼센트 값의 상한이다.
     private static final BigDecimal MAX_RATE = new BigDecimal("100");
-
-    private static final int MAX_UNSIGNED_SMALL_INT = 65535;
+    private static final BigDecimal PDF_AMOUNT_TOLERANCE = BigDecimal.ONE;
+    // DB 저장 범위와 별도로 새로 저장하는 계산기 입력에 적용한다.
+    private static final int MAX_DEPENDENT_COUNT = 100;
+    private static final BigDecimal MAX_INPUT_WON = new BigDecimal("9999999999999");
+    private static final BigDecimal MAX_INPUT_RATE = new BigDecimal("99.9999");
     private static final int MAX_DESCRIPTION_LENGTH = 255;
 
     private static final Set<String> INCOME_CATEGORIES = Set.of(
@@ -58,39 +62,6 @@ public class TaxValidator {
         }
     }
 
-    public void requireAccess(AccessContext access, TaxInputRequest input) {
-        if (input == null) {
-            throw new ApiException(
-                    HttpStatus.NOT_FOUND,
-                    "TAX_INPUT_NOT_FOUND",
-                    "분석을 찾을 수 없습니다."
-            );
-        }
-
-        if (access == null) {
-            throw forbidden();
-        }
-
-        if (access.isAdmin()) {
-            return;
-        }
-
-        // 회원 분석은 분석 소유자에게 허용한다.
-        if (input.getUserId() != null
-                && Objects.equals(input.getUserId(), access.getUserId())) {
-            return;
-        }
-
-        // 비회원 분석은 해당 분석을 생성한 서버 세션에만 허용한다.
-        if (input.getUserId() == null
-                && access.getGuestInputIds() != null
-                && access.getGuestInputIds().contains(input.getTaxInputId())) {
-            return;
-        }
-
-        throw forbidden();
-    }
-
     public void validateInputPresent(TaxInputRequest input) {
         if (input == null) {
             throw invalid("input", "분석 기본정보가 필요합니다.");
@@ -101,7 +72,7 @@ public class TaxValidator {
         validateInputPresent(request);
 
         validateTaxYear(request.getTaxYear());
-        validateUnsignedSmallInt(request.getDependentCount(), "dependentCount");
+        validateDependentCount(request.getDependentCount());
 
         if (request.getGeneralDonationAmount() == null
                 || request.getSpecialDonationAmount() == null) {
@@ -115,14 +86,14 @@ public class TaxValidator {
 
         validateDecimal(
                 request.getGeneralDonationAmount(),
-                MAX_AMOUNT,
-                2,
+                MAX_INPUT_WON,
+                0,
                 "generalDonationAmount"
         );
         validateDecimal(
                 request.getSpecialDonationAmount(),
-                MAX_AMOUNT,
-                2,
+                MAX_INPUT_WON,
+                0,
                 "specialDonationAmount"
         );
 
@@ -219,6 +190,11 @@ public class TaxValidator {
             throw invalid("rows", "거래 목록에 빈 항목이 있습니다.");
         }
 
+        // 추출 원본과 별도로, 실제로 저장하는 거래에 서비스 입력 범위를 적용한다.
+        validateDecimal(source.getActualAmount(), MAX_INPUT_WON, 0, "actualAmount");
+        validateDecimal(source.getAmount(), MAX_INPUT_WON, 0, "amount");
+        validateDecimal(source.getDeductedTaxRate(), MAX_INPUT_RATE, 4, "deductedTaxRate");
+
         // 검토 중이거나 제외된 거래는 저장하지 않는다.
         if (Boolean.TRUE.equals(source.getNeedsReview())
                 || Boolean.TRUE.equals(source.getExcluded())) {
@@ -282,6 +258,51 @@ public class TaxValidator {
         validateTaxYear(source.getTransactionDate().getYear());
     }
 
+    public void validateExtractedPdfTransaction(
+            TaxTransactionDto source,
+            TaxTransactionDto normalized
+    ) {
+        validateCashTransaction(source);
+        validatePdfTransactionDate(source);
+        validateStoredTransaction(normalized);
+        validateTransaction(normalized, "transactions");
+
+        String type = normalized.getTransactionType();
+
+        if (!"INCOME".equals(type) && !"EXPENSE".equals(type)) {
+            throw invalid("transactionType", "수입 및 지출 구분 확인 필요");
+        }
+
+        BigDecimal gross = source.getPreTaxIncome();
+        BigDecimal tax = source.getTaxDeducted();
+        validateDecimal(tax, MAX_PRE_TAX_INCOME, 2, "taxDeducted");
+
+        if (!"INCOME".equals(type) || gross == null) {
+            return;
+        }
+
+        // 파서가 추출한 값을 바탕으로 저장 전에 금액의 일관성을 확인한다.
+        BigDecimal difference = gross.subtract(normalized.getAmount());
+
+        if (difference.signum() < 0) {
+            throw invalid("actualAmount", "실제 입금액이 세전 금액보다 큽니다.");
+        }
+
+        if (tax != null && tax.compareTo(difference) != 0) {
+            throw invalid("taxDeducted", "세액과 세전·실제 금액의 차이가 다릅니다.");
+        }
+
+        BigDecimal rate = source.getDeductedTaxRate();
+
+        if (rate != null) {
+            BigDecimal expected = gross.multiply(rate).movePointLeft(2);
+
+            if (difference.subtract(expected).abs().compareTo(PDF_AMOUNT_TOLERANCE) > 0) {
+                throw invalid("deductedTaxRate", "세율과 실제 금액이 일치하지 않습니다.");
+            }
+        }
+    }
+
     public void validateNewTransactionIds(List<TaxTransactionDto> rows) {
         // 최초 INSERT 대상에는 기존 거래번호를 받지 않는다.
         for (TaxTransactionDto source : rows) {
@@ -333,7 +354,7 @@ public class TaxValidator {
         }
 
         validateDecimal(row.getAmount(), MAX_AMOUNT, 2, field + ".amount");
-        validateDecimal(row.getPreTaxIncome(), MAX_AMOUNT, 2, field + ".preTaxIncome");
+        validateDecimal(row.getPreTaxIncome(), MAX_PRE_TAX_INCOME, 2, field + ".preTaxIncome");
         validateDecimal(row.getDeductedTaxRate(), MAX_RATE, 4, field + ".deductedTaxRate");
 
         if ("EXPENSE".equals(type) && row.getPreTaxIncome() != null) {
@@ -380,14 +401,9 @@ public class TaxValidator {
                 || ("EXPENSE".equals(transactionType) && EXPENSE_CATEGORIES.contains(category));
     }
 
-    private void validateUnsignedSmallInt(Integer value, String field) {
-        if (value == null) {
-            throw invalid(field, "필수 입력값입니다.");
-        }
-
-        // 가족 수를 저장할 DB 타입의 범위를 확인한다.
-        if (value < 0 || value > MAX_UNSIGNED_SMALL_INT) {
-            throw invalid(field, "0부터 65535 사이의 정수여야 합니다.");
+    private void validateDependentCount(Integer value) {
+        if (value == null || value < 0 || value > MAX_DEPENDENT_COUNT) {
+            throw invalid("dependentCount", "공제 대상 가족 수는 0~100 사이의 정수여야 합니다.");
         }
     }
 
@@ -433,14 +449,6 @@ public class TaxValidator {
         }
 
         return bytes;
-    }
-
-    private ApiException forbidden() {
-        return new ApiException(
-                HttpStatus.FORBIDDEN,
-                "ACCESS_DENIED",
-                "해당 분석에 접근할 권한이 없습니다."
-        );
     }
 
     private ApiException invalid(String field, String message) {

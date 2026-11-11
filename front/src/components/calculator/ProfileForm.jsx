@@ -2,6 +2,7 @@
 
 import { Card, Segmented, TextField } from '../common/index';
 import { useTax } from '../../store/useTaxStore';
+import { parseDependentCount, parseWon } from '../../utils/transactionAmount';
 import styled from 'styled-components';
 
 const ProfileSection = styled.section`
@@ -82,7 +83,12 @@ const ProfileSection = styled.section`
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 16px;
   }
+  .deductions .field {
+    min-width: 0;
+  }
   .deductions input {
+    box-sizing: border-box;
+    min-width: 0;
     width: 100%;
   }
   .hint {
@@ -112,7 +118,15 @@ const BUSINESS_STATUS = [
 
 export function ProfileForm() {
   const { profile, updateProfile } = useTax();
-  const handleChange = (field) => (event) => updateProfile({ [field]: event.target.value });
+  const handleChange = (field, parseNumber) => (event) => {
+    const value = event.target.value;
+    const number = parseNumber(value);
+
+    // 입력과 붙여넣기 모두 범위를 넘으면 이전 값을 유지하고, 앞자리 0은 제거한다.
+    if (value === '' || number !== null) {
+      updateProfile({ [field]: value === '' ? '' : String(number) });
+    }
+  };
 
   return (
     <ProfileSection>
@@ -142,11 +156,9 @@ export function ProfileForm() {
               <TextField
                 id="dependentCount"
                 label="공제 대상 가족 수 (본인 제외)"
-                type="number"
-                min="0"
-                step="1"
+                inputMode="numeric"
                 value={profile.dependentCount}
-                onChange={handleChange('dependentCount')}
+                onChange={handleChange('dependentCount', parseDependentCount)}
               />
               <p className="hint">공제 요건에 해당하는 가족만 입력하세요. 본인은 제외합니다.</p>
             </div>
@@ -160,20 +172,16 @@ export function ProfileForm() {
               <TextField
                 id="specialDonationAmount"
                 label="특례기부금 (원)"
-                type="number"
-                min="0"
-                step="1"
+                inputMode="numeric"
                 value={profile.specialDonationAmount}
-                onChange={handleChange('specialDonationAmount')}
+                onChange={handleChange('specialDonationAmount', parseWon)}
               />
               <TextField
                 id="generalDonationAmount"
                 label="일반기부금 (원)"
-                type="number"
-                min="0"
-                step="1"
+                inputMode="numeric"
                 value={profile.generalDonationAmount}
-                onChange={handleChange('generalDonationAmount')}
+                onChange={handleChange('generalDonationAmount', parseWon)}
               />
             </div>
             <p className="hint">

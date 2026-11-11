@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { Button, Card, KeyValue } from '../common/index';
 import { getTaxReviewSignature, updateTaxInput } from '../../api/taxApi';
 import { useTax, useTaxStore } from '../../store/useTaxStore';
+import { taxProfileNumbers } from '../../utils/transactionAmount';
 import { getTaxInputSummary } from '../../utils/taxInputSummary';
 
 function money(value) {
@@ -16,30 +17,6 @@ function dateText(value) {
   }
 
   return String(value ?? '').trim();
-}
-
-function optionalNumber(value, label, fallback = null) {
-  if (value == null || String(value).trim() === '') {
-    return fallback;
-  }
-
-  const number = Number(String(value).replace(/,/g, '').trim());
-
-  if (!Number.isFinite(number) || number < 0) {
-    throw new Error(`${label}를 확인해주세요.`);
-  }
-
-  return number;
-}
-
-function optionalInteger(value, label, fallback = null) {
-  const number = optionalNumber(value, label, fallback);
-
-  if (number !== null && !Number.isSafeInteger(number)) {
-    throw new Error(`${label}는 정수로 입력해주세요.`);
-  }
-
-  return number;
 }
 
 function getScreenRows(state) {
@@ -60,9 +37,7 @@ function validId(value) {
 function profileValues(profile) {
   return {
     businessRegistered: profile.businessRegistered ?? null,
-    dependentCount: optionalInteger(profile.dependentCount, '공제 대상 가족 수', 0),
-    generalDonationAmount: optionalNumber(profile.generalDonationAmount, '일반기부금', 0),
-    specialDonationAmount: optionalNumber(profile.specialDonationAmount, '특례기부금', 0),
+    ...taxProfileNumbers(profile),
   };
 }
 
