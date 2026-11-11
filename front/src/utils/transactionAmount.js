@@ -1,6 +1,7 @@
 // DB 컬럼과 별도로 계산기에서 받는 입력 범위를 정한다.
 const MAX_DEPENDENT_COUNT = 100;
 const MAX_WON = 9_999_999_999_999;
+const MAX_PRE_TAX_INCOME = Number.MAX_SAFE_INTEGER;
 const MAX_DEDUCTED_TAX_RATE = 99.9999;
 
 export function parseWon(value) {
@@ -52,5 +53,16 @@ export function calculatePreTaxIncome(actualAmount, deductionRate) {
     return null;
   // 실제 입금액을 차감 후 비율로 나누며 원 단위 반올림으로 역산한다.
   const gross = Math.round(actualAmount / (1 - rate / 100));
-  return Number.isSafeInteger(gross) && gross <= MAX_WON ? gross : null;
+  return Number.isSafeInteger(gross) && gross <= MAX_PRE_TAX_INCOME ? gross : null;
+}
+
+export function getMaximumActualIncome(deductedTaxRate) {
+  if (deductedTaxRate === null) return MAX_WON;
+
+  // 세전 수입의 원 단위 반올림까지 고려해 저장 가능한 최대 입금액을 구한다.
+  const amount = Math.floor(MAX_PRE_TAX_INCOME * (1 - deductedTaxRate / 100));
+  if (amount >= MAX_WON) return MAX_WON;
+
+  if (calculatePreTaxIncome(amount, deductedTaxRate) === null) return amount - 1;
+  return calculatePreTaxIncome(amount + 1, deductedTaxRate) === null ? amount : amount + 1;
 }

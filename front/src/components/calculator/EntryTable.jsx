@@ -666,7 +666,7 @@ export function EntryTable() {
                 <td>{row.date}</td>
                 <td title={row.description}>
                   {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
-                  {row.description}
+                  <span className="tax-description-preview">{row.description}</span>
                 </td>
                 <td className="tax-amount">{formatMoney(row.amount)}</td>
                 <td>{getTransactionCategoryLabel(row.category)}</td>
@@ -829,7 +829,7 @@ export function EntryTable() {
                       <td>{row.date}</td>
                       <td className="tax-description" title={row.description}>
                         {row.needsReview ? '[검토] ' : !row.persisted ? '[저장 대기] ' : ''}
-                        {row.description}
+                        <span className="tax-description-preview">{row.description}</span>
                       </td>
                       <td className="tax-amount">{formatMoney(row.amount)}</td>
                       <td>

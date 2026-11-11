@@ -12,7 +12,12 @@ import { useTax, useTaxStore } from '../../store/useTaxStore';
 import { useToast } from '../../store/useToastStore';
 import FileUploader from './FileUploader';
 
-import { calculatePreTaxIncome, parseDeductedTaxRate, parseWon } from '../../utils/transactionAmount';
+import {
+  calculatePreTaxIncome,
+  getMaximumActualIncome,
+  parseDeductedTaxRate,
+  parseWon,
+} from '../../utils/transactionAmount';
 
 const UploadArea = styled.div({
   height: '220px',
@@ -103,7 +108,12 @@ export function EntryForm() {
 
   const categories = kind === 'in' ? INCOME_TRANSACTION_CATEGORIES : EXPENSE_TRANSACTION_CATEGORIES;
 
-  const preTaxIncome = calculatePreTaxIncome(parseWon(amt), parseDeductedTaxRate(deductionRate));
+  const actualAmount = parseWon(amt);
+  const deductedTaxRate = parseDeductedTaxRate(deductionRate);
+  const preTaxIncome = calculatePreTaxIncome(actualAmount, deductedTaxRate);
+  const maximumActualIncome = getMaximumActualIncome(deductedTaxRate);
+  const maximumIncomeText = maximumActualIncome.toLocaleString('ko-KR');
+  const incomeTooHigh = kind === 'in' && actualAmount !== null && actualAmount > maximumActualIncome;
 
   function changeDeductionRate(event) {
     const value = event.target.value.trim().replace(/^0+(?=[0-9])/, '');
@@ -118,6 +128,8 @@ export function EntryForm() {
   function changeActualAmount(event) {
     const value = event.target.value;
     const amount = parseWon(value);
+
+    if (kind === 'in' && amount !== null && amount > maximumActualIncome) return;
 
     // 입력과 붙여넣기에서 상한을 넘으면 이전 금액을 유지한다.
     if (value === '' || amount !== null) {
@@ -136,9 +148,7 @@ export function EntryForm() {
 
     if (useTaxStore.getState().taxSaveBusy) return;
 
-    const actualAmount = parseWon(amt);
-    const deductedTaxRate = parseDeductedTaxRate(deductionRate);
-    const grossAmount = calculatePreTaxIncome(actualAmount, deductedTaxRate);
+    const grossAmount = preTaxIncome;
 
     if (!date || Number(date.slice(0, 4)) !== Number(profile.taxYear) || !memo.trim()) {
       toast('귀속 연도에 맞는 날짜와 거래 설명을 입력해주세요.');
@@ -156,7 +166,7 @@ export function EntryForm() {
     }
 
     if (kind === 'in' && grossAmount === null) {
-      toast('역산한 세전 수입이 저장 범위를 초과합니다.');
+      toast(`현재 차감 세율에서 실제 입금액은 최대 ${maximumIncomeText}원입니다.`);
       return;
     }
 
@@ -264,7 +274,7 @@ export function EntryForm() {
               />
             </label>
 
-            <Button type="submit" variant="soft" disabled={busy}>
+            <Button type="submit" variant="soft" disabled={busy || incomeTooHigh}>
               + 내역 추가하기
             </Button>
           </div>
@@ -273,10 +283,18 @@ export function EntryForm() {
             {kind === 'in' ? (
               <>
                 세전 수입 자동 계산:{' '}
-                {preTaxIncome === null
-                  ? '입금액과 차감 세율을 입력해주세요.'
-                  : `${preTaxIncome.toLocaleString('ko-KR')}원 (원 단위 반올림)`}
+                {incomeTooHigh
+                  ? '현재 세율에서 허용되는 입금액을 초과했습니다.'
+                  : preTaxIncome === null
+                    ? '입금액과 차감 세율을 입력해주세요.'
+                    : `${preTaxIncome.toLocaleString('ko-KR')}원 (원 단위 반올림)`}
                 <br />
+                {deductedTaxRate !== null && (
+                  <>
+                    현재 차감 세율에서 실제 입금액은 최대 {maximumIncomeText}원입니다.
+                    <br />
+                  </>
+                )}
                 차감 세율은 실제 지급 내역에 맞춰 입력해주세요.
               </>
             ) : (

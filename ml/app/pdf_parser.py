@@ -70,7 +70,7 @@ HEADER_ROLE_PATTERNS = (
     ),
     ("gross", r"세전(?:금액|수입|수입금액|입금액)|지급총액|grossamount"),
     ("amount", r"(?:거래|사용|결제|수입|지출)?금액|amount"),
-    ("tax", r"(?:공제)?세액|원천징수액|차감세액|tax"),
+    ("tax", r"(?:공제)?세액|원천징수액|차감세액|차감세금|tax"),
     ("tax_rate", r"(?:차감|원천징수)?세율|taxrate"),
     ("category", r"카테고리|분류|category"),
     ("sequence", r"(?:거래|승인|계좌)?번호|순번|no\.?"),
@@ -241,7 +241,7 @@ def _direction_hint(source):
     return "UNKNOWN"
 
 
-def words_to_rows(words, config=None):
+def words_to_rows(words, config=None, *, align_transaction_columns=False):
     """PDF 내장 단어를 좌표에 따라 행으로 묶는다."""
 
     settings = _settings(config)
@@ -296,6 +296,10 @@ def words_to_rows(words, config=None):
 
     result = []
 
+    header_index = None
+    column_starts = None
+    aligned_rows = []
+
     for line in sorted(
         lines,
         key=lambda row: statistics.median(word["top"] for word in row),
@@ -312,6 +316,7 @@ def words_to_rows(words, config=None):
         )
 
         cells = []
+        cell_starts = []
         current = []
         right = None
 
@@ -321,11 +326,35 @@ def words_to_rows(words, config=None):
                 current = []
                 right = None
 
+            if not current:
+                cell_starts.append(word["x0"])
             current.append(word["text"])
             right = word["x1"] if right is None else max(right, word["x1"])
 
         if current:
             cells.append(" ".join(current))
+
+        if align_transaction_columns:
+            roles = [_header_role(cell) for cell in cells]
+            if roles[0] == "date" and {"type", "description", "gross", "tax", "net"}.issubset(roles):
+                if header_index is not None:
+                    # 표가 여러 개면 페이지 전체를 하나의 헤더로 해석하지 않는다.
+                    align_transaction_columns = False
+                else:
+                    header_index = len(result)
+                    column_starts = cell_starts
+            elif column_starts is not None and _date(cells[0]):
+                # 비어 있는 세전 수입·세액 열도 보존하도록 헤더 좌표에 단어를 배치한다.
+                columns = [[] for _ in column_starts]
+                column = 0
+                for word in line:
+                    while column + 1 < len(column_starts) and word["x0"] >= column_starts[column + 1]:
+                        column += 1
+                    columns[column].append(word["text"])
+                aligned_cells = [" ".join(words) for words in columns]
+                if not _date(aligned_cells[0]):
+                    align_transaction_columns = False
+                aligned_rows.append({"cells": aligned_cells})
 
         result.append(
             {
@@ -333,6 +362,23 @@ def words_to_rows(words, config=None):
                 "text": " | ".join(cells),
             }
         )
+
+    if align_transaction_columns and aligned_rows:
+        header = result[header_index]
+        original_rows = [
+            row for row in result[header_index + 1:]
+            if any(_date(cell) for cell in row["cells"])
+        ]
+        has_earlier_transactions = any(
+            _date(row["cells"][0]) for row in result[:header_index]
+        )
+        # 다른 거래 행을 잃지 않고 열 수 차이를 복원할 수 있을 때만 적용한다.
+        if (
+            not has_earlier_transactions
+            and len(aligned_rows) == len(original_rows)
+            and any(len(row["cells"]) != len(header["cells"]) for row in original_rows)
+        ):
+            return [header, *aligned_rows]
 
     return result
 
@@ -819,7 +865,10 @@ def _extract_page_rows(
             native_method = "PDF_TABLE"
             native_groups = table_groups
         else:
-            rows = _rows(words_to_rows(native_words, settings), settings)
+            rows = _rows(
+                words_to_rows(native_words, settings, align_transaction_columns=True),
+                settings,
+            )
             native_groups = [rows] if rows else []
 
         # 작은 이미지는 내장 거래 구조가 확인된 경우에만 OCR에서 제외한다.

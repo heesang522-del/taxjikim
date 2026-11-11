@@ -24,6 +24,8 @@ public class TaxValidator {
 
     // DECIMAL(15, 2)의 DB 저장 범위다.
     private static final BigDecimal MAX_AMOUNT = new BigDecimal("9999999999999.99");
+    // 세전 수입은 더 넓은 컬럼에 저장하되 JSON 숫자로 정확히 표현할 수 있는 범위까지 허용한다.
+    private static final BigDecimal MAX_PRE_TAX_INCOME = new BigDecimal("9007199254740991");
 
     // 세율 필드에 저장할 수 있는 퍼센트 값의 상한이다.
     private static final BigDecimal MAX_RATE = new BigDecimal("100");
@@ -305,7 +307,7 @@ public class TaxValidator {
 
         BigDecimal gross = source.getPreTaxIncome();
         BigDecimal tax = source.getTaxDeducted();
-        validateDecimal(tax, MAX_AMOUNT, 2, "taxDeducted");
+        validateDecimal(tax, MAX_PRE_TAX_INCOME, 2, "taxDeducted");
 
         if (!"INCOME".equals(type) || gross == null) {
             return;
@@ -384,7 +386,7 @@ public class TaxValidator {
         }
 
         validateDecimal(row.getAmount(), MAX_AMOUNT, 2, field + ".amount");
-        validateDecimal(row.getPreTaxIncome(), MAX_AMOUNT, 2, field + ".preTaxIncome");
+        validateDecimal(row.getPreTaxIncome(), MAX_PRE_TAX_INCOME, 2, field + ".preTaxIncome");
         validateDecimal(row.getDeductedTaxRate(), MAX_RATE, 4, field + ".deductedTaxRate");
 
         if ("EXPENSE".equals(type) && row.getPreTaxIncome() != null) {

@@ -551,8 +551,18 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
   background: var(--bg);
 }
 
-.tax-review-dialog .tax-description {
-  overflow-wrap: anywhere;
+.tax-read-area {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.tax-table .tax-description-preview {
+  display: block;
+  max-width: clamp(8rem, 28vw, 24rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tax-review-dialog .tax-amount {

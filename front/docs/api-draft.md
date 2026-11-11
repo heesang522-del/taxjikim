@@ -241,6 +241,13 @@ ALTER TABLE TAX_TRANSACTIONS
 - UI는 앞뒤 공백을 제거하고 원화 금액의 천 단위 쉼표를 허용한다. 내부 공백·문자·음수·지수 표기는 거부한다. API에는 해당 값을 일반 JSON 숫자로 전달한다.
 - 직접 입력 거래는 내역 확인·수정에서 저장한 뒤 분석 결과로 이동한다.
 
+세전 수입은 실제 입금액과 차감 세율로 역산하며 최대 9,007,199,254,740,991원까지 허용한다. 조 단위 입금액을 저장하기 전에 기존 DB에서 세전 수입 컬럼을 확장한다.
+
+```sql
+ALTER TABLE TAX_TRANSACTIONS
+  MODIFY COLUMN PRE_TAX_INCOME DECIMAL(18,2) NULL;
+```
+
 ```json
 {
   "input": {
