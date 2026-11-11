@@ -4,8 +4,8 @@
 import { useEffect, useRef } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { rememberPath } from '../../utils/returnTo';
-import { useAuth } from '../../store/useAuthStore';
-import { useToastStore } from '../../store/useToastStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useToastStore } from '../../stores/useToastStore';
 import Toast from '../common/Toast';
 import { Header } from './Header';
 import ChatWidget from './ChatWidget';

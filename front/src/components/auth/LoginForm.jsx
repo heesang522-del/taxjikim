@@ -4,7 +4,7 @@
 import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Button, TextField } from '../common/index';
-import { useAuth } from '../../store/useAuthStore';
+import { useAuth } from '../../stores/useAuthStore';
 import { USER_INPUT_LIMITS, PASSWORD_MAX_LENGTH } from '../../utils/userValidation';
 
 // 로그인 성공 처리와 계정 화면 이동을 연결하고, 실패 안내는 폼 아래에 표시

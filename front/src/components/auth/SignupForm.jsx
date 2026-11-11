@@ -14,7 +14,7 @@ import {
 } from '../../utils/userValidation';
 import { Button, TextField } from '../common/index';
 import { SignupProfileImage } from './SignupProfileImage';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 import {
   checkLoginId,
   checkNickname,

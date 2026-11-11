@@ -4,8 +4,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Pill } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
-import { useInquiry } from '../store/useInquiryStore';
-import { useToast } from '../store/useToastStore';
+import { useInquiry } from '../stores/useInquiryStore';
+import { useToast } from '../stores/useToastStore';
 import { toDateLabel } from '../utils/format';
 
 const PAGE_SIZE = 10; // 신고 접수 화면과 달리 문의는 수가 많아질 수 있어 칸마다 페이지로 끊어 보여준다.

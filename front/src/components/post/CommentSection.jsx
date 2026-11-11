@@ -4,8 +4,8 @@
 import { useEffect, useState } from 'react';
 import { Button, Card } from '../common/index';
 import { ROUTES } from '../../utils/routes';
-import { useAuth } from '../../store/useAuthStore';
-import { useToast } from '../../store/useToastStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useToast } from '../../stores/useToastStore';
 import ReportModal from './ReportModal';
 import { getComments, createComment, updateComment, deleteComment } from '../../api/comment';
 import { createCommentReport } from '../../api/report';

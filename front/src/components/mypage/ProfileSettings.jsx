@@ -12,8 +12,8 @@ import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { Button, Icon, Modal, TextField } from '../common/index';
-import { useAuth } from '../../store/useAuthStore';
-import { useToast } from '../../store/useToastStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useToast } from '../../stores/useToastStore';
 import { maskEmail } from '../../utils/format';
 import {
   sendEmailVerification,

@@ -6,11 +6,11 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import { SimSliders } from '../components/calculator/SimSliders';
 import { SimCompare } from '../components/calculator/SimCompare';
 import { getTaxCalculationResult, getSavedTaxResult, simulateTax } from '../api/taxApi';
-import { EMPTY_SIM } from '../store/useTaxStore';
+import { EMPTY_SIM } from '../stores/useTaxStore';
 import { ScenarioTable } from '../components/calculator/ScenarioTable';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 import { ROUTES } from '../utils/routes';
-import { useToast } from '../store/useToastStore';
+import { useToast } from '../stores/useToastStore';
 
 export function CalculatorSimPage() {
   const { user } = useAuth();

@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { Card, Icon } from '../common/index';
 import { getMemberMessages, getMyChatHistory } from '../../api/chat';
-import { useAuth } from '../../store/useAuthStore';
-import { useMemberRoomStore } from '../../store/useMemberRoomStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useMemberRoomStore } from '../../stores/useMemberRoomStore';
 
 function formatDate(value) {
   return value

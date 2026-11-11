@@ -41,7 +41,7 @@
 src/
   mocks/       # mock JSON
   api/         # 데이터 접근 함수. 화면은 여기만 호출
-  store/       # zustand
+  stores/      # zustand
   pages/
   components/
 docs/

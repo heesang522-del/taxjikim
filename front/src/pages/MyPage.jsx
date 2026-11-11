@@ -6,7 +6,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Tabs } from '../components/common/index';
 import { getSavedTaxResults } from '../api/taxApi';
 import { ROUTES } from '../utils/routes';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 import { ProfileSettings } from '../components/mypage/ProfileSettings';
 import { AnnualTaxComparison } from '../components/mypage/AnnualTaxComparison';
 import { ConsultationHistory } from '../components/mypage/ConsultationHistory';

@@ -9,13 +9,13 @@ import CommentSection from '../components/post/CommentSection';
 import ReportModal from '../components/post/ReportModal';
 import { DELETED_POST } from '../data/options';
 import { ROUTES } from '../utils/routes';
-import { useAuth } from '../store/useAuthStore';
-import { usePost } from '../store/usePostStore';
-import { useToast } from '../store/useToastStore';
+import { useAuth } from '../stores/useAuthStore';
+import { usePost } from '../stores/usePostStore';
+import { useToast } from '../stores/useToastStore';
 import { useReports } from '../utils/useReports';
 import { createPostReport } from '../api/report';
 import { deletePost, getPost } from '../api/post';
-import { imagePreviewProps, videoPreviewProps } from '../store/post-preview';
+import { imagePreviewProps, videoPreviewProps } from '../stores/post-preview';
 
 const listOf = (tab) => `${ROUTES.postList}?tab=${encodeURIComponent(tab)}`;
 // 서버 글은 숫자 postId, 브라우저에만 남아있는 예시 글은 문자열 id를 쓴다. SupportQnaPostPage와 같은 구분 방식.

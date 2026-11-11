@@ -5,14 +5,14 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Card, SelectField, TextAreaField, TextField } from '../common/index';
 import { POST_WRITE_TABS } from '../../data/content';
-import { useAuth } from '../../store/useAuthStore';
-import { useToast } from '../../store/useToastStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useToast } from '../../stores/useToastStore';
 import {
   uploadFileChunks,
   filterBlockedFiles,
   imagePreviewProps,
   videoPreviewProps,
-} from '../../store/post-preview.js';
+} from '../../stores/post-preview.js';
 import { createPost, updatePost } from '../../api/post.js';
 import { ROUTES } from '../../utils/routes';
 

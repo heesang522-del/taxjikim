@@ -1,4 +1,4 @@
-import { normalizeTaxKind, parseTaxAmount } from '../store/useTaxStore';
+import { normalizeTaxKind, parseTaxAmount } from '../stores/useTaxStore';
 
 export function getTransactionCashAmount(row) {
   // 세전 금액을 실제 입금액으로 대체하지 않는다.

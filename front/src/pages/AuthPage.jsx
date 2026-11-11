@@ -10,7 +10,7 @@ import { SignupForm } from '../components/auth/SignupForm';
 import { RecoveryForm } from '../components/auth/RecoveryForm';
 import { takeReturnTo } from '../utils/returnTo';
 import { ROUTES } from '../utils/routes';
-import { useToast } from '../store/useToastStore';
+import { useToast } from '../stores/useToastStore';
 
 const TABS = [
   ['login', '로그인'],

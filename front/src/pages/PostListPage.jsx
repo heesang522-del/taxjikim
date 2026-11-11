@@ -6,7 +6,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Tabs } from '../components/common/index';
 import { POST_TABS, POST_WRITE_TABS } from '../data/content';
 import { ROUTES } from '../utils/routes';
-import { useAuth } from '../store/useAuthStore';
+import { useAuth } from '../stores/useAuthStore';
 import { getPostsPage } from '../api/post';
 
 const CATEGORY_TONE = { 공지: 'danger', '정보 공유': 'primary', 팁: 'neutral' };

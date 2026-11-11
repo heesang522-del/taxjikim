@@ -6,7 +6,7 @@ import { ROUTES } from '../utils/routes';
 import { YEAR } from '../data/taxConstants';
 import { man } from '../utils/format';
 import { useTaxResult } from '../utils/useTaxResult';
-import { useToast } from '../store/useToastStore';
+import { useToast } from '../stores/useToastStore';
 import { useNavigate } from 'react-router-dom';
 
 const STEPS = [

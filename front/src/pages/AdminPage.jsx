@@ -5,14 +5,14 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Tabs } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
-import { useToast } from '../store/useToastStore';
-import { usePost } from '../store/usePostStore';
-import { useInquiry } from '../store/useInquiryStore';
+import { useToast } from '../stores/useToastStore';
+import { usePost } from '../stores/usePostStore';
+import { useInquiry } from '../stores/useInquiryStore';
 import { useAllReports } from '../utils/useAllReports';
-import { useWaitingCount } from '../store/useChatStore';
+import { useWaitingCount } from '../stores/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
 import { getNoticesPage, getFaqsPage, getLibraryItems, createPost, updatePost as updatePostApi, deletePost } from '../api/post';
-import { uploadFileChunks } from '../store/post-preview.js';
+import { uploadFileChunks } from '../stores/post-preview.js';
 
 const ADMIN_TABS = [['members', '회원·게시판 관리'], ['support', '고객 지원']];
 const PAGE_WINDOW_SIZE = 9; // 페이지 번호 버튼은 한 번에 최대 이만큼만 보여준다 (게시판·고객센터와 동일)

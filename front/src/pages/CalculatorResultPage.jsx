@@ -11,9 +11,9 @@ import { MonthlyChart } from '../components/calculator/result/MonthlyChart';
 import { CategoryRatioCharts } from '../components/calculator/result/CategoryRatioCharts';
 import RegistrationCompare from '../components/calculator/result/RegistrationCompare';
 import { ROUTES } from '../utils/routes';
-import { useTax } from '../store/useTaxStore';
-import { useAuth } from '../store/useAuthStore';
-import { useToast } from '../store/useToastStore';
+import { useTax } from '../stores/useTaxStore';
+import { useAuth } from '../stores/useAuthStore';
+import { useToast } from '../stores/useToastStore';
 
 export default function CalcResultPage() {
   const [searchParams] = useSearchParams();

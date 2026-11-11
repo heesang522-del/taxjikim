@@ -1,7 +1,7 @@
 'use no memo';
 
 import { Card, Segmented, TextField } from '../common/index';
-import { useTax } from '../../store/useTaxStore';
+import { useTax } from '../../stores/useTaxStore';
 import { parseDependentCount, parseWon } from '../../utils/transactionAmount';
 import styled from 'styled-components';
 

@@ -5,7 +5,7 @@ import { getPasswordError, PASSWORD_GUIDE, PASSWORD_MAX_LENGTH, USER_INPUT_LIMIT
 
 import { useEffect, useState } from 'react';
 import { Button, Icon, KeyValue, Modal, TextField } from '../common/index';
-import { useToast } from '../../store/useToastStore';
+import { useToast } from '../../stores/useToastStore';
 import {
   sendAccountLookupCode,
   sendPasswordResetCode,

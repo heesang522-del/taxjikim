@@ -4,8 +4,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { NAV_ITEMS, ROUTES } from '../../utils/routes';
-import { useAuth } from '../../store/useAuthStore';
-import { useToast } from '../../store/useToastStore';
+import { useAuth } from '../../stores/useAuthStore';
+import { useToast } from '../../stores/useToastStore';
 import { useNotifications } from '../../utils/useNotifications';
 import { Button, Icon, Modal, Pill } from '../common/index';
 
