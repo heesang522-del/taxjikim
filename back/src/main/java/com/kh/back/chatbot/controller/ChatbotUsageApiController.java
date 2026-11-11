@@ -19,6 +19,7 @@ public class ChatbotUsageApiController {
 
     @GetMapping
     public ApiResponse<ChatbotUsageDto> usage( @AuthenticationPrincipal CustomUserDetails principal) {
+        chatbotUsageService.checkReadRate(principal.getUserId());
         return ApiResponse.ok(
                 chatbotUsageService.getUsage(principal)
         );

@@ -12,6 +12,7 @@ import java.util.UUID;
 public class ChatbotValidator {
 
     private static final int MAX_QUESTION_LENGTH = 500;
+    public static final int MAX_TITLE_LENGTH = 40;
 
     public void validateConversationId(Long conversationId) {
         if (conversationId == null || conversationId <= 0) {
@@ -42,6 +43,17 @@ public class ChatbotValidator {
         }
 
         return question;
+    }
+
+    public String validateAndNormalizeTitle(String value) {
+        String title = value == null ? "" : value.strip();
+        if (title.isBlank() || title.codePointCount(0, title.length()) > MAX_TITLE_LENGTH) {
+            String message = "대화 이름은 1~40자로 입력해주세요.";
+            throw new ApiException(
+                    HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message, Map.of("title", message)
+            );
+        }
+        return title;
     }
 
     public void validateRequestId(UUID requestId) {

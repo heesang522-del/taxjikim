@@ -93,6 +93,14 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
     }
 
     @Override
+    @Transactional
+    public ConversationResponse renameConversation(Long userId, Long conversationId, String title) {
+        requireLockedConversation(userId, conversationId);
+        requireUpdated(chatbotMapper.renameConversation(userId, conversationId, title));
+        return requireConversation(userId, conversationId).toResponse();
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public void requireConversationOwnership(
             Long userId,
@@ -103,16 +111,13 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
     }
 
     @Override
-    @Transactional(
-            readOnly = true,
-            isolation = Isolation.REPEATABLE_READ
-    )
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public ConversationSnapshot getSnapshot(
             Long userId,
             Long conversationId
     ) {
         ChatbotConversationDto conversation =
-                requireConversation(
+                requireLockedConversation(
                         userId,
                         conversationId
                 );
@@ -122,6 +127,11 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
                         userId,
                         conversationId
                 );
+
+        // 재조회에서도 만료된 질문을 정리해 전송을 다시 시도할 수 있게 한다.
+        if (expirePendingQuestions(userId, conversationId, messages, LocalDateTime.now(KOREA_ZONE))) {
+            messages = chatbotMapper.findMessages(userId, conversationId);
+        }
 
         return ConversationSnapshot.builder()
                 .revision(conversation.getRevision())
@@ -147,34 +157,15 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
         LocalDateTime questionTime =
                 LocalDateTime.now(KOREA_ZONE);
 
-        LocalDateTime cutoff =
-                questionTime.minusSeconds(
-                        Math.max(1, pendingTimeoutSeconds)
-                );
-
         List<ChatbotMessageDto> messages =
                 chatbotMapper.findMessages(
                         userId,
                         conversationId
                 );
 
-        // 서버 중단 등으로 오래 남은 예약도 실패 확정과 함께 복구한다.
-        for (ChatbotMessageDto item : messages) {
-            if ("PENDING".equals(item.getStatus())
-                    && item.getCreatedAt().isBefore(cutoff)) {
-                failAndRelease(
-                        userId,
-                        conversationId,
-                        item.getMessageId()
-                );
-            }
+        if (expirePendingQuestions(userId, conversationId, messages, questionTime)) {
+            messages = chatbotMapper.findMessages(userId, conversationId);
         }
-
-        // 상태 정리 후 최신 메시지로 진행 중인 질문을 확인한다.
-        messages = chatbotMapper.findMessages(
-                userId,
-                conversationId
-        );
 
         boolean hasPending = messages.stream()
                 .anyMatch(item ->
@@ -365,6 +356,20 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
         }
     }
 
+    private boolean expirePendingQuestions(
+            Long userId, Long conversationId, List<ChatbotMessageDto> messages, LocalDateTime now
+    ) {
+        LocalDateTime cutoff = now.minusSeconds(Math.max(1, pendingTimeoutSeconds));
+        boolean changed = false;
+        for (ChatbotMessageDto message : messages) {
+            if ("PENDING".equals(message.getStatus()) && message.getCreatedAt().isBefore(cutoff)
+                    && failAndRelease(userId, conversationId, message.getMessageId())) {
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
     private boolean failAndRelease(
             Long userId,
             Long conversationId,
@@ -395,7 +400,7 @@ public class ChatbotHistoryServiceImpl implements ChatbotHistoryService {
                 question.replaceAll("\\s+", " ").strip();
 
         int length = Math.min(
-                40,
+                ChatbotValidator.MAX_TITLE_LENGTH,
                 title.codePointCount(0, title.length())
         );
 

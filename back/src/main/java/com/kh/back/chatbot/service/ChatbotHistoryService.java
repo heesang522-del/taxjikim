@@ -15,6 +15,8 @@ public interface ChatbotHistoryService {
 
     ConversationResponse createConversation(Long userId);
 
+    ConversationResponse renameConversation(Long userId, Long conversationId, String title);
+
     void requireConversationOwnership(
             Long userId,
             Long conversationId

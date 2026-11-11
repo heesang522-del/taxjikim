@@ -7,6 +7,8 @@ import java.time.LocalDate;
 
 public interface ChatbotUsageService {
 
+    void checkReadRate(Long userId);
+
     ChatbotUsageDto getUsage(
             CustomUserDetails principal
     );

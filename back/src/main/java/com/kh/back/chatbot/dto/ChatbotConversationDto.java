@@ -36,6 +36,9 @@ public class ChatbotConversationDto {
                 .build();
     }
 
+    public record RenameRequest(String title) {
+    }
+
     @Builder
     public record ConversationResponse(
             Long conversationId,
