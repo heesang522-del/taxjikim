@@ -8,7 +8,7 @@ import {
   USER_INPUT_LIMITS,
 } from '../../utils/userValidation';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { Button, Icon, Modal, TextField } from '../common/index';
@@ -47,6 +47,20 @@ export function ProfileSettings() {
   const [pending, setPending] = useState('');
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
+  const [resendAvailableAt, setResendAvailableAt] = useState(null);
+  const [now, setNow] = useState(Date.now);
+  const resendSecondsLeft = resendAvailableAt == null ? 0 : Math.max(0, Math.ceil((resendAvailableAt - now) / 1000));
+
+  useEffect(() => {
+    if (resendAvailableAt == null) return undefined;
+    // 팝업을 닫아도 잠금을 유지하고, 1분이 지나면 카운트다운을 종료한다.
+    const timer = setInterval(() => {
+      const timestamp = Date.now();
+      setNow(timestamp);
+      if (timestamp >= resendAvailableAt) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendAvailableAt]);
 
   function handleEdit(section) {
     if (pending) return;
@@ -105,14 +119,19 @@ export function ProfileSettings() {
   }
 
   function handleSendCode() {
+    if (pending || (resendAvailableAt != null && Date.now() < resendAvailableAt)) return;
     const emailError = getEmailError(email);
     if (emailError) {
       setFieldErrors((previous) => ({ ...previous, email: emailError }));
       return;
     }
-    setVerifiedEmail(null);
     handleAction('send', async () => {
       await sendEmailVerification(email.trim());
+      // 발송 성공 응답부터 60초간 잠그고, 성공한 경우에만 기존 인증 상태를 초기화한다.
+      const timestamp = Date.now();
+      setNow(timestamp);
+      setResendAvailableAt(timestamp + 60_000);
+      setVerifiedEmail(null);
       setCode('');
       toast('인증번호를 보냈습니다. 5분 안에 입력하세요.');
     });
@@ -297,7 +316,9 @@ export function ProfileSettings() {
                 setCode('');
               }}
             />
-            <Button onClick={handleSendCode}>인증번호 받기</Button>
+            <Button onClick={handleSendCode} disabled={resendSecondsLeft > 0}>
+              {resendSecondsLeft > 0 ? `${resendSecondsLeft}초 후 받기` : '인증번호 받기'}
+            </Button>
           </InputActionRow>
           <InputActionRow>
             <TextField
