@@ -1,10 +1,9 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Button, Card, DataTable, HBar, Pill, Tabs } from '../components/common/index';
-import { ADMIN_STATS, USAGE_METRICS, FAILURE_LOG_SEED } from '../data/content';
+import { Button, Card, DataTable, Pill, Tabs } from '../components/common/index';
 import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
 import { usePost } from '../store/usePostStore';
@@ -12,13 +11,34 @@ import { useInquiry } from '../store/useInquiryStore';
 import { useAllReports } from '../utils/useAllReports';
 import { useWaitingCount } from '../store/useChatStore';
 import { AccountLockManagement } from '../components/admin/AccountLockManagement';
-import { toDateLabel } from '../utils/format';
-import { getNotices, getFaqs, createPost, updatePost as updatePostApi, deletePost } from '../api/post';
+import { getNoticesPage, getFaqsPage, getLibraryItems, createPost, updatePost as updatePostApi, deletePost } from '../api/post';
+import { uploadFileChunks } from '../store/post-preview.js';
 
-const ADMIN_TABS = [['usage', '모델·처리 현황'], ['members', '회원·게시판 관리'], ['support', '고객 지원']];
+const ADMIN_TABS = [['members', '회원·게시판 관리'], ['support', '고객 지원']];
+const PAGE_WINDOW_SIZE = 9; // 페이지 번호 버튼은 한 번에 최대 이만큼만 보여준다 (게시판·고객센터와 동일)
 // 서버 공지는 숫자 postId, 브라우저에만 남아있는 예시 공지는 문자열 id를 쓴다. 다른 게시판 화면들과 같은 구분 방식.
 const isServerId = (id) => /^\d+$/.test(id);
-const StatCard = ({ title, data }) => <Card title={title}>{data.map(([l, v]) => <HBar key={l} label={l} value={v} display={`${v}%`} scale={2} />)}</Card>;
+
+// 전체 페이지가 많아져도 버튼이 끝없이 늘어나지 않도록, 현재 페이지를 중심으로 최대 size개만 잘라 보여준다.
+function getPageWindow(current, total, size) {
+  if (total <= size) return Array.from({ length: total }, (_, i) => i + 1);
+  const start = Math.min(Math.max(1, current - Math.floor(size / 2)), total - size + 1);
+  return Array.from({ length: size }, (_, i) => start + i);
+}
+
+function Pager({ page, totalPages, onChange }) {
+  if (totalPages <= 1) return null;
+  const numbers = getPageWindow(page, totalPages, PAGE_WINDOW_SIZE);
+  return (
+    <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
+      <Button size="sm" variant="ghost" disabled={page <= 1} onClick={() => onChange(page - 1)}>이전</Button>
+      {numbers.map((n) => (
+        <Button key={n} size="sm" variant={n === page ? 'primary' : 'ghost'} onClick={() => onChange(n)}>{n}</Button>
+      ))}
+      <Button size="sm" variant="ghost" disabled={page >= totalPages} onClick={() => onChange(page + 1)}>다음</Button>
+    </div>
+  );
+}
 
 function NoticeRow({ post, onSave }) {
   const [editing, setEditing] = useState(false);
@@ -137,6 +157,59 @@ function FaqAddForm({ onAdd }) {
   );
 }
 
+function LibraryRow({ item, onDelete }) {
+  const fileUrl = item.attachments?.[0]?.previewUrl;
+  return (
+    <div className="row between" style={{ padding: '10px 0', borderBottom: '1px solid var(--border-soft)' }}>
+      {fileUrl
+        ? <a href={fileUrl} target="_blank" rel="noopener noreferrer">{item.title}</a>
+        : <span>{item.title}</span>}
+      <Button size="sm" variant="danger" onClick={onDelete}>삭제</Button>
+    </div>
+  );
+}
+
+function LibraryAddForm({ onAdd }) {
+  const [open, setOpen] = useState(false);
+  const [title, setTitle] = useState('');
+  const [file, setFile] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const toast = useToast();
+
+  if (!open) return <Button size="sm" variant="soft" onClick={() => setOpen(true)}>새 자료 올리기</Button>;
+
+  const submit = async () => {
+    if (isSubmitting) return;
+    if (!title.trim() || !file) { toast('제목과 PDF 파일을 선택하세요'); return; }
+    setIsSubmitting(true);
+    try {
+      await onAdd({ title, file });
+      setTitle(''); setFile(null); setOpen(false);
+    } catch {
+      // 실패 토스트는 onAdd(상위)가 띄운다.
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="grid" style={{ gap: 8 }}>
+      <input className="in" placeholder="자료 제목" value={title} onChange={(e) => setTitle(e.target.value)} disabled={isSubmitting} />
+      <input
+        className="in"
+        type="file"
+        accept=".pdf"
+        disabled={isSubmitting}
+        onChange={(e) => setFile(e.target.files[0] || null)}
+      />
+      <div className="row">
+        <Button size="sm" onClick={() => setOpen(false)} disabled={isSubmitting}>취소</Button>
+        <Button size="sm" variant="primary" onClick={submit} disabled={isSubmitting}>{isSubmitting ? '업로드 중...' : '등록'}</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const [params] = useSearchParams();
   const [tab, setTab] = useState(ADMIN_TABS.some(([id]) => id === params.get('tab')) ? params.get('tab') : ADMIN_TABS[0][0]);
@@ -144,23 +217,44 @@ export default function AdminPage() {
   const navigate = useNavigate();
 
   const { posts, updatePost } = usePost();
-  const { inquiries } = useInquiry();
+  const { inquiries, loadInquiries } = useInquiry();
   const { reports } = useAllReports();
   const waitingCount = useWaitingCount();
 
-  // "공지 관리"는 서버 공지를 매번 DB에서 직접 받아온다(getPostsPage를 전체 페이지 모아 쓰는 getNotices).
-  // 실패해도 조용히 넘어간다 — 로컬 예시 공지(있다면)만 보이는 정도이고, 탭을 다시 열면 재시도된다.
+  // 고객 지원 탭의 "Q&A 문의 처리" 요약 카드가 실제 DB 문의 수를 보여주도록 들어올 때마다 다시 받아온다.
+  useEffect(() => { loadInquiries().catch(() => {}); }, [loadInquiries]);
+
+  // "공지 관리"는 서버 공지를 한 페이지씩 받아온다(게시판·고객센터와 같은 방식).
+  const [noticePage, setNoticePage] = useState(1);
   const [serverNotices, setServerNotices] = useState([]);
-  const loadNotices = () => getNotices().then(setServerNotices).catch(() => {});
+  const [noticeTotalPages, setNoticeTotalPages] = useState(1);
+  const loadNotices = useCallback((page) => getNoticesPage({ page }).then(({ posts: items, meta }) => {
+    setServerNotices(items);
+    setNoticeTotalPages(meta.totalPages || 1);
+  }).catch(() => {}), []);
 
-  // FAQ는 관리자만 작성하는 DB 게시글이라 로컬 예시 데이터 없이 서버 목록만 보여준다.
+  // FAQ는 관리자만 작성하는 DB 게시글이라 로컬 예시 데이터 없이 서버 목록만 한 페이지씩 보여준다.
+  const [faqPage, setFaqPage] = useState(1);
   const [faqs, setFaqs] = useState([]);
-  const loadFaqs = () => getFaqs().then(setFaqs).catch(() => {});
+  const [faqTotalPages, setFaqTotalPages] = useState(1);
+  const loadFaqs = useCallback((page) => getFaqsPage({ page }).then(({ posts: items, meta }) => {
+    const totalPages = meta.totalPages || 1;
+    setFaqTotalPages(totalPages);
+    // FAQ 삭제로 보던 페이지가 사라지면(예: 마지막 페이지의 유일한 FAQ를 지운 경우) 실제 마지막 페이지로 되돌린다.
+    if (items.length === 0 && page > totalPages) {
+      setFaqPage(Math.max(totalPages, 1));
+      return;
+    }
+    setFaqs(items);
+  }).catch(() => {}), []);
 
-  useEffect(() => {
-    loadNotices();
-    loadFaqs();
-  }, []);
+  // 자료실도 FAQ와 같은 이유로 로컬 예시 데이터 없이 서버 목록만 보여준다.
+  const [libraryItems, setLibraryItems] = useState([]);
+  const loadLibraryItems = () => getLibraryItems().then(setLibraryItems).catch(() => {});
+
+  useEffect(() => { loadNotices(noticePage); }, [loadNotices, noticePage]);
+  useEffect(() => { loadFaqs(faqPage); }, [loadFaqs, faqPage]);
+  useEffect(() => { loadLibraryItems(); }, []);
 
   // 서버 공지는 실제 게시글 수정 API로 저장해야 DB에 반영된다. 브라우저에만 있는 예시 공지는
   // usePostStore의 로컬 수정으로 처리한다(화면에만 반영, 저장 공간이 있으면 localStorage에 남는다).
@@ -188,7 +282,7 @@ export default function AdminPage() {
     navigate(ROUTES.postDetail(post.id));
   };
 
-  // FAQ 등록·수정·삭제는 전부 실제 게시글 API(postType=FAQ)로 처리하고, 끝나면 목록을 다시 받아온다.
+  // FAQ 등록·수정·삭제는 전부 실제 게시글 API(postType=FAQ)로 처리하고, 끝나면 현재 페이지를 다시 받아온다.
   const makeFaqFormData = (values) => {
     const formData = new FormData();
     formData.append('title', values.q);
@@ -201,7 +295,7 @@ export default function AdminPage() {
   const addFaq = async (values) => {
     try {
       await createPost(makeFaqFormData(values));
-      await loadFaqs();
+      await loadFaqs(faqPage);
       toast('FAQ를 등록했습니다');
     } catch (error) {
       toast(error.message || 'FAQ 등록에 실패했습니다.');
@@ -212,7 +306,7 @@ export default function AdminPage() {
   const saveFaq = async (faq, values) => {
     try {
       await updatePostApi(faq.id, makeFaqFormData(values));
-      await loadFaqs();
+      await loadFaqs(faqPage);
       toast('FAQ를 수정했습니다');
     } catch (error) {
       toast(error.message || 'FAQ 수정에 실패했습니다.');
@@ -223,95 +317,55 @@ export default function AdminPage() {
   const deleteFaq = async (faq) => {
     try {
       await deletePost(faq.id);
-      await loadFaqs();
+      await loadFaqs(faqPage);
       toast('FAQ를 삭제했습니다');
     } catch (error) {
       toast(error.message || 'FAQ 삭제에 실패했습니다.');
     }
   };
 
+  // 자료실 등록은 PDF를 청크 업로드(다른 게시글 첨부와 같은 엔드포인트)한 뒤, 그 결과 파일명을
+  // 게시글 생성 API에 함께 보내 연결한다.
+  const addLibraryItem = async ({ title, file }) => {
+    try {
+      const storedFileName = await uploadFileChunks(file);
+      const formData = new FormData();
+      formData.append('title', title);
+      formData.append('content', title);
+      formData.append('postType', 'LIBRARY');
+      formData.append('isPublic', true);
+      formData.append('savedFileNamesJson', JSON.stringify([storedFileName]));
+      await createPost(formData);
+      await loadLibraryItems();
+      toast('자료를 등록했습니다');
+    } catch (error) {
+      toast(error.message || '자료 등록에 실패했습니다.');
+      throw error;
+    }
+  };
+
+  const deleteLibraryItem = async (item) => {
+    try {
+      await deletePost(item.id);
+      await loadLibraryItems();
+      toast('자료를 삭제했습니다');
+    } catch (error) {
+      toast(error.message || '자료 삭제에 실패했습니다.');
+    }
+  };
+
   const reportsPending = reports.filter((r) => r.status === '대기').length;
   const inquiriesPending = inquiries.filter((q) => q.status !== '답변 완료').length;
-  // 서버 공지(직접 조회) + 브라우저에만 남아있는 예시 공지(있다면)를 함께 보여준다.
-  const notices = [...serverNotices, ...posts.filter((p) => p.tab === '공지')].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const latestReports = [...reports].sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')).slice(0, 5);
-  const pendingQna = inquiries
-    .filter((q) => q.status !== '답변 완료')
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, 5);
-  const totalRuns = USAGE_METRICS.calcRuns + USAGE_METRICS.uploadAttempts;
-  const failureRate = (FAILURE_LOG_SEED.length / totalRuns * 100).toFixed(1);
+  // 서버 공지(현재 페이지) + 브라우저에만 남아있는 예시 공지(있다면, 1페이지에만)를 함께 보여준다.
+  const notices = [...serverNotices, ...(noticePage === 1 ? posts.filter((p) => p.tab === '공지') : [])]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <div className="grid">
       <Tabs tabs={ADMIN_TABS.map(([id, label]) => ({ id, label }))} active={tab} onChange={setTab} />
 
-      {tab === 'usage' && (
-        <div className="grid">
-          <Card title="상담 대기" icon="messageSquare" aside={<Pill tone={waitingCount ? 'danger' : 'neutral'}>{waitingCount}건 대기</Pill>}>
-            <p className="small muted">{waitingCount ? `응대를 기다리는 채팅 상담이 ${waitingCount}건 있습니다.` : '응대 대기 중인 채팅 상담이 없습니다.'}</p>
-            <div style={{ marginTop: 12 }}><Button size="sm" variant={waitingCount ? 'primary' : 'secondary'} to={ROUTES.adminChats}>상담 관리로 이동</Button></div>
-          </Card>
-          <div className="grid g2">
-            <Card title="접수된 신고 (최신 5)" icon="shieldAlert" aside={<Pill tone="danger">{reportsPending}건 대기</Pill>}>
-              {latestReports.length
-                ? <DataTable columns={[
-                  { key: 't', header: '유형', render: (r) => <Pill>{r.targetType === 'post' ? '게시글' : '댓글'}</Pill> },
-                  { key: 'r', header: '사유', render: (r) => r.reason },
-                  { key: 's', header: '상태', align: 'right', render: (r) => <Pill tone={r.status === '대기' ? 'warn' : 'success'}>{r.result ?? r.status}</Pill> },
-                ]} rows={latestReports} rowKey={(r) => r.id} />
-                : <p className="state-msg">접수된 신고가 없습니다</p>}
-              <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminReports}?tab=members`}>전체보기</Button></div>
-            </Card>
-            <Card title="Q&A 답변 대기 (최신 5)" icon="messageSquare" aside={<Pill tone="warn">{pendingQna.length}건</Pill>}>
-              {pendingQna.length
-                ? <DataTable columns={[
-                  // 문의 제목 길이에 따라 작성자 칸이 움직이지 않도록 열 폭을 고정한다.
-                  { key: 'q', header: '문의', width: '55%', ellipsis: true, render: (q) => <>{q.title} {q.visibility === 'private' && <Pill>비공개</Pill>}</> },
-                  { key: 'a', header: '작성자', width: '25%', ellipsis: true, render: (q) => q.author },
-                  { key: 'd', header: '등록일', width: '20%', align: 'right', render: (q) => toDateLabel(q.createdAt) },
-                ]} rows={pendingQna} rowKey={(q) => q.id} />
-                : <p className="state-msg">답변 대기 중인 Q&A가 없습니다</p>}
-              <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminInquiries}?tab=support`}>전체보기</Button></div>
-            </Card>
-          </div>
-          <div className="grid g3">
-            <Card className="stat">
-              <p className="lbl">총 계산 실행</p>
-              <p className="big">{USAGE_METRICS.calcRuns.toLocaleString()}회</p>
-              <p className="sub">평균 처리 {USAGE_METRICS.avgCalcMs}ms</p>
-            </Card>
-            <Card className="stat">
-              <p className="lbl">파일 업로드 시도</p>
-              <p className="big">{USAGE_METRICS.uploadAttempts.toLocaleString()}건</p>
-              <p className="sub">PDF 업로드 합계</p>
-            </Card>
-            <Card className="stat">
-              <p className="lbl">실패율</p>
-              <p className="big" style={{ color: 'var(--danger)' }}>{failureRate}%</p>
-              <p className="sub">실패 {FAILURE_LOG_SEED.length}건 / 전체 {totalRuns.toLocaleString()}건</p>
-            </Card>
-          </div>
-          <Card title="업로드·계산 실패 이력" icon="uploadCloud">
-            <DataTable columns={[
-              // 사유 길이에 따라 사용자 칸이 움직이지 않도록 열 폭을 고정한다.
-              { key: 't', header: '종류', width: '15%', render: (f) => <Pill tone={f.type === '업로드' ? 'primary' : 'warn'}>{f.type}</Pill> },
-              { key: 'r', header: '사유', width: '45%', ellipsis: true, render: (f) => f.reason },
-              { key: 'u', header: '사용자', width: '20%', ellipsis: true, render: (f) => f.user },
-              { key: 'd', header: '발생 시각', width: '20%', align: 'right', render: (f) => f.occurredAt },
-            ]} rows={FAILURE_LOG_SEED} rowKey={(f) => f.id} />
-          </Card>
-        </div>
-      )}
-
       {tab === 'members' && (
         <div className="grid">
-          <div className="grid g3">
-            <StatCard title="연령대별 가입자" data={ADMIN_STATS.age} />
-            <StatCard title="소득 구간별" data={ADMIN_STATS.income} />
-            <StatCard title="지역별" data={ADMIN_STATS.region} />
-          </div>
-          <AccountLockManagement />
           <Card title="신고 접수" icon="shieldAlert" aside={<Pill tone="danger">{reportsPending}건 대기</Pill>}>
             <DataTable columns={[
               { key: 't', header: '유형', render: (r) => <Pill>{r.targetType === 'post' ? '게시글' : '댓글'}</Pill> },
@@ -322,15 +376,16 @@ export default function AdminPage() {
             ]} rows={reports.slice(0, 5)} rowKey={(r) => r.id} />
             <div style={{ marginTop: 12 }}><Button size="sm" to={`${ROUTES.adminReports}?tab=members`}>신고 처리하기</Button></div>
           </Card>
+          <Card title="1:1 채팅 상담" icon="messageSquare" aside={<Pill tone={waitingCount ? 'danger' : 'neutral'}>{waitingCount}건 대기</Pill>}>
+            <p className="small muted">채팅 상담은 대기 목록에서 상담방을 직접 골라 응대하고, 지난 상담 기록도 같은 화면에서 확인합니다.</p>
+            <div style={{ marginTop: 12 }}><Button size="sm" variant={waitingCount ? 'primary' : 'secondary'} to={ROUTES.adminChats}>상담 관리로 이동</Button></div>
+          </Card>
+          <AccountLockManagement />
         </div>
       )}
 
       {tab === 'support' && (
         <div className="grid">
-          <Card title="채팅 상담" icon="messageSquare" aside={<Pill tone={waitingCount ? 'danger' : 'neutral'}>{waitingCount}건 대기</Pill>}>
-            <p className="small muted">채팅 상담은 대기 목록에서 상담방을 직접 골라 응대합니다.</p>
-            <div style={{ marginTop: 12 }}><Button size="sm" to={ROUTES.adminChats}>상담 관리</Button></div>
-          </Card>
           <Card title="Q&A 문의 처리" icon="messageSquare" aside={<Pill tone="warn">{inquiriesPending}건 대기</Pill>}>
             <DataTable columns={[
               { key: 'q', header: '문의', render: (q) => q.title },
@@ -345,6 +400,7 @@ export default function AdminPage() {
                 <NoticeRow key={p.id} post={p} onSave={(v) => saveNotice(p, v)} />
               ))
               : <p className="state-msg">등록된 공지가 없습니다</p>}
+            <Pager page={noticePage} totalPages={noticeTotalPages} onChange={setNoticePage} />
           </Card>
           <Card title="FAQ 관리" icon="fileText">
             {faqs.length
@@ -357,8 +413,23 @@ export default function AdminPage() {
                 />
               ))
               : <p className="state-msg">등록된 FAQ가 없습니다</p>}
+            <Pager page={faqPage} totalPages={faqTotalPages} onChange={setFaqPage} />
             <div style={{ marginTop: 12 }}>
               <FaqAddForm onAdd={addFaq} />
+            </div>
+          </Card>
+          <Card title="자료실 관리" icon="fileText">
+            {libraryItems.length
+              ? libraryItems.map((item) => (
+                <LibraryRow
+                  key={item.id}
+                  item={item}
+                  onDelete={() => deleteLibraryItem(item)}
+                />
+              ))
+              : <p className="state-msg">등록된 자료가 없습니다</p>}
+            <div style={{ marginTop: 12 }}>
+              <LibraryAddForm onAdd={addLibraryItem} />
             </div>
           </Card>
         </div>

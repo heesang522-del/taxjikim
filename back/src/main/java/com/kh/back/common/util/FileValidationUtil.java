@@ -76,7 +76,7 @@ public final class FileValidationUtil {
         }
 
         if (!filename.toLowerCase(Locale.ROOT).matches(allowedExtensionPattern)) {
-            throw invalid("file", "사진·동영상만 업로드할 수 있습니다.");
+            throw invalid("file", "사진·동영상·PDF만 업로드할 수 있습니다.");
         }
     }
 
@@ -164,7 +164,7 @@ public final class FileValidationUtil {
 
     /**
      * 병합된 파일의 내용이 확장자가 주장하는 형식(매직바이트)과 실제로 맞는지 검사한다.
-     * jpg·png·gif·webp·mp4·mov·webm만 지원한다 — 다른 확장자는 전부 불일치로 처리한다.
+     * jpg·png·gif·webp·mp4·mov·webm·pdf만 지원한다 — 다른 확장자는 전부 불일치로 처리한다.
      */
     public static void validateMediaSignature(Path file, String extension) throws IOException {
 
@@ -214,11 +214,15 @@ public final class FileValidationUtil {
                             new byte[]{26, 69, (byte) 223, (byte) 163}
                     );
 
+            case ".pdf" ->
+                    header.length >= 4
+                            && signature.startsWith("%PDF");
+
             default -> false;
         };
 
         if (!valid) {
-            throw invalid("file", "파일 내용이 허용된 사진·동영상 형식과 일치하지 않습니다.");
+            throw invalid("file", "파일 내용이 허용된 사진·동영상·PDF 형식과 일치하지 않습니다.");
         }
     }
 

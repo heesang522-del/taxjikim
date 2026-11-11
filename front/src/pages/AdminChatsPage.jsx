@@ -64,7 +64,7 @@ export default function AdminChatsPage() {
     <div className="grid">
       <div className="row between">
         <h2 className="post-title">상담 관리</h2>
-        <Button to={`${ROUTES.admin}?tab=support`}>관리자 홈으로</Button>
+        <Button to={`${ROUTES.admin}?tab=members`}>관리자 홈으로</Button>
       </div>
       <div className="chat-admin">
         <Card title="상담 목록" icon="messageSquare">

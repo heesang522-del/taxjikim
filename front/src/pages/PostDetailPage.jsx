@@ -172,6 +172,10 @@ export function PostDetailPage() {
                       preload="metadata"
                       style={{ maxWidth: '100%', maxHeight: 560, borderRadius: 8 }}
                     />
+                  ) : file.mediaType === 'pdf' ? (
+                    <a href={file.previewUrl} target="_blank" rel="noopener noreferrer">
+                      📄 {file.name || `첨부파일 ${index + 1}`}
+                    </a>
                   ) : (
                     <img
                       {...imagePreviewProps}

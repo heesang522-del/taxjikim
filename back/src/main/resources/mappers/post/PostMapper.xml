@@ -91,10 +91,10 @@
             </when>
             <otherwise>
                 <!-- 게시판 종류를 지정하지 않으면("전체" 탭 등) 일반 게시판만 섞어서 보여준다.
-                     QNA(고객센터 문의)·FAQ(자주 묻는 질문)는 둘 다 고객센터 전용이라 일반 게시판
-                     목록에는 절대 섞이면 안 된다. QNA는 postType=QNA로 조회하고(getInquiries 등),
-                     FAQ는 아예 이 게시글 API가 아니라 useFaq가 별도로 관리한다. -->
-                AND p.BOARD_TYPE NOT IN ('QNA', 'FAQ')
+                     QNA(고객센터 문의)·FAQ(자주 묻는 질문)·LIBRARY(자료실)는 전부 고객센터 전용이라
+                     일반 게시판 목록에는 절대 섞이면 안 된다. QNA는 postType=QNA로 조회하고
+                     (getInquiries 등), FAQ·자료실은 이 API를 postType=FAQ/LIBRARY로 직접 호출해 가져온다. -->
+                AND p.BOARD_TYPE NOT IN ('QNA', 'FAQ', 'LIBRARY')
 
             </otherwise>
         </choose>

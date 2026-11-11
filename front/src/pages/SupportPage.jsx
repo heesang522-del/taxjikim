@@ -1,18 +1,31 @@
 // taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
 'use no memo';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Card, DataTable, Pill, Segmented, Tabs, TextAreaField, TextField } from '../components/common/index';
-import { HELP_TABS, LIBRARY } from '../data/content';
+import { HELP_TABS } from '../data/content';
 import { ROUTES } from '../utils/routes';
 import { useToast } from '../store/useToastStore';
 import { useAuth } from '../store/useAuthStore';
 import { useInquiry } from '../store/useInquiryStore';
 import { toDateLabel } from '../utils/format';
-import { createPost, getFaqs } from '../api/post.js';
+import { createPost, getFaqs, getInquiriesPage, getLibraryItems } from '../api/post.js';
 
 const VISIBILITY_OPTIONS = [{ value: 'public', label: '공개' }, { value: 'private', label: '비공개' }];
+const QNA_PAGE_WINDOW_SIZE = 9; // 페이지 번호 버튼은 한 번에 최대 이만큼만 보여준다 (게시판과 동일)
+
+// 전체 페이지가 많아져도 버튼이 끝없이 늘어나지 않도록, 현재 페이지를 중심으로 최대 size개만 잘라 보여준다.
+function getPageWindow(current, total, size) {
+  if (total <= size) return Array.from({ length: total }, (_, i) => i + 1);
+  const start = Math.min(Math.max(1, current - Math.floor(size / 2)), total - size + 1);
+  return Array.from({ length: size }, (_, i) => start + i);
+}
+
+// 문의 목록에서 보여줄 수 있는 글만 남긴다: 공개 글은 모두, 비공개 글은 작성자와 관리자에게만.
+function filterVisible(list, { isAdmin, loggedIn, user }) {
+  return list.filter((q) => q.visibility === 'public' || isAdmin || (loggedIn && q.author === user.nickname));
+}
 
 function QnaForm({ onSubmit, onCancel, isSubmitting }) {
   const toast = useToast();
@@ -54,31 +67,58 @@ function QnaForm({ onSubmit, onCancel, isSubmitting }) {
 const HELP_TAB_IDS = HELP_TABS.map(([id]) => id);
 
 export default function HelpPage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const [tab, setTab] = useState(HELP_TAB_IDS.includes(params.get('tab')) ? params.get('tab') : 'faq');
   const [writingQna, setWritingQna] = useState(false);
   const [isSubmittingQna, setIsSubmittingQna] = useState(false);
+  const [qnaPage, setQnaPage] = useState(Math.max(Number(params.get('page')) || 1, 1));
+  const [serverInquiries, setServerInquiries] = useState([]);
+  const [qnaTotalPages, setQnaTotalPages] = useState(1);
   const [loadingInquiries, setLoadingInquiries] = useState(true);
   const [inquiriesError, setInquiriesError] = useState('');
   const [faqs, setFaqs] = useState([]);
   const [loadingFaqs, setLoadingFaqs] = useState(true);
   const [faqsError, setFaqsError] = useState('');
+  const [libraryItems, setLibraryItems] = useState([]);
+  const [loadingLibrary, setLoadingLibrary] = useState(true);
+  const [libraryError, setLibraryError] = useState('');
   const toast = useToast();
   const navigate = useNavigate();
   const { loggedIn, user, isAdmin } = useAuth();
-  const { inquiries, loadInquiries } = useInquiry();
-  const todo = (m) => () => toast(`프로토타입: ${m}`);
+  const { inquiries } = useInquiry();
 
-  // Q&A 탭에 들어올 때 DB의 실제 문의를 불러온다 (그 전까지는 브라우저 예시 문의만 보인다).
+  // 문의 목록 1페이지를 서버에서 다시 받아온다. 탭 진입 시의 Effect와, 새 문의 등록 뒤의 즉시 갱신에서 함께 쓴다.
+  const fetchQnaPage = useCallback(async (targetPage) => {
+    const { posts: items, meta } = await getInquiriesPage({ page: targetPage });
+    const totalPages = meta.totalPages || 1;
+    setQnaTotalPages(totalPages);
+    // 글이 삭제되거나 주소를 직접 고쳐서(예: ?page=99) 더 이상 없는 페이지를 가리키면, 실제 마지막 페이지로 되돌린다.
+    if (items.length === 0 && targetPage > totalPages) {
+      setQnaPage(Math.max(totalPages, 1));
+      return;
+    }
+    setServerInquiries(items);
+  }, []);
+
+  // Q&A 탭에 들어오거나 페이지를 넘기면 그 페이지의 실제 문의만 서버에서 받아온다(게시판과 동일한 방식).
   useEffect(() => {
     if (tab !== 'qna') return undefined;
     let active = true;
     setLoadingInquiries(true);
-    loadInquiries()
+    setInquiriesError('');
+    fetchQnaPage(qnaPage)
       .catch(() => { if (active) setInquiriesError('문의 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); })
       .finally(() => { if (active) setLoadingInquiries(false); });
     return () => { active = false; };
-  }, [tab, loadInquiries]);
+  }, [tab, qnaPage, fetchQnaPage]);
+
+  // 탭·페이지를 주소 쿼리에 반영한다. 기본값(FAQ 탭/1페이지)은 생략해 주소를 깔끔하게 유지한다.
+  useEffect(() => {
+    const next = {};
+    if (tab !== 'faq') next.tab = tab;
+    if (tab === 'qna' && qnaPage !== 1) next.page = String(qnaPage);
+    setParams(next, { replace: true });
+  }, [tab, qnaPage, setParams]);
 
   // FAQ 탭에 들어올 때 DB의 FAQ 게시글을 불러온다.
   useEffect(() => {
@@ -92,10 +132,25 @@ export default function HelpPage() {
     return () => { active = false; };
   }, [tab]);
 
+  // 자료실 탭에 들어올 때 DB의 자료실 게시글(관리자가 올린 PDF)을 불러온다.
+  useEffect(() => {
+    if (tab !== 'lib') return undefined;
+    let active = true;
+    setLoadingLibrary(true);
+    getLibraryItems()
+      .then((list) => { if (active) setLibraryItems(list); })
+      .catch(() => { if (active) setLibraryError('자료실 목록을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'); })
+      .finally(() => { if (active) setLoadingLibrary(false); });
+    return () => { active = false; };
+  }, [tab]);
+
   // 공개 글은 모두에게, 비공개 글은 작성자와 관리자에게만 보인다 (비회원·다른 회원에게는 목록에도 나오지 않는다)
-  const visibleInquiries = inquiries
-    .filter((q) => q.visibility === 'public' || isAdmin || (loggedIn && q.author === user.nickname))
+  // 브라우저 예시 문의(로컬)는 페이지 단위로 조회되지 않으니, 게시판의 고정 공지와 같은 방식으로 1페이지에만 얹어 보여준다.
+  const visibleLocalInquiries = filterVisible(inquiries.filter((q) => q.source !== 'server'), { isAdmin, loggedIn, user })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const visibleServerInquiries = filterVisible(serverInquiries, { isAdmin, loggedIn, user });
+  const visibleInquiries = qnaPage === 1 ? [...visibleLocalInquiries, ...visibleServerInquiries] : visibleServerInquiries;
+  const qnaPageNumbers = getPageWindow(qnaPage, qnaTotalPages, QNA_PAGE_WINDOW_SIZE);
 
   // 문의 등록은 실제 백엔드 QNA 게시글 생성 API로 보낸다. 생성 응답에 postId가 없어 등록 후 목록을 다시 불러온다.
   const submitQna = async ({ title, body, visibility }) => {
@@ -109,7 +164,9 @@ export default function HelpPage() {
       formData.append('isPublic', visibility === 'public');
 
       await createPost(formData);
-      await loadInquiries();
+      // 새 문의는 최신순 1페이지에 나타난다. 이미 1페이지라면 바로 다시 받아오고, 다른 페이지라면 1페이지로 옮긴다.
+      if (qnaPage === 1) await fetchQnaPage(1);
+      else setQnaPage(1);
 
       toast(visibility === 'private' ? '비공개로 등록했습니다. 나와 관리자만 볼 수 있어요' : '문의를 등록했습니다');
       setWritingQna(false);
@@ -130,7 +187,27 @@ export default function HelpPage() {
           ? faqs.map((f) => <details key={f.id}><summary>{f.q}</summary><p>{f.a}</p></details>)
           : <p className="state-msg">등록된 FAQ가 없습니다</p>
       )}
-      {tab === 'lib' && <DataTable columns={[{ key: 'n', header: '자료', render: (x) => x }, { key: 'd', header: '', align: 'right', render: () => <Pill tone="primary">다운로드</Pill> }]} rows={LIBRARY} rowKey={(x) => x} onRowClick={todo('자료 다운로드')} />}
+      {tab === 'lib' && (
+        loadingLibrary ? <p className="state-msg" role="status">자료실을 불러오는 중입니다.</p>
+          : libraryError ? <p className="state-msg" role="alert">{libraryError}</p>
+          : libraryItems.length
+          ? (
+            <DataTable
+              columns={[
+                { key: 'n', header: '자료', render: (x) => x.title },
+                { key: 'd', header: '', align: 'right', render: () => <Pill tone="primary">다운로드</Pill> },
+              ]}
+              rows={libraryItems}
+              rowKey={(x) => x.id}
+              onRowClick={(x) => {
+                const fileUrl = x.attachments?.[0]?.previewUrl;
+                if (fileUrl) window.open(fileUrl, '_blank', 'noopener,noreferrer');
+                else toast('첨부된 파일이 없습니다.');
+              }}
+            />
+          )
+          : <p className="state-msg">등록된 자료가 없습니다</p>
+      )}
       {tab === 'qna' && (
         <div className="grid" style={{ gap: 12 }}>
           <div className="row between">
@@ -144,18 +221,31 @@ export default function HelpPage() {
           {loadingInquiries ? <p className="state-msg" role="status">문의 목록을 불러오는 중입니다.</p>
             : inquiriesError ? <p className="state-msg" role="alert">{inquiriesError}</p>
             : visibleInquiries.length
-            ? <DataTable
-              // 제목 길이에 따라 작성자 칸이 움직이지 않도록 열 폭을 고정한다.
-              columns={[
-                { key: 't', header: '제목', width: '50%', ellipsis: true, render: (q) => <>{q.visibility === 'private' && <Pill>비공개</Pill>} {q.title}</> },
-                { key: 'a', header: '작성자', width: '20%', ellipsis: true, render: (q) => q.author },
-                { key: 'd', header: '등록일', width: '18%', render: (q) => toDateLabel(q.createdAt) },
-                { key: 's', header: '상태', width: '12%', align: 'right', render: (q) => <Pill tone={q.status === '답변 완료' ? 'success' : 'warn'}>{q.status}</Pill> },
-              ]}
-              rows={visibleInquiries}
-              rowKey={(q) => q.id}
-              onRowClick={(q) => navigate(ROUTES.qnaPost(q.id))}
-            />
+            ? (
+              <>
+                <DataTable
+                  // 제목 길이에 따라 작성자 칸이 움직이지 않도록 열 폭을 고정한다.
+                  columns={[
+                    { key: 't', header: '제목', width: '50%', ellipsis: true, render: (q) => <>{q.visibility === 'private' && <Pill>비공개</Pill>} {q.title}</> },
+                    { key: 'a', header: '작성자', width: '20%', ellipsis: true, render: (q) => q.author },
+                    { key: 'd', header: '등록일', width: '18%', render: (q) => toDateLabel(q.createdAt) },
+                    { key: 's', header: '상태', width: '12%', align: 'right', render: (q) => <Pill tone={q.status === '답변 완료' ? 'success' : 'warn'}>{q.status}</Pill> },
+                  ]}
+                  rows={visibleInquiries}
+                  rowKey={(q) => q.id}
+                  onRowClick={(q) => navigate(ROUTES.qnaPost(q.id))}
+                />
+                {qnaTotalPages > 1 && (
+                  <div className="row" style={{ justifyContent: 'center', gap: 6, marginTop: 16 }}>
+                    <Button size="sm" variant="ghost" disabled={qnaPage <= 1} onClick={() => setQnaPage((p) => p - 1)}>이전</Button>
+                    {qnaPageNumbers.map((n) => (
+                      <Button key={n} size="sm" variant={n === qnaPage ? 'primary' : 'ghost'} onClick={() => setQnaPage(n)}>{n}</Button>
+                    ))}
+                    <Button size="sm" variant="ghost" disabled={qnaPage >= qnaTotalPages} onClick={() => setQnaPage((p) => p + 1)}>다음</Button>
+                  </div>
+                )}
+              </>
+            )
             : <p className="state-msg">등록된 문의가 없습니다</p>}
         </div>
       )}
