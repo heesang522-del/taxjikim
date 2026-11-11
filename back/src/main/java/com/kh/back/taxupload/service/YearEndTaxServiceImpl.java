@@ -6,7 +6,6 @@ import com.kh.back.taxupload.dto.PdfParseResponseDto;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxServiceResponse;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
-import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import com.kh.back.taxupload.mapper.TaxMapper;
@@ -49,7 +48,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
     ) {
         taxValidator.validateRequestPresent(request, "저장 요청이 필요합니다.");
 
-        AccessContext access = createAccess(principal);
         Long taxInputId = request.getTaxInputId();
         List<TaxTransactionDto> rows = request.getTransactions();
         boolean createAnalysis = taxInputId == null;
@@ -62,7 +60,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
 
         if (createAnalysis) {
             // 새 분석의 소유자는 서버의 인증 정보에서 결정한다.
-            input = normalizeInput(request.getInput(), null, access.getUserId());
+            Long ownerId = principal == null ? null : principal.getUserId();
+            input = normalizeInput(request.getInput(), null, ownerId);
             taxValidator.validateInput(input);
 
             input.setSaveStatus("TEMP");
@@ -70,7 +69,7 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             taxInputId = input.getTaxInputId();
         } else {
             // 기존 분석에 거래를 저장하기 전에 접근 권한을 확인하고 분석을 잠근다.
-            input = requireInput(access, taxInputId, true);
+            input = requireInput(principal, taxInputId, true);
         }
 
         List<TaxTransactionDto> savedRows = List.of();
@@ -165,10 +164,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         taxValidator.validateUpdateTargets(updateProfile, updateCategory);
         taxValidator.validateMatchingTaxInputId(taxInputId, request.getTaxInputId());
 
-        AccessContext access = createAccess(principal);
-
         // 기본정보와 카테고리가 같은 분석을 기준으로 수정되도록 먼저 잠근다.
-        TaxInputRequest existingInput = requireInput(access, taxInputId, true);
+        TaxInputRequest existingInput = requireInput(principal, taxInputId, true);
         TaxInputRequest updatedInput = existingInput;
 
         if (updateProfile) {
@@ -207,10 +204,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         List<Long> requestedIds = request.getTransactionIds();
         taxValidator.validateDeleteTargets(deleteAll, transactionId, requestedIds);
 
-        AccessContext access = createAccess(principal);
-
         // 삭제 전에 분석 접근 권한을 확인하고 분석을 잠근다.
-        requireInput(access, taxInputId, true);
+        requireInput(principal, taxInputId, true);
 
         if (deleteAll) {
             int deleted = taxMapper.deleteInput(taxInputId);
@@ -261,10 +256,8 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
             Long taxInputId,
             MultipartFile file
     ) throws IOException {
-        AccessContext access = createAccess(principal);
-
         if (taxInputId != null) {
-            requireInput(access, taxInputId, false);
+            requireInput(principal, taxInputId, false);
         }
 
         try {
@@ -461,16 +454,36 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
                 .build();
     }
 
-    private TaxInputRequest requireInput(AccessContext access, Long taxInputId, boolean lock) {
+    private TaxInputRequest requireInput(CustomUserDetails principal, Long taxInputId, boolean lock) {
         taxValidator.validateId(taxInputId, "taxInputId");
 
         TaxInputRequest input = lock
                 ? taxMapper.lockInput(taxInputId)
                 : taxMapper.findInput(taxInputId);
 
-        taxValidator.requireAccess(access, input);
+        if (input == null) {
+            throw new ApiException(
+                    HttpStatus.NOT_FOUND,
+                    "TAX_INPUT_NOT_FOUND",
+                    "분석을 찾을 수 없습니다."
+            );
+        }
 
-        return input;
+        // 비회원 분석은 소유자가 없고, 회원 분석은 소유자나 관리자에게 허용한다.
+        Long ownerId = input.getUserId();
+        if (ownerId == null || (principal != null && (
+                Objects.equals(ownerId, principal.getUserId())
+                || principal.getAuthorities().stream()
+                        .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()))
+        ))) {
+            return input;
+        }
+
+        throw new ApiException(
+                HttpStatus.FORBIDDEN,
+                "ACCESS_DENIED",
+                "해당 분석에 접근할 권한이 없습니다."
+        );
     }
 
     private void applyCategoryChanges(Long taxInputId, List<TaxCategoryChange> changes) {
@@ -576,19 +589,6 @@ public class YearEndTaxServiceImpl implements YearEndTaxService {
         }
 
         return left.compareTo(right) == 0;
-    }
-
-    private AccessContext createAccess(CustomUserDetails principal) {
-        Long userId = principal == null ? null : principal.getUserId();
-
-        boolean admin = principal != null
-                && principal.getAuthorities().stream()
-                .anyMatch(authority -> "ROLE_ADMIN".equals(authority.getAuthority()));
-
-        return AccessContext.builder()
-                .userId(userId)
-                .admin(admin)
-                .build();
     }
 
     private ApiException invalid(String field, String message) {

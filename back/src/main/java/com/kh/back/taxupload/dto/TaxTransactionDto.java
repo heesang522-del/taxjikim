@@ -82,19 +82,6 @@ public class TaxTransactionDto {
     }
 
     /*
-     * 서비스에서 로그인 정보로 생성한다.
-     */
-    @Getter
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class AccessContext {
-
-        private Long userId;
-        private boolean admin;
-    }
-
-    /*
      * 통합 서비스 호출용 요청이다.
      * Controller가 작업 대상과 필요한 값을 builder로 구성한다.
      */

@@ -3,7 +3,6 @@ package com.kh.back.taxupload.validator;
 import com.kh.back.common.exception.ApiException;
 import com.kh.back.taxupload.dto.TaxCategoryChange;
 import com.kh.back.taxupload.dto.TaxTransactionDto;
-import com.kh.back.taxupload.dto.TaxTransactionDto.AccessContext;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxInputRequest;
 import com.kh.back.taxupload.dto.TaxTransactionDto.TaxServiceRequest;
 import org.springframework.http.HttpStatus;
@@ -61,37 +60,6 @@ public class TaxValidator {
         if (taxYear == null || taxYear < 1000 || taxYear > 9999) {
             throw invalid("taxYear", "귀속 연도를 네 자리 숫자로 입력해주세요.");
         }
-    }
-
-    public void requireAccess(AccessContext access, TaxInputRequest input) {
-        if (input == null) {
-            throw new ApiException(
-                    HttpStatus.NOT_FOUND,
-                    "TAX_INPUT_NOT_FOUND",
-                    "분석을 찾을 수 없습니다."
-            );
-        }
-
-        if (access == null) {
-            throw forbidden();
-        }
-
-        if (access.isAdmin()) {
-            return;
-        }
-
-        // 회원 분석은 로그인한 소유자에게 허용한다.
-        if (input.getUserId() != null
-                && Objects.equals(input.getUserId(), access.getUserId())) {
-            return;
-        }
-
-        // 비회원 분석은 토큰이나 세션 없이 분석번호로 접근을 허용한다.
-        if (input.getUserId() == null) {
-            return;
-        }
-
-        throw forbidden();
     }
 
     public void validateInputPresent(TaxInputRequest input) {
@@ -481,14 +449,6 @@ public class TaxValidator {
         }
 
         return bytes;
-    }
-
-    private ApiException forbidden() {
-        return new ApiException(
-                HttpStatus.FORBIDDEN,
-                "ACCESS_DENIED",
-                "해당 분석에 접근할 권한이 없습니다."
-        );
     }
 
     private ApiException invalid(String field, String message) {
