@@ -21,7 +21,7 @@ async function requestChatbot(config) {
   } catch (cause) {
     const detail = cause.response?.data?.error;
 
-    const error = new Error(
+      const error = new Error(
       detail?.message ??
         (cause.isAxiosError ? '서버 응답을 확인하지 못했습니다. 대화 기록을 확인해주세요.' : cause.message)
     );
@@ -44,6 +44,14 @@ export function createConversation() {
   return requestChatbot({
     url: '/chatbot/conversations',
     method: 'POST',
+  });
+}
+
+export function renameConversation(conversationId, title) {
+  return requestChatbot({
+    url: `/chatbot/conversations/${conversationId}/title`,
+    method: 'PATCH',
+    data: { title },
   });
 }
 
@@ -136,7 +144,7 @@ export function sendMessage(conversationId, message, { onDelta, signal } = {}) {
           finishFailure(
             new Error(
               `${reason} 서버 취소가 확인되어 예약한 질문 횟수가 해제되었습니다. ` +
-                '대화 기록과 사용량을 다시 조회해주세요.'
+              '같은 질문을 다시 보낼 수 있습니다.'
             )
           );
 
@@ -154,17 +162,17 @@ export function sendMessage(conversationId, message, { onDelta, signal } = {}) {
         }
 
         finishFailure(
-          new Error(
+          Object.assign(new Error(
             `${reason} 서버의 취소 상태를 확인하지 못했습니다. ` +
               '횟수가 차감될 수 있으니 대화 기록과 사용량을 다시 조회해주세요.'
-          )
+          ), { code: 'CHATBOT_REQUEST_STATUS_UNKNOWN' })
         );
       } catch {
         finishFailure(
-          new Error(
+          Object.assign(new Error(
             `${reason} 서버 취소를 확인하지 못했습니다. ` +
               '횟수가 차감될 수 있으니 대화 기록과 사용량을 다시 조회해주세요.'
-          )
+          ), { code: 'CHATBOT_REQUEST_STATUS_UNKNOWN' })
         );
       }
     }

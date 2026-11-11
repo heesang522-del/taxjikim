@@ -41,6 +41,12 @@ public interface ChatbotMapper {
                            @Param("title") String title
     ); // 대화방의 제목 버전 마지막 수정 시각을 갱신
 
+    int renameConversation(
+            @Param("userId") Long userId,
+            @Param("conversationId") Long conversationId,
+            @Param("title") String title
+    );
+
     int insertMessage(
             ChatbotMessageDto message
     ); // 사용자 질문이나 ai 답변한개를 db 에 저장

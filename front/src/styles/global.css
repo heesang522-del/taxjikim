@@ -167,9 +167,66 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
   font-size: 11px;
 }
 
-.ai-chat-list-item .ai-chat-delete {
+.ai-chat-layout .ai-chat-conversation-more {
   flex-shrink: 0;
-  padding: 6px 8px;
+  padding: 4px 8px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.ai-chat-conversation-menu {
+  position: fixed;
+  inset: var(--menu-top, auto) var(--menu-right, 8px) var(--menu-bottom, auto) auto;
+  min-width: 132px;
+  margin: 0;
+  padding: 5px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.ai-chat-conversation-menu:popover-open {
+  display: grid;
+  gap: 2px;
+}
+
+.ai-chat-layout .ai-chat-conversation-menu > button {
+  justify-content: flex-start;
+  padding: 7px 10px;
+  border-color: transparent;
+  text-align: left;
+}
+
+.ai-chat-layout .ai-chat-conversation-delete {
+  color: var(--danger);
+}
+
+.ai-chat-rename-form {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ai-chat-rename-form input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.ai-chat-rename-form > [role='alert'] {
+  color: var(--danger);
+}
+
+.ai-chat-rename-form > div {
+  display: flex;
+  gap: 6px;
 }
 
 .ai-chat-sidebar-footer {
@@ -385,19 +442,6 @@ details p { color: var(--text-muted); margin-top: 6px; font-size: 13px; }
 
   .ai-chat-sidebar {
     padding: 16px 8px;
-  }
-
-  .ai-chat-list-item {
-    flex-wrap: wrap;
-    gap: 0;
-  }
-
-  .ai-chat-conversation {
-    flex-basis: 100%;
-  }
-
-  .ai-chat-list-item .ai-chat-delete {
-    margin: 2px 0 8px auto;
   }
 
   .ai-chat-header,

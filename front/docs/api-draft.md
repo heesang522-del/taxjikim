@@ -298,7 +298,9 @@ ALTER TABLE TAX_TRANSACTIONS
 - 모든 `/api/v1/chatbot/**` 요청은 로그인 세션이 필요하다. 실제 백엔드 API를 사용한다.
 - `GET /chatbot/conversations`: 본인 대화방 목록 조회.
 - `POST /chatbot/conversations`: 새 대화 생성. 삭제되지 않은 대화방은 사용자별 최대 10개다.
+- `PATCH /chatbot/conversations/{conversationId}/title`: 본인 대화의 이름을 변경한다. 요청은 `{ title: string }`이며, 앞뒤 공백을 제거한 1~40자를 받는다. 응답은 변경된 대화 정보다. 직접 지정한 이름은 첫 질문으로 덮어쓰지 않는다.
 - `GET /chatbot/conversations/{conversationId}/messages`: 본인 메시지 조회.
+- 대화 목록·메시지·사용량 조회는 회원당 10초에 합산 30건으로 제한하며 초과 시 `429 CHATBOT_READ_RATE_LIMIT`을 반환한다. 메시지 재조회에서 만료된 질문은 실패 처리하고 예약 횟수를 복구한다.
 - `DELETE /chatbot/conversations/{conversationId}`: 대화방 논리 삭제.
 - `GET /chatbot/usage`: 한국 날짜 기준 일일 질문 사용량 조회. 현재 한도는 30회다.
 - `POST /chatbot/conversations/{conversationId}/messages`: 기존 일반 질문 API를 유지한다.

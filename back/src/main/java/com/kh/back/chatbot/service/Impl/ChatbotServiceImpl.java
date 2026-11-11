@@ -84,6 +84,11 @@ public class ChatbotServiceImpl implements ChatbotService {
     }
 
     @Override
+    public ConversationResponse renameConversation(CustomUserDetails principal, Long conversationId, String title) {
+        return historyService.renameConversation(principal.getUserId(), conversationId, title);
+    }
+
+    @Override
     public List<MessageResponse> getMessages(
             CustomUserDetails principal,
             Long conversationId
