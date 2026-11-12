@@ -3,9 +3,11 @@
 
 import { Button, Card } from '../common/index';
 import { useScenarios } from '../../utils/useScenarios';
-import { man, won } from '../../utils/format';
+import { man } from '../../utils/format';
 import { useToast } from '../../stores/useToastStore';
 import { MAX_SCENARIOS } from '../../data/options';
+
+const MAX_EXTRA_AMOUNT = 2_000_000_000_000;
 
 const FIELDS = [
   { key: 'extraInc', label: '연말까지 추가 수입', hint: '기존 예상 금액보다 추가로 생기는 세전 수입' },
@@ -36,9 +38,13 @@ export function SimSliders({taxInputId, sim, patchSim, resetSim, scenario, predi
       }[r]
     );
   };
-  const onChange = (key) => (e) => {
+  const handleAmountChange = (key) => (e) => {
     const digits = e.target.value.replace(/\D/g, '');
-    patchSim({ [key]: digits ? Number(digits) : 0 });
+    // 만원으로 입력받고 기존 상태·서버 계산에 사용하는 원 단위로 변환한다.
+    const amount = digits ? Number(digits) * 10_000 : 0;
+    // 직접 입력과 붙여넣기 모두 기존 2조 원 상한을 적용한다.
+    patchSim({ [key]: Math.min(amount, MAX_EXTRA_AMOUNT) });
+    if (amount > MAX_EXTRA_AMOUNT) toast('추가 금액은 항목별 최대 200,000,000만원까지 입력할 수 있습니다');
   };
   return (
     <Card title="연말까지 이렇게 하면?" icon="sliders">
@@ -52,20 +58,21 @@ export function SimSliders({taxInputId, sim, patchSim, resetSim, scenario, predi
           </div>
           {/* 기존 예상액을 해당 입력 바로 위에 표시해 추가 가정과 구분한다. */}
           {s.key === 'extraInc' && Number.isFinite(predictedIncome) && (
-            <p className="small muted">예상 수입 {won(predictedIncome)}</p>
+            <p className="small muted">예상 수입 {man(predictedIncome)}</p>
           )}
           {s.key === 'extraExp' && Number.isFinite(predictedExpense) && (
-            <p className="small muted">예상 지출 {won(predictedExpense)}</p>
+            <p className="small muted">예상 지출 {man(predictedExpense)}</p>
           )}
           <input
             id={`s_${s.key}`}
             className="in"
             inputMode="numeric"
-            placeholder="0"
-            value={sim[s.key] || ''}
-            onChange={onChange(s.key)}
+            placeholder="0 (만원)"
+            aria-label={`${s.label} (만원)`}
+            value={sim[s.key] ? sim[s.key] / 10_000 : ''}
+            onChange={handleAmountChange(s.key)}
           />
-          <span className="small muted">{s.hint}</span>
+          <span className="small muted">{s.hint} (단위: 만원, 최대 200,000,000만원)</span>
         </div>
       ))}
       <div className="row" style={{ marginTop: 12 }}>
