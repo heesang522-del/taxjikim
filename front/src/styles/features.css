@@ -1,0 +1,88 @@
+/* 홈 */
+.hero-home h1 { font-size: clamp(26px, 4.5vw, 38px); font-weight: 800; letter-spacing: -.02em; max-width: 18em; }
+
+/* 게시판 상세 */
+.post-title { font-size: 22px; font-weight: 700; margin: 10px 0 8px; overflow-wrap: anywhere; }
+.post-body { min-height: 160px; margin-top: 16px; padding: 20px 0; border-block: 1px solid var(--border-soft); font-size: 14px; line-height: 1.75; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* 파일 업로드 (점선 박스) */
+.drop { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 24px; text-align: center; border: 2px dashed var(--border); border-radius: 16px; background: rgba(248, 250, 252, .5); transition: border-color .15s; }
+.drop:hover, .drop.on { border-color: var(--primary); }
+.drop > svg { color: var(--primary); }
+
+/* 결과 요약 카드 3개 (첫 카드는 진한 남색) */
+.stat .lbl { font-size: 12px; font-weight: 600; color: var(--text-muted); }
+.stat .big { font-size: 30px; font-weight: 800; margin: 8px 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat .sub { font-size: 12px; color: var(--text-faint); }
+.stat .sub.ok { color: var(--success); font-weight: 500; }
+.stat.dark { background: var(--primary-dark); border-color: var(--primary-dark); }
+.stat.dark .lbl, .stat.dark .sub { color: var(--primary-light); }
+.stat.dark .big { color: #fff; }
+
+/* 산출 근거 */
+.chain { display: flex; flex-direction: column; gap: 2px; }
+.chain .st { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; padding: 10px 14px; border-radius: 12px; font-size: 13px; }
+.chain .st small { display: block; color: var(--text-faint); font-size: 11px; }
+.chain .st.hl { background: var(--primary-bg); }
+.chain .st.hl b { color: var(--primary-dark); }
+
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+svg text { fill: var(--text-muted); font-size: 11px; font-family: inherit; }
+
+.act { display: flex; gap: 12px; padding: 14px 0; border-bottom: 1px solid var(--border-soft); align-items: flex-start; }
+.act:last-child { border-bottom: none; padding-bottom: 0; }
+.act:first-of-type { padding-top: 0; }
+.act .gain { font-weight: 700; color: var(--success); white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.guide-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px; border-radius: 12px; background: var(--bg); color: var(--text-h); font-size: 12px; font-weight: 600; text-decoration: none; }
+.guide-link:hover { background: var(--fill); }
+.guide-link svg { color: var(--text-faint); }
+
+/* 시뮬레이션 */
+.slider { display: flex; flex-direction: column; gap: 4px; padding: 14px 0; border-bottom: 1px solid var(--border-soft); }
+.slider:first-of-type { padding-top: 0; }
+.slider:last-of-type { border-bottom: none; }
+.slider .top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
+.slider input.in { max-width: 220px; }
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmp > div { padding: 14px; border-radius: 16px; min-width: 0; }
+.cmp .now { background: var(--fill); }
+.cmp .what { background: var(--primary-bg); }
+.cmp .v { font-size: 22px; font-weight: 800; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.delta { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* 로딩 */
+.load { max-width: 520px; margin: 40px auto; text-align: center; display: flex; flex-direction: column; gap: 24px; padding: 48px 32px; }
+.spinner { width: 64px; height: 64px; margin: 0 auto; border-radius: 24px; background: var(--primary-bg); color: var(--primary); display: flex; align-items: center; justify-content: center; }
+.spinner svg { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.track { width: 256px; max-width: 100%; height: 8px; margin: 0 auto; border-radius: 999px; background: var(--fill); overflow: hidden; }
+.track i { display: block; height: 100%; border-radius: 999px; background: var(--primary); transition: width .35s; }
+.ls { display: flex; flex-direction: column; gap: 6px; text-align: left; width: fit-content; margin: 0 auto; font-size: 13px; }
+.ls div { display: flex; gap: 10px; color: var(--text-faint); }
+.ls div.done { color: var(--text); }
+.ls div::before { content: "○"; }
+.ls div.done::before { content: "●"; color: var(--primary); }
+
+/* 채팅 상담 */
+.chat-root { position: fixed; right: 20px; bottom: 20px; z-index: 80; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.chat-fab { position: relative; width: 56px; height: 56px; border-radius: 50%; border: 0; background: var(--primary); color: #fff; display: grid; place-items: center; cursor: pointer; box-shadow: 0 8px 24px rgba(79, 70, 229, .35); }
+.chat-fab:hover { background: var(--primary-hover); }
+.chat-panel { width: min(360px, calc(100vw - 40px)); height: min(480px, calc(100vh - 120px)); display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; box-shadow: 0 16px 48px rgba(15, 23, 42, .2); overflow: hidden; }
+.chat-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; background: var(--primary); color: #fff; }
+.chat-x { background: transparent; border: 0; color: #fff; cursor: pointer; display: grid; place-items: center; }
+.chat-body { flex: 1; overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 8px; background: var(--bg); }
+.chat-center { align-items: center; justify-content: center; text-align: center; gap: 12px; }
+.chat-note { font-size: 12px; color: var(--text-muted); text-align: center; }
+.chat-warn { padding: 8px 12px; font-size: 12px; background: var(--warn-bg); color: var(--warn); text-align: center; }
+.chat-msg { max-width: 80%; padding: 8px 12px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border); }
+.chat-msg p { white-space: pre-wrap; word-break: break-word; font-size: 14px; }
+.chat-msg span { display: block; margin-top: 2px; font-size: 11px; color: var(--text-faint); }
+.chat-msg.member { align-self: flex-end; background: var(--primary-bg); border-color: var(--primary-border); }
+.chat-form { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--border); }
+.chat-form .in { flex: 1; min-width: 0; }
+.chat-foot { padding: 0 12px 10px; font-size: 11px; color: var(--text-muted); }
+.chat-admin { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px; align-items: start; }
+.chat-admin .chat-body { height: 360px; border: 1px solid var(--border); border-radius: 12px; }
+@media (max-width: 800px) { .chat-admin { grid-template-columns: 1fr; } }

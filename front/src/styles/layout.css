@@ -1,0 +1,21 @@
+.bar { position: sticky; top: 0; z-index: 50; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 24px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.bar-left { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.bar-right { display: flex; align-items: center; gap: 8px; }
+.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-weight: 700; font-size: 18px; color: var(--text-h); white-space: nowrap; }
+.brand .logo { width: 36px; height: 36px; border-radius: 12px; background: var(--primary); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 10px rgba(79, 70, 229, .25); }
+.nav { display: flex; align-items: center; gap: 4px; margin-left: 24px; }
+.nav a { display: flex; align-items: center; gap: 4px; padding: 8px 12px; border-radius: 8px; text-decoration: none; font-size: 14px; font-weight: 500; color: var(--text-muted); white-space: nowrap; }
+.nav a:hover { background: var(--fill); }
+.nav a.active { color: var(--primary); font-weight: 600; }
+.nav a.admin { color: var(--danger); font-weight: 600; border: 1px solid var(--danger-border); }
+.nav a.admin:hover, .nav a.admin.active { background: var(--danger-bg); }
+@media (max-width: 900px) { .nav { display: none; } }
+
+/* 계산 화면 상단 탭 (밑줄형) */
+.subtabs { display: flex; gap: 24px; border-bottom: 1px solid var(--border); font-size: 14px; font-weight: 600; overflow-x: auto; }
+.subtabs > a, .subtabs > button { padding: 0 0 12px; border: none; border-bottom: 2px solid transparent; background: transparent; color: var(--text-muted); cursor: pointer; text-decoration: none; white-space: nowrap; }
+.subtabs > a:hover, .subtabs > button:hover { color: var(--text-h); }
+.subtabs > a.active, .subtabs > button.active { color: var(--primary); border-bottom-color: var(--primary); }
+.calc-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 32px; }
+.calc-head .subtabs { flex: 1; min-width: 0; }
+.rail { position: sticky; top: 88px; }

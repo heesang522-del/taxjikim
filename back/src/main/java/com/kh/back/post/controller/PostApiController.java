@@ -1,11 +1,22 @@
 package com.kh.back.post.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.common.exception.ApiException;
+
 import com.kh.back.post.dto.ChunkDto;
 import com.kh.back.post.dto.PostDto;
 import com.kh.back.post.service.PostService;
+
+
+import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
+
 import org.springframework.web.bind.annotation.*;
 
 import java.io.IOException;
@@ -15,163 +26,144 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/posts")
+@RequestMapping("/api/v1/posts")
+@RequiredArgsConstructor
 public class PostApiController {
 
     private final PostService postService;
 
-    public PostApiController(PostService postService) {
-        this.postService = postService;
-    }
+    private final ObjectMapper objectMapper = new ObjectMapper(); // json을 읽거나 변환하는 객체
 
-    /**
-     * 1. 비동기 게시글 목록 데이터 조회 API
-     */
     @GetMapping
-    public ApiResponse<Map<String, Object>> getPostPage(
-            @RequestParam(defaultValue = "latest") String sort,
-            @RequestParam(defaultValue = "") String keyword,
-            @RequestParam(defaultValue = "1") int page
-    ) {
-        int size = 9;
-        int totalCount = postService.countAll(keyword);
-        int totalPages = (int) Math.ceil((double) totalCount / size);
-        if (page < 1) page = 1;
-        int offset = (page - 1) * size;
+    public ApiResponse<List<PostDto>> getPostPage(@RequestParam(defaultValue = "latest") String sort,
 
+                                                  @RequestParam(defaultValue = "") String keyword,
+
+                                                  @RequestParam(defaultValue = "1") int page,
+
+                                                  @RequestParam(required = false) String postType,
+
+                                                  // "전체" 탭에서 상위 공지를 따로 고정 노출할 때, 일반 목록에서는 공지를 뺀다.
+                                                  @RequestParam(defaultValue = "false") boolean excludeNotice) {
+
+        return postService.getPostPage(sort, keyword, page, postType, excludeNotice);
+    } // latest 정렬방식, "" 검색어, 1 페이지 번호, null 게시판 종류 ( 받은 조건으로 서비스에 게시글 조회를 요청하고 그결과를 반환)
+
+    @GetMapping("/{postId}")
+    public ApiResponse<PostDto> getPost(@PathVariable Long postId) {
+
+        // 비로그인 조회는 조회수를 올리지 않는다(PostServiceImpl.findById 참고).
+        return ApiResponse.ok(postService.findById(postId));
+    } // url 의 {postId} 부분을 변수로 받음 , 서비스에 해당 번호의 게시글 조회를 요청
+    // 조회한 게시글을 공통 성공 응답 형식으로 감싸 반환
+
+
+    @PostMapping(value = "/upload-chunk", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<Map<String, Object>> uploadChunk(@ModelAttribute ChunkDto dto) throws IOException {
+     // /upload-chunck로 들어오는 post 요청을 처리하고 파일을 전송하는 multipart/form-data 형식만 받음  , // 전송된 파일 조각과 업로드 정보등을 chunkdto 객체에 담음
+        String savedFileName = postService.processChunkUpload(dto);
+    // 서비스가 조각을 저장하고 모두 모였다면 파일을 합침 , 아직 조각이 부족하면 null , 파일 처리가 완료되면 저장된 파일명 반환
         Map<String, Object> result = new HashMap<>();
-        result.put("posts", postService.findPage(sort, keyword, offset, size));
-        result.put("page", page);
-        result.put("totalPages", totalPages);
-        result.put("hasNext", page < totalPages);
+ // 응답에 넣을 이름 . 값 묶음을 만듬
+        result.put("completed", savedFileName != null);  // 파일명이 있으면 완료 여부를 true로 설정하고 파일명도 함꼐 담음
 
-        return ApiResponse.ok(result); // success -> ok 로 변경
+        result.put("savedFileName", savedFileName);
+
+        return ApiResponse.ok(result); // 이 데이터를 공통 성공 응답 형식으로 감싸 프론트에 반환
     }
 
-    /**
-     * 2. 대용량 파일 청크 업로드 API
-     */
-    @PostMapping("/upload-chunk")
-    public ResponseEntity<Map<String, Object>> uploadChunk(ChunkDto dto) {
-        Map<String, Object> response = new HashMap<>();
+    @PostMapping(consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
+    public ApiResponse<Void> createPost(@RequestParam("title") String title, @RequestParam("content") String content, @RequestParam(value = "postType", defaultValue = "INFO") String postType,
 
-        try {
-            String savedFileName = postService.processChunkUpload(dto);
-            boolean completed = (savedFileName != null);
+                                        @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
 
-            Map<String, Object> data = new HashMap<>();
-            data.put("completed", completed);
-            data.put("savedFileName", savedFileName);
+                                        @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson) {
 
-            response.put("success", true);
-            response.put("data", data);
-            return ResponseEntity.ok(response);
+        PostDto post = makePost(title, content, postType, isPublic);
 
-        } catch (Exception e) {
-            e.printStackTrace();
-            response.put("success", false);
-            response.put("message", e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
-        }
+        postService.saveWithFiles(post, parseFileNames(savedFileNamesJson));
+
+        return ApiResponse.ok(null);
     }
 
-    /**
-     * 3. 게시글 신규 등록 API
-     */
-    @PostMapping(consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
-    public ResponseEntity<?> createPost(
-            @RequestParam("title") String title,
-            @RequestParam(value = "place", required = false) String place,
-            @RequestParam("content") String content,
-            @RequestParam(value = "transportCost", defaultValue = "0") Long transportCost,
-            @RequestParam(value = "foodCost", defaultValue = "0") Long foodCost,
-            @RequestParam(value = "otherCost", defaultValue = "0") Long otherCost,
-            @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
-            @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
-    ) {
-        try {
-            List<String> savedFileNames = parseSavedFileNames(savedFileNamesJson, savedFileNamesAlt);
+    @PostMapping(value = {"/{postId}", "/{postId}/update"}, consumes = {MediaType.MULTIPART_FORM_DATA_VALUE, MediaType.APPLICATION_FORM_URLENCODED_VALUE})
+    public ApiResponse<Void> updatePost(@PathVariable Long postId,
 
-            PostDto postDto = new PostDto();
-            postDto.setTitle(title);
-            postDto.setPlace(place);
-            postDto.setContent(content);
-            postDto.setTransportCost(transportCost);
-            postDto.setFoodCost(foodCost);
-            postDto.setOtherCost(otherCost);
-            postDto.setWriter("익명");
+                                        @RequestParam("title") String title,
 
-            postService.saveWithFiles(postDto, savedFileNames);
+                                        @RequestParam("content") String content,
 
-            return ResponseEntity.ok(Map.of("success", true));
-        } catch (Exception e) {
-            e.printStackTrace();
-            return ResponseEntity.badRequest().body(Map.of("success", false, "message", e.getMessage()));
-        }
+                                        @RequestParam(value = "postType", defaultValue = "INFO") String postType,
+
+                                        @RequestParam(value = "isPublic", defaultValue = "true") boolean isPublic,
+
+                                        @RequestParam(value = "deleteFileIds", required = false) List<Long> deleteFileIds,
+
+                                        @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson) {
+
+        PostDto post = makePost(title, content, postType, isPublic);
+
+        post.setPostId(postId);
+
+        postService.updateWithFiles(post, deleteFileIds, parseFileNames(savedFileNamesJson));
+
+        return ApiResponse.ok(null);
     }
 
-    /**
-     * 4. 게시글 수정 API
-     */
-    @PostMapping(value = {"/{postId}", "/{postId}/update"}, consumes = {org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE, org.springframework.http.MediaType.APPLICATION_FORM_URLENCODED_VALUE})
-    public ApiResponse<Void> updatePost(
-            @PathVariable Long postId,
-            @RequestParam("title") String title,
-            @RequestParam(value = "place", required = false) String place,
-            @RequestParam("content") String content,
-            @RequestParam(value = "transportCost", defaultValue = "0") Long transportCost,
-            @RequestParam(value = "foodCost", defaultValue = "0") Long foodCost,
-            @RequestParam(value = "otherCost", defaultValue = "0") Long otherCost,
-            @RequestParam(value = "deleteImageIds", required = false) List<Long> deleteImageIds,
-            @RequestParam(value = "savedFileNamesJson", required = false) String savedFileNamesJson,
-            @RequestParam(value = "savedFileNames", required = false) String savedFileNamesAlt
-    ) throws IOException {
-
-        List<String> savedFileNames = parseSavedFileNames(savedFileNamesJson, savedFileNamesAlt);
-
-        PostDto postDto = new PostDto();
-        postDto.setPostId(postId);
-        postDto.setTitle(title);
-        postDto.setPlace(place);
-        postDto.setContent(content);
-        postDto.setTransportCost(transportCost);
-        postDto.setFoodCost(foodCost);
-        postDto.setOtherCost(otherCost);
-
-        postService.updateWithFiles(postDto, deleteImageIds, savedFileNames);
-        return ApiResponse.ok(null); // success -> ok 로 변경
-    }
-
-    // 등록과 수정에서 같은 파일명 처리 규칙을 사용한다.
-    private List<String> parseSavedFileNames(String savedFileNamesJson, String savedFileNamesAlt) {
-        String jsonStr = (savedFileNamesJson != null && !savedFileNamesJson.isBlank())
-                ? savedFileNamesJson : savedFileNamesAlt;
-        List<String> savedFileNames = new ArrayList<>();
-        if (jsonStr == null || jsonStr.isBlank() || jsonStr.equals("[]")) {
-            return savedFileNames;
-        }
-
-        String cleaned = jsonStr.trim();
-        if (cleaned.startsWith("[") && cleaned.endsWith("]")) {
-            cleaned = cleaned.substring(1, cleaned.length() - 1);
-        }
-        if (!cleaned.isBlank()) {
-            for (String part : cleaned.split(",")) {
-                String fileName = part.trim().replaceAll("^\"|\"$", "");
-                if (!fileName.isEmpty()) {
-                    savedFileNames.add(fileName);
-                }
-            }
-        }
-        return savedFileNames;
-    }
-
-    /**
-     * 5. 게시글 삭제 API
-     */
     @DeleteMapping("/{postId}")
     public ApiResponse<Void> deletePost(@PathVariable Long postId) {
+
         postService.deleteById(postId);
-        return ApiResponse.ok(null); // success -> ok 로 변경
+
+        return ApiResponse.ok(null);
+    }
+
+    private PostDto makePost(String title, String content, String postType, boolean isPublic) {
+
+        PostDto post = new PostDto();
+
+        post.setTitle(title);
+        post.setContent(content);
+        post.setPostType(postType);
+        post.setPublic(isPublic);
+
+        // 사용자 ID는 서비스에서 인증 정보로 지정한다.
+        return post;
+    }
+
+    private List<String> parseFileNames(String savedFileNamesJson) {
+
+        if (savedFileNamesJson == null || savedFileNamesJson.isBlank()) {
+            return List.of(); // 만약 저장된 json형식 파일 이름이 null 이면 업으면, 그리고 저장된 파일이름이 비었을때 () 으로 반환
+        }
+
+        try {
+            JsonNode root = objectMapper.readTree(savedFileNamesJson);
+
+            if (root == null || !root.isArray()) {
+                throw invalid("첨부파일 목록은 배열이어야 합니다.");
+            }
+
+            List<String> names = new ArrayList<>();
+
+            for (JsonNode node : root) {
+
+                if (!node.isTextual()) {
+                    throw invalid("첨부파일명은 문자열이어야 합니다.");
+                }
+
+                names.add(node.textValue());
+            }
+
+            return names;
+
+        } catch (JsonProcessingException e) {
+            throw invalid("첨부파일 목록의 형식을 확인해주세요.");
+        }
+    }
+
+    private ApiException invalid(String message) {
+
+        return new ApiException(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR", message);
     }
 }

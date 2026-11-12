@@ -1,0 +1,39 @@
+package com.kh.back.notification.service;
+
+import com.kh.back.notification.dto.NotificationPageDto;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+public interface NotificationService {
+
+    // 로그인한 회원의 알림 SSE 구독을 시작한다. 실제 연결 관리는 SseEmitterRegistry에 위임한다.
+    SseEmitter subscribe(Long userId);
+
+    // 공지사항 게시글 업로드 시 전체 활성 회원에게 알림 발송
+    void broadcastNoticePost(Long postId, String title);
+
+    // 로그인한 회원의 미읽음 알림 목록 커서 페이징 조회. cursorId·size가 없으면 기본값으로 처음부터 조회한다.
+    NotificationPageDto getNotifications(Long userId, Long cursorId, Integer size);
+
+    // 로그인한 회원의 미읽음 알림 수 조회
+    long getUnreadCount(Long userId);
+
+    // 알림 1건을 읽음 처리한다. 본인 알림이 아니거나 이미 처리된 알림이면 예외를 던진다.
+    void markAsRead(Long userId, Long notificationId);
+
+    // 로그인한 회원의 미읽음 알림을 전부 읽음 처리한다. 읽을 알림이 없어도 그냥 끝낸다(예외 없음).
+    void markAllAsRead(Long userId);
+
+    // 정보공유·팁·QnA 게시글에 댓글이 달렸을 때 게시글 작성자에게 알림 발송 (본인 댓글 제외)
+    void notifyPostComment(Long postId, Long postAuthorId, Long commenterId, String commenterNickname,
+                            String postTitle, String commentContent);
+
+    // 내 댓글에 답글이 달렸을 때 부모 댓글 작성자에게 알림 발송 (본인 답글 제외)
+    void notifyCommentReply(Long postId, Long parentCommentAuthorId, Long replierId, String replierNickname,
+                             String postTitle, String replyContent);
+
+    // QNA 게시글이 새로 등록됐을 때 고정 담당 관리자 1명에게 알림 발송 (관리자 본인이 작성한 경우 제외)
+    void notifyNewQnaPost(Long postId, Long authorId, String authorNickname, String postTitle, String postContent);
+
+    // 신고 처리 결과(삭제/반려)를 신고자에게 알린다. postId는 알림 클릭 시 이동할 게시글(댓글이면 소속 게시글) ID다.
+    void notifyReportResolved(Long reporterId, Long postId, String postTitle, String targetType, String result);
+}

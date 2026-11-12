@@ -3,6 +3,8 @@ package com.kh.back.common.dto;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import java.util.Map;
 
 /**
  * 모든 API 가 같은 모양으로 응답하기 위한 공통 봉투.
@@ -15,7 +17,7 @@ public class ApiResponse<T> {
 
     private final boolean success;
     private final T data;
-    private final PageMeta meta;   // 목록 조회일 때만 채운다
+    private final Object meta;     // 목록 조회일 때만 채운다. 번호 페이징은 PageMeta, 커서 페이징은 CursorMeta
     private final ErrorInfo error; // 실패일 때만 채운다
 
     // 단건 조회 성공
@@ -24,13 +26,21 @@ public class ApiResponse<T> {
     }
 
     // 목록 조회 성공 (페이징 정보 포함)
-    public static <T> ApiResponse<T> ok(T data, PageMeta meta) {
+    public static <T> ApiResponse<T> ok(T data, Object meta) {
         return new ApiResponse<>(true, data, meta, null);
     }
 
     // 실패
     public static ApiResponse<Void> fail(String code, String message) {
-        return new ApiResponse<>(false, null, null, new ErrorInfo(code, message));
+        return fail(code, message, null);
+    }
+
+    public static ApiResponse<Void> fail(String code, String message, Map<String, String> fields) {
+        return fail(code, message, fields, null);
+    }
+
+    public static ApiResponse<Void> fail(String code, String message, Map<String, String> fields, Object details) {
+        return new ApiResponse<>(false, null, null, new ErrorInfo(code, message, fields, details));
     }
 
     @Getter
@@ -38,5 +48,9 @@ public class ApiResponse<T> {
     public static class ErrorInfo {
         private final String code;    // 예: COMPANY_NOT_FOUND
         private final String message; // 사람이 읽는 설명
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private final Map<String, String> fields;
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        private final Object details;
     }
 }

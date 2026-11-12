@@ -1,0 +1,55 @@
+import { client } from './client.js';
+
+async function requestComments(postId, config = {}) {
+  try {
+    // 인증은 쿠키를 사용한다.
+    const response = await client.request({
+      url: `/posts/${encodeURIComponent(postId)}/comments`,
+      ...config,
+    });
+    if (!response.data?.success) throw new Error('댓글 요청에 실패했습니다.');
+    return response.data.data;
+  } catch (error) {
+    throw new Error(error.response?.data?.error?.message || error.message || '댓글 요청에 실패했습니다.');
+  }
+}
+
+export async function getComments(postId) {
+  const comments = await requestComments(postId);
+  // DB 응답을 기존 댓글 UI 필드에 맞추되 작성자 회원 번호를 함께 보관한다.
+  // parentCommentId가 있으면 대댓글이므로, 화면에서 부모 댓글 id와 비교할 수 있게 문자열로 맞춘다.
+  return comments.map((comment) => ({
+    id: String(comment.commentId),
+    postId: String(comment.postId),
+    userId: comment.userId,
+    parentCommentId: comment.parentCommentId != null ? String(comment.parentCommentId) : null,
+    body: comment.content,
+    author: comment.writer,
+    createdAt: comment.createdAt,
+    updatedAt: comment.updatedAt,
+    // 부모가 삭제됐어도 살아있는 답글이 있으면 자리는 유지된 채로 내려온다.
+    // 삭제 여부는 deletedAt(실제 DB DELETED_AT 값) 유무로 판단한다. deletedByType은 지금 화면에서 안 쓰지만
+    // 누가 지웠는지 구분용으로 그대로 들고 있는다(DELETED_BY_TYPE을 기록하기 전 삭제 건은 비어 있을 수 있음).
+    deleted: comment.deletedAt != null,
+    deletedByType: comment.deletedByType ?? null,
+  }));
+}
+
+export function createComment(postId, content, parentCommentId = null) {
+  return requestComments(postId, { method: 'POST', data: { content, parentCommentId } });
+}
+
+export function updateComment(postId, commentId, content) {
+  return requestComments(postId, {
+    url: `/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+    method: 'PATCH',
+    data: { content },
+  });
+}
+
+export function deleteComment(postId, commentId) {
+  return requestComments(postId, {
+    url: `/posts/${encodeURIComponent(postId)}/comments/${encodeURIComponent(commentId)}`,
+    method: 'DELETE',
+  });
+}

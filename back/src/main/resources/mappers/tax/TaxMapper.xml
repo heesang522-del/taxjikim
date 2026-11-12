@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.tax.mapper.TaxMapper">
+    <!-- 실제 결과가 저장된 본인 분석만 최신 귀속연도부터 표시한다. -->
+    <select id="findSavedResults" resultType="com.kh.back.tax.dto.SavedTaxResultDto">
+        SELECT i.TAX_INPUT_ID AS taxInputId, i.TAX_YEAR AS taxYear,
+               r.CALCULATED_AT AS savedAt,
+               CAST(r.RESULT_DETAIL->>'$.breakdown.totalIncome' AS DECIMAL(38,2)) AS totalIncome,
+               CAST(r.RESULT_DETAIL->>'$.breakdown.totalExpense' AS DECIMAL(15,2)) AS totalExpense,
+               CAST(r.RESULT_DETAIL->>'$.breakdown.totalTax' AS DECIMAL(38,2)) AS totalTax
+        FROM tax_inputs i
+        JOIN tax_results r ON r.TAX_INPUT_ID = i.TAX_INPUT_ID
+        WHERE i.USER_ID = #{userId} AND i.SAVE_STATUS = 'SAVED'
+        ORDER BY i.TAX_YEAR DESC, r.CALCULATED_AT DESC
+    </select>
+
+    <!-- 기존 JSON 컬럼에는 추가 가정을, 금액 컬럼에는 저장 당시 결과 합계를 기록한다. -->
+    <insert id="insertScenario" useGeneratedKeys="true" keyProperty="scenario.simulationId" keyColumn="SIMULATION_ID">
+        INSERT INTO SIMULATION (USER_ID, TAX_INPUT_ID, TITLE, INPUT_DATA_SNAPSHOT,
+                                RESULT_EXPECTED_TAX, RESULT_TOTAL_INCOME, RESULT_TOTAL_EXPENSE)
+        SELECT #{userId}, TAX_INPUT_ID, #{scenario.name},
+                JSON_OBJECT('extraInc', #{scenario.extraInc}, 'extraExp', #{scenario.extraExp},
+                            'extraDonation', #{scenario.extraDonation}),
+                #{scenario.totalTax}, #{scenario.totalIncome}, #{scenario.totalExpense}
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{scenario.taxInputId}
+          AND (USER_ID IS NULL OR USER_ID = #{userId})
+    </insert>
+
+    <select id="findScenarios" resultType="com.kh.back.tax.dto.SimulationScenarioDto">
+        SELECT SIMULATION_ID AS simulationId, TAX_INPUT_ID AS taxInputId, TITLE AS name,
+               CAST(INPUT_DATA_SNAPSHOT->>'$.extraInc' AS DECIMAL(15,2)) AS extraInc,
+               CAST(INPUT_DATA_SNAPSHOT->>'$.extraExp' AS DECIMAL(15,2)) AS extraExp,
+               CAST(INPUT_DATA_SNAPSHOT->>'$.extraDonation' AS DECIMAL(15,2)) AS extraDonation,
+               RESULT_EXPECTED_TAX AS totalTax, RESULT_TOTAL_INCOME AS totalIncome,
+               RESULT_TOTAL_EXPENSE AS totalExpense
+        FROM SIMULATION
+        WHERE USER_ID = #{userId}
+          AND TAX_INPUT_ID = #{taxInputId}
+        ORDER BY SIMULATION_ID
+    </select>
+
+    <delete id="deleteScenario">
+        DELETE FROM SIMULATION WHERE SIMULATION_ID = #{simulationId} AND USER_ID = #{userId}
+    </delete>
+
+    <!-- 현재 분석과 귀속연도가 같은 이전 저장본만 삭제하고, 다른 연도와 TEMP 분석은 유지한다. -->
+    <delete id="deletePreviousSavedInputs">
+        DELETE previousInput
+        FROM tax_inputs previousInput
+        JOIN tax_inputs currentInput ON currentInput.TAX_INPUT_ID = #{taxInputId}
+                                   AND previousInput.TAX_YEAR = currentInput.TAX_YEAR
+        WHERE previousInput.USER_ID = #{userId}
+          AND previousInput.SAVE_STATUS = 'SAVED'
+          AND previousInput.TAX_INPUT_ID != #{taxInputId}
+    </delete>
+
+    <!-- 같은 분석번호의 결과는 화면에서 보낸 JSON으로 덮어쓴다. -->
+    <insert id="saveResult">
+        INSERT INTO tax_results (TAX_INPUT_ID, RESULT_DETAIL, CALCULATED_AT)
+        VALUES (#{taxInputId}, #{resultDetail}, CURRENT_TIMESTAMP)
+        ON DUPLICATE KEY UPDATE RESULT_DETAIL = #{resultDetail}, CALCULATED_AT = CURRENT_TIMESTAMP
+    </insert>
+
+    <update id="markResultSaved">
+        UPDATE tax_inputs SET USER_ID = #{userId}, SAVE_STATUS = 'SAVED', UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND (USER_ID IS NULL OR USER_ID = #{userId})
+    </update>
+
+    <select id="findResult" resultType="java.lang.String">
+        SELECT r.RESULT_DETAIL
+            FROM tax_results r
+            JOIN tax_inputs i ON i.TAX_INPUT_ID = r.TAX_INPUT_ID
+            WHERE r.TAX_INPUT_ID = #{taxInputId} AND i.USER_ID = #{userId}
+    </select>
+
+    <!-- 거래 합계와 별도로 입력한 계산 조건을 같은 분석번호로 조회한다. -->
+    <select id="findCalculationInput" resultType="com.kh.back.tax.dto.TaxCalculationInputDto">
+        SELECT TAX_YEAR AS taxYear,
+               BUSINESS_REGISTERED AS businessRegistered,
+               DEPENDENT_COUNT AS dependentCount,
+               SPECIAL_DONATION_AMOUNT AS specialDonationAmount,
+               GENERAL_DONATION_AMOUNT AS generalDonationAmount
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND (USER_ID = #{userId} OR USER_ID IS NULL)
+    </select>
+
+    <!-- 수입·지출을 포함한 전체 자료 기간을 한 번에 조회한다. -->
+    <select id="findTransactionPeriod" resultType="com.kh.back.tax.dto.TransactionPeriodDto">
+        SELECT MIN(TRANSACTION_DATE) AS firstDate,
+               MAX(TRANSACTION_DATE) AS lastDate
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <!-- 월·거래 구분으로 묶되, 수입은 세전 금액·지출은 실제 금액을 합산한다. -->
+    <select id="findMonthlyTransactions" resultType="com.kh.back.tax.dto.MonthlyTransactionDto">
+        SELECT MONTH(TRANSACTION_DATE) AS month,
+               TRANSACTION_TYPE AS transactionType,
+               ROUND(COALESCE(SUM(
+                   CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                        THEN PRE_TAX_INCOME ELSE AMOUNT END
+               ), 0), 0) AS amount,
+               CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                         AND COUNT(AMOUNT) = COUNT(*)
+                    THEN SUM(AMOUNT)
+                    ELSE NULL END AS netIncome
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_TYPE IN ('INCOME', 'EXPENSE')
+        GROUP BY MONTH(TRANSACTION_DATE), TRANSACTION_TYPE
+        ORDER BY MONTH(TRANSACTION_DATE), TRANSACTION_TYPE
+    </select>
+
+    <select id="findCategoryAmounts" resultType="com.kh.back.tax.dto.CategoryAmountDto">
+        SELECT TRANSACTION_TYPE AS transactionType,
+               CATEGORY AS category,
+               COALESCE(SUM(CASE WHEN TRANSACTION_TYPE = 'INCOME'
+                                 THEN PRE_TAX_INCOME ELSE AMOUNT END), 0) AS amount
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_TYPE IN ('INCOME', 'EXPENSE')
+        GROUP BY TRANSACTION_TYPE, CATEGORY
+        ORDER BY TRANSACTION_TYPE, amount DESC, category
+    </select>
+</mapper>

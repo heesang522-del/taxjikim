@@ -1,0 +1,67 @@
+package com.kh.back.tax.controller;
+
+import com.kh.back.common.dto.ApiResponse;
+import com.kh.back.tax.dto.TaxCalculationResultDto;
+import com.kh.back.tax.service.TaxService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.http.ResponseEntity;
+import tools.jackson.databind.JsonNode;
+import com.kh.back.tax.dto.TaxSimulationDto;
+import com.kh.back.tax.dto.TaxBreakdownDto;
+import org.springframework.web.bind.annotation.PostMapping;
+import com.kh.back.auth.security.CustomUserDetails;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import com.kh.back.tax.dto.SavedTaxResultDto;
+import java.util.List;
+
+
+// 세금 분석 결과 요청을 받는다.
+@RestController
+@RequestMapping("/api/v1/tax/inputs")
+@RequiredArgsConstructor
+public class TaxApiController {
+
+    private final TaxService taxService;
+
+    // 인증은 SecurityConfig에서 처리하고, 인증된 회원번호로 본인 목록을 조회한다.
+    @GetMapping("/saved-results")
+    public ApiResponse<List<SavedTaxResultDto>> getSavedResults(
+            @AuthenticationPrincipal CustomUserDetails principal) {
+        return ApiResponse.ok(taxService.getSavedResults(principal.getUserId()));
+    }
+
+    // 결과 데이터에 추가 가정을 반영해 계산하며 DB에는 저장하지 않는다.
+    @PostMapping("/simulation")
+    public ApiResponse<TaxBreakdownDto> simulate(@RequestBody TaxSimulationDto request) {
+        return ApiResponse.ok(taxService.simulate(request));
+    }
+
+    // 페이지에서 보낸 결과 JSON을 저장한다. 로그인 접근은 SecurityConfig에서 관리한다.
+    @PutMapping("/{taxInputId}/result")
+    public ResponseEntity<Void> saveResult(@AuthenticationPrincipal CustomUserDetails principal,
+                                         @PathVariable("taxInputId") Long taxInputId,
+                                         @RequestBody JsonNode result) {
+        // 인증된 회원번호만 사용하며, 프론트가 보낸 회원번호나 세션 기록은 사용하지 않는다.
+        taxService.saveResult(taxInputId, principal.getUserId(), result);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 인증된 회원번호를 전달해 본인의 저장 결과만 조회한다.
+    @GetMapping("/{taxInputId}/result")
+    public ApiResponse<JsonNode> getSavedResult(@AuthenticationPrincipal CustomUserDetails principal, @PathVariable("taxInputId") Long taxInputId) {
+        return ApiResponse.ok(taxService.getSavedResult(taxInputId, principal.getUserId()));
+    }
+
+    // 결과 페이지에 필요한 산출 근거·월별 금액·사업자등록 여부를 함께 반환한다.
+    @GetMapping("/{taxInputId}/calculation-result")
+    public ApiResponse<TaxCalculationResultDto> getCalculationResult(@AuthenticationPrincipal CustomUserDetails principal, @PathVariable("taxInputId") Long taxInputId) {
+        return ApiResponse.ok(taxService.getCalculationResult(taxInputId, principal == null ? null : principal.getUserId()));
+    }
+
+}

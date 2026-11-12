@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.taxupload.mapper.TaxMapper">
+
+    <resultMap id="inputMap"
+               type="com.kh.back.taxupload.dto.TaxTransactionDto$TaxInputRequest">
+
+        <id property="taxInputId" column="TAX_INPUT_ID"/>
+
+        <result property="userId" column="USER_ID"/>
+        <result property="taxYear" column="TAX_YEAR"/>
+        <result property="businessRegistered" column="BUSINESS_REGISTERED"/>
+        <result property="dependentCount" column="DEPENDENT_COUNT"/>
+        <result property="generalDonationAmount" column="GENERAL_DONATION_AMOUNT"/>
+        <result property="specialDonationAmount" column="SPECIAL_DONATION_AMOUNT"/>
+        <result property="saveStatus" column="SAVE_STATUS"/>
+    </resultMap>
+
+    <resultMap id="transactionMap"
+               type="com.kh.back.taxupload.dto.TaxTransactionDto">
+
+        <id property="transactionId" column="TRANSACTION_ID"/>
+
+        <result property="taxInputId" column="TAX_INPUT_ID"/>
+        <result property="transactionType" column="TRANSACTION_TYPE"/>
+        <result property="transactionDate" column="TRANSACTION_DATE"/>
+        <result property="description" column="DESCRIPTION"/>
+        <result property="category" column="CATEGORY"/>
+        <result property="preTaxIncome" column="PRE_TAX_INCOME"/>
+        <result property="deductedTaxRate" column="DEDUCTED_TAX_RATE"/>
+        <result property="amount" column="AMOUNT"/>
+    </resultMap>
+
+    <insert id="insertInput"
+            useGeneratedKeys="true"
+            keyProperty="taxInputId"
+            keyColumn="TAX_INPUT_ID">
+
+        INSERT INTO tax_inputs (
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        DEPENDENT_COUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
+        SAVE_STATUS
+        )
+        VALUES (
+        #{userId},
+        #{taxYear},
+        #{businessRegistered},
+        #{dependentCount},
+        #{generalDonationAmount},
+        #{specialDonationAmount},
+        #{saveStatus}
+        )
+    </insert>
+
+    <select id="findInput" resultMap="inputMap">
+        SELECT
+        TAX_INPUT_ID,
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        DEPENDENT_COUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
+        SAVE_STATUS
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </select>
+
+    <!-- 같은 분석에 대한 변경 작업을 조율하도록 부모 분석을 잠근다. -->
+    <select id="lockInput" resultMap="inputMap">
+        SELECT
+        TAX_INPUT_ID,
+        USER_ID,
+        TAX_YEAR,
+        BUSINESS_REGISTERED,
+        DEPENDENT_COUNT,
+        GENERAL_DONATION_AMOUNT,
+        SPECIAL_DONATION_AMOUNT,
+        SAVE_STATUS
+        FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        FOR UPDATE
+    </select>
+
+    <update id="updateInput">
+        UPDATE tax_inputs
+        SET USER_ID = #{userId},
+        TAX_YEAR = #{taxYear},
+        BUSINESS_REGISTERED = #{businessRegistered},
+        DEPENDENT_COUNT = #{dependentCount},
+        GENERAL_DONATION_AMOUNT = #{generalDonationAmount},
+        SPECIAL_DONATION_AMOUNT = #{specialDonationAmount},
+        SAVE_STATUS = #{saveStatus},
+        UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </update>
+
+    <delete id="deleteInput">
+        DELETE FROM tax_inputs
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </delete>
+
+    <update id="touchInput">
+        UPDATE tax_inputs
+        SET UPDATED_AT = CURRENT_TIMESTAMP
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </update>
+
+    <insert id="insertTransactions">
+
+        INSERT INTO tax_transactions (
+        TAX_INPUT_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        PRE_TAX_INCOME,
+        DEDUCTED_TAX_RATE,
+        AMOUNT
+        )
+        VALUES
+        <foreach collection="rows" item="row" separator=",">
+        (
+        #{row.taxInputId},
+        #{row.transactionType},
+        #{row.transactionDate},
+        #{row.description},
+        #{row.category},
+        #{row.preTaxIncome},
+        #{row.deductedTaxRate},
+        #{row.amount}
+        )
+        </foreach>
+    </insert>
+
+    <!-- 거래번호가 있으면 특정 거래, 없으면 분석의 전체 거래를 조회한다. -->
+    <select id="findTransactions" resultMap="transactionMap">
+        SELECT
+        TRANSACTION_ID,
+        TAX_INPUT_ID,
+        TRANSACTION_TYPE,
+        TRANSACTION_DATE,
+        DESCRIPTION,
+        CATEGORY,
+        PRE_TAX_INCOME,
+        DEDUCTED_TAX_RATE,
+        AMOUNT
+        FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+
+        <if test="transactionId != null">
+            AND TRANSACTION_ID = #{transactionId}
+        </if>
+
+        ORDER BY TRANSACTION_ID
+    </select>
+
+    <update id="updateCategories">
+        UPDATE tax_transactions
+        SET CATEGORY = CASE TRANSACTION_ID
+        <foreach collection="changes" item="change">
+            WHEN #{change.transactionId} THEN #{change.category}
+        </foreach>
+        ELSE CATEGORY END
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_ID IN
+        <foreach collection="changes" item="change" open="(" separator="," close=")">
+            #{change.transactionId}
+        </foreach>
+    </update>
+
+    <delete id="deleteTransactionBatch">
+        DELETE FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+          AND TRANSACTION_ID IN
+        <foreach collection="transactionIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <delete id="deleteTransaction">
+        DELETE FROM tax_transactions
+        WHERE TAX_INPUT_ID = #{taxInputId}
+        AND TRANSACTION_ID = #{transactionId}
+    </delete>
+
+    <delete id="deleteResult">
+        DELETE FROM tax_results
+        WHERE TAX_INPUT_ID = #{taxInputId}
+    </delete>
+
+</mapper>

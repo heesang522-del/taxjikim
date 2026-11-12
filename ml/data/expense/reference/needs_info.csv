@@ -1,0 +1,11 @@
+﻿sample_id,description,expected_status
+needs_info_01,물품 구매,NEEDS_INFO
+needs_info_02,정기 결제,NEEDS_INFO
+needs_info_03,이용료,NEEDS_INFO
+needs_info_04,비용 지급,NEEDS_INFO
+needs_info_05,서비스 결제,NEEDS_INFO
+needs_info_06,온라인 구매,NEEDS_INFO
+needs_info_07,월 사용료,NEEDS_INFO
+needs_info_08,구입 대금,NEEDS_INFO
+needs_info_09,카드 결제,NEEDS_INFO
+needs_info_10,주문 결제,NEEDS_INFO

@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.kh.back.notification.mapper.NotificationMapper">
+
+    <!-- 공지사항 게시글 업로드 시 활성 회원 전체에게 알림 생성 -->
+    <insert id="insertNoticeBroadcast">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, IS_READ)
+        SELECT USER_ID, 'NOTICE', 'POST', #{targetId}, #{title}, FALSE
+        FROM `users`
+        WHERE USER_STATUS = 'ACTIVE'
+    </insert>
+
+    <!--
+        로그인한 회원의 미읽음 알림 목록 커서 페이징 조회 (읽었거나 삭제된 알림은 제외).
+        읽음 처리는 곧바로 소프트 삭제(DELETED_AT)로 이어지므로, 여기 보이는 알림은 항상 미읽음 상태다.
+        NOTIFICATION_ID는 자동 증가 PK이고 CREATED_AT은 삽입 시 DB가 채우는 값이라,
+        생성 순서와 항상 같이 움직여서 정렬·커서 기준으로 그대로 쓸 수 있다.
+        cursorId가 있으면 그보다 작은(더 오래된) 알림부터 내려준다.
+    -->
+    <select id="findByUserId" resultType="com.kh.back.notification.dto.NotificationDto">
+        SELECT
+            NOTIFICATION_ID AS notificationId,
+            USER_ID         AS userId,
+            TYPE            AS type,
+            TARGET_TYPE     AS targetType,
+            TARGET_ID       AS targetId,
+            TITLE           AS title,
+            MESSAGE         AS message,
+            IS_READ         AS isRead,
+            CREATED_AT      AS createdAt
+        FROM NOTIFICATIONS
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+        <if test="cursorId != null">
+          AND NOTIFICATION_ID &lt; #{cursorId}
+        </if>
+        ORDER BY NOTIFICATION_ID DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 로그인한 회원의 미읽음 알림 수 조회 -->
+    <select id="countUnreadByUserId" resultType="long">
+        SELECT COUNT(*)
+        FROM NOTIFICATIONS
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </select>
+
+    <!--
+        알림 1건 읽음 처리: 읽음 플래그를 켜는 동시에 소프트 삭제(DELETED_AT)해서
+        목록·미읽음 수 조회에서 바로 빠지게 한다. userId까지 조건에 넣어 본인 알림만 처리한다.
+    -->
+    <update id="markAsReadById">
+        UPDATE NOTIFICATIONS
+        SET IS_READ = TRUE,
+            DELETED_AT = NOW()
+        WHERE NOTIFICATION_ID = #{notificationId}
+          AND USER_ID = #{userId}
+          AND DELETED_AT IS NULL
+    </update>
+
+    <!-- 로그인한 회원의 미읽음 알림을 전부 읽음 처리(+소프트 삭제)한다. -->
+    <update id="markAllAsReadByUserId">
+        UPDATE NOTIFICATIONS
+        SET IS_READ = TRUE,
+            DELETED_AT = NOW()
+        WHERE USER_ID = #{userId}
+          AND IS_READ = FALSE
+          AND DELETED_AT IS NULL
+    </update>
+
+    <!-- 게시글(정보공유·팁·QnA)에 댓글이 달렸을 때 게시글 작성자에게 알림 1건 생성 -->
+    <insert id="insertCommentNotification">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES (#{userId}, 'COMMENT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+    </insert>
+
+    <!-- 내 댓글에 답글이 달렸을 때 부모 댓글 작성자에게 알림 1건 생성 -->
+    <insert id="insertReplyNotification">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES (#{userId}, 'REPLY', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+    </insert>
+
+    <!-- 활성 상태인 ADMIN role 전체의 USER_ID 조회. 작성자 본인이 관리자여도 자기 글 알림은 받지 않는다. -->
+    <select id="findAdminUserIds" resultType="Long">
+        SELECT USER_ID
+        FROM `users`
+        WHERE USER_ROLE = 'ADMIN'
+          AND USER_STATUS = 'ACTIVE'
+          AND USER_ID &lt;&gt; #{excludeUserId}
+        ORDER BY USER_ID
+    </select>
+
+    <!-- QNA 글이 새로 등록됐을 때 관리자 전원에게 알림 생성 -->
+    <insert id="insertQnaPostNotifications">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES
+        <foreach collection="userIds" item="userId" separator=",">
+            (#{userId}, 'QNA_NEW', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+        </foreach>
+    </insert>
+
+    <!-- 신고 처리 결과를 신고자에게 알린다 -->
+    <insert id="insertReportResultNotification">
+        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        VALUES (#{userId}, 'REPORT_RESULT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
+    </insert>
+
+</mapper>

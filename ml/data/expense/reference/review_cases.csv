@@ -1,0 +1,9 @@
+﻿description,reason,review_status
+촬영용 카메라 대여료,장비 대여는 공간 대여와 다르며 적용 범주 미확정,NEEDS_DECISION
+게임 아이템 구매,게임 이용권인지 게임 내 소비성 아이템인지 불명확,NEEDS_DECISION
+리뷰용 화장품 구매,리뷰용 비전자 제품의 범주 기준 미확정,NEEDS_DECISION
+촬영용 의상 구입,의류를 소품에 포함하는 기준 미확정,NEEDS_DECISION
+장비 수리 비용,구매가 아닌 수리 서비스의 범주 미확정,NEEDS_DECISION
+업무용 차량 렌트비,차량 대여의 범주 기준 미확정,NEEDS_DECISION
+인터넷 비용,회선 요금인지 온라인 서비스 이용료인지 불명확,NEEDS_DECISION
+광고비 정산,수입인지 지출인지 및 정산 내용이 불명확,NEEDS_DECISION

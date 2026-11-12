@@ -77,7 +77,7 @@ export default function HeroSection() {
           </Button>
           <Button
             as={Link}
-            to="/community"
+            to="/posts"
             $size="lg"
             style={{ background: 'rgba(55, 48, 163, 0.8)', border: '1px solid #4f46e5', color: '#fff' }}
           >

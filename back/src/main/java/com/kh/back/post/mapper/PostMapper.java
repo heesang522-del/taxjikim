@@ -1,8 +1,8 @@
 package com.kh.back.post.mapper;
 
-import com.kh.back.post.dto.FileMetaDataDto;
+import com.kh.back.post.dto.FileMetadataDto;
 import com.kh.back.post.dto.PostDto;
-import com.kh.back.post.dto.PostImageDto;
+
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -10,54 +10,75 @@ import java.util.List;
 
 @Mapper
 public interface PostMapper {
-    List<PostDto> findAll(@Param("sort") String sort);
 
     List<PostDto> findPage(
             @Param("sort") String sort,
             @Param("keyword") String keyword,
             @Param("offset") int offset,
-            @Param("size") int size
+            @Param("size") int size,
+            @Param("postType") String postType,
+            @Param("currentUserId") Long currentUserId,
+            @Param("isAdmin") boolean isAdmin,
+            @Param("excludeNotice") boolean excludeNotice
     );
 
+    int countAll(
+            @Param("keyword") String keyword,
+            @Param("postType") String postType,
+            @Param("currentUserId") Long currentUserId,
+            @Param("isAdmin") boolean isAdmin,
+            @Param("excludeNotice") boolean excludeNotice
+    );
 
-
-    int countAll(@Param("keyword") String keyword);
-
-    PostDto findById(@Param("postId") Long postId);
-
-    List<PostImageDto> findImagesByPostId(
+    PostDto findById(
             @Param("postId") Long postId
     );
 
+    PostDto lockById(
+            @Param("postId") Long postId
+    );
+
+    // 하루 1회 제한(Redis)을 통과했을 때만 호출한다. 영향받은 행 수로 호출부가 성공 여부를 알 수 있다.
+    int incrementViewCount(
+            @Param("postId") Long postId
+    );
 
     void save(PostDto post);
 
-    void delete(Long postId);
-
     void update(PostDto post);
 
-    void deleteById(@Param("postId") Long postId);
-
-    void saveImage(PostImageDto postImage);
-
-    void savePostImage(
+    void updateAnswerStatus(
             @Param("postId") Long postId,
-            @Param("uploadId") Long uploadId
+            @Param("answerStatus") String answerStatus
     );
 
-    void deleteByPostIdAndUploadId(
-            @Param("postId") Long postId,
-            @Param("uploadId") Long uploadId
+    void deleteById(
+            @Param("postId") Long postId
     );
 
-    void deleteImage(
-            @Param("uploadId") Long uploadId
+    void deleteByAdmin(
+            @Param("postId") Long postId
     );
 
-    void updateImageOrder(
-            @Param("uploadId") Long uploadId,
-            @Param("imageOrder") int imageOrder
+    List<FileMetadataDto> findFilesByPostId(
+            @Param("postId") Long postId
     );
 
-    void saveFileMeta(FileMetaDataDto metadataDto);
+    void savePendingFile(
+            FileMetadataDto file
+    );
+
+    FileMetadataDto lockPendingFile(
+            @Param("storedFileName") String storedFileName
+    );
+
+    int attachPendingFile(
+            @Param("fileId") Long fileId,
+            @Param("postId") Long postId
+    );
+
+    int deleteFileMeta(
+            @Param("fileId") Long fileId,
+            @Param("postId") Long postId
+    );
 }

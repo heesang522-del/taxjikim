@@ -3,6 +3,8 @@
 .env.*
 !.env.example
 !.env.*.example
+# 개인 실행 설정은 비밀번호와 로컬 인증서 경로를 포함하므로 공유하지 않는다.
+back/src/main/resources/application-local.yml
 *.local
 *.pem
 *.key
@@ -12,7 +14,61 @@
 *.keystore
 
 # Python 가상환경, 캐시, 로컬 데이터와 학습 결과
-나중에 건드려야함
+/ml/.venv/
+**/__pycache__/
+*.py[cod]
+**/.ipynb_checkpoints/
+
+# 현재 합성 더미데이터만 공유하고 실제 거래 데이터는 계속 제외한다.
+/ml/data/*
+!/ml/data/.gitkeep
+!/ml/data/expense/
+/ml/data/expense/*
+!/ml/data/expense/training/
+!/ml/data/expense/testing/
+!/ml/data/expense/reference/
+
+# 수입 합성 학습·시험 자료와 카테고리 안내만 공유한다. 사용자 수집 자료는 제외한다.
+!/ml/data/income/
+/ml/data/income/*
+!/ml/data/income/training/
+!/ml/data/income/testing/
+/ml/data/income/training/*
+/ml/data/income/testing/*
+!/ml/data/income/training/training_data.csv
+!/ml/data/income/testing/test_data.csv
+!/ml/data/income/reference/
+/ml/data/income/reference/*
+!/ml/data/income/reference/categories.md
+
+# 서버 실행에 필요한 LinearSVC 모델과 이전 LinearSVC 시험 기록만 공유한다.
+/ml/models/*
+!/ml/models/.gitkeep
+!/ml/models/expense_classifier/
+/ml/models/expense_classifier/*
+!/ml/models/expense_classifier/linear_svc_bundle.pkl
+!/ml/models/expense_classifier/model_report.json
+!/ml/models/expense_classifier/previous_test_report.json
+!/ml/models/expense_classifier/previous_test_predictions.csv
+!/ml/models/income_classifier/
+/ml/models/income_classifier/*
+!/ml/models/income_classifier/linear_svc_bundle.pkl
+!/ml/models/income_classifier/model_report.json
+
+# 새 환경에서도 재학습 완료 기록과 모델을 함께 사용해 같은 데이터의 재학습을 방지한다.
+!/ml/models/retraining/
+/ml/models/retraining/*
+!/ml/models/retraining/income_last_training.json
+!/ml/models/retraining/expense_last_training.json
+!/ml/models/retraining/income/
+!/ml/models/retraining/expense/
+/ml/models/retraining/income/*
+/ml/models/retraining/expense/*
+!/ml/models/retraining/income/classifier/
+!/ml/models/retraining/expense/classifier/
+/ml/models/retraining/*/classifier/*
+!/ml/models/retraining/*/classifier/linear_svc_bundle.pkl
+!/ml/models/retraining/*/classifier/model_report.json
 
 # IntelliJ IDEA
 **/.idea/
@@ -28,6 +84,9 @@
 **/.DS_Store
 **/Thumbs.db
 
+# 로컬 작업 중 생성되는 임시 파일
+.tmp/
+
 # Vim 편집기 임시 파일
 *.swp
 *.swo
@@ -36,3 +95,92 @@
 *.log
 *.log.*
 **/logs/
+
+# 다운로드 파일
+workers
+
+# 실행 위치에 따라 생기는 사용자 업로드와 세무 PDF 원본은 공유하지 않는다.
+/storage/tax-pdfs/
+/back/storage/tax-pdfs/
+
+# 프론트엔드 전용 제외 규칙
+/front/**/node_modules
+/front/**/dist
+/front/**/dist-ssr
+/front/**/*.local
+
+# Editor directories and files
+/front/**/*.suo
+/front/**/*.ntvs*
+/front/**/*.njsproj
+/front/**/*.sln
+/front/**/*.sw?
+
+# 로컬 이전 백업과 npm 캐시는 저장소에 올리지 않는다.
+/front/**/migration-backup/
+/front/**/.npm-cache/
+
+# 백엔드 전용 제외 규칙
+/back/**/HELP.md
+/back/**/.gradle
+/back/**/build/
+!/back/gradle/wrapper/gradle-wrapper.jar
+!/back/**/src/main/**/build/
+!/back/**/src/test/**/build/
+
+# Maven 빌드 결과와 Java 컴파일 파일
+/back/**/target/
+/back/**/*.class
+
+# 사용자 업로드 파일
+
+### STS ###
+/back/**/.apt_generated
+/back/**/.classpath
+/back/**/.factorypath
+/back/**/.project
+/back/**/.settings
+/back/**/.springBeans
+/back/**/.sts4-cache
+/back/**/bin/
+!/back/**/src/main/**/bin/
+!/back/**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+/back/**/out/
+!/back/**/src/main/**/out/
+!/back/**/src/test/**/out/
+
+### NetBeans ###
+/back/nbproject/private/
+/back/nbbuild/
+/back/dist/
+/back/nbdist/
+/back/.nb-gradle/
+
+# 개인 JWT 서명 키 (Git에 올리지 않는다)
+/back/config/jwt-secret.properties
+
+# 테스트 소스는 로컬에서만 관리한다.
+/back/src/test/
+/ml/scripts/test_pdf_parser.py
+
+# 로컬 SQL 자료는 Git에 올리지 않는다.
+/back/sql/schema.sql
+/back/local/
+
+# 업로드는 제외하고 현재 저장 위치의 기본 프로필 이미지 하나만 공유한다.
+**/uploads/
+!/back/uploads/
+/back/uploads/*
+!/back/uploads/profile/
+/back/uploads/profile/*
+!/back/uploads/profile/default-profile.svg
+/docs/mypage-consultation-history-design.md
+
+# PyInstaller 빌드 중간 파일과 배포 결과물
+/build/
+/dist/
+
+# 환경변수가 올라간 설정파일
+back/src/main/resources/application-local.yml

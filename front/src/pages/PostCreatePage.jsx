@@ -1,0 +1,33 @@
+// taxlab 코드는 React Compiler 없이 동작하게 만들어져 있어 이 파일은 컴파일러 대상에서 뺀다
+'use no memo';
+
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Button } from '../components/common/index';
+import PostForm from '../components/post/PostForm';
+import NoticeCard from '../components/post/NoticeCard';
+import { ROUTES } from '../utils/routes';
+import { POST_WRITE_TABS } from '../data/content';
+import { useAuth } from '../stores/useAuthStore';
+
+export function PostCreatePage() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const { loggedIn, isAdmin } = useAuth();
+
+  if (!loggedIn) {
+    return <NoticeCard title="로그인이 필요합니다" desc="글쓰기는 로그인 후 이용할 수 있습니다." action={<Button variant="primary" to={ROUTES.auth}>로그인</Button>} />;
+  }
+
+  // 공지 분류는 관리자만 쓸 수 있다. 일반 회원이 ?tab=공지로 들어오면 첫 번째 분류로 바꾼다.
+  const writable = isAdmin ? POST_WRITE_TABS : POST_WRITE_TABS.filter((t) => t !== '공지');
+  const tab = writable.includes(params.get('tab')) ? params.get('tab') : writable[0];
+
+  return (
+    <PostForm
+      heading="글쓰기"
+      initial={{ tab, title: '', body: '', files: [] }}
+      submitLabel="등록"
+      onCancel={() => navigate(`${ROUTES.postList}?tab=${encodeURIComponent(tab)}`)}
+    />
+  );
+}
