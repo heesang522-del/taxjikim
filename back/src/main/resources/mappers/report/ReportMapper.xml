@@ -3,7 +3,7 @@
 <mapper namespace="com.kh.back.report.mapper.ReportMapper">
 
     <insert id="insert" parameterType="com.kh.back.report.dto.ReportDto" useGeneratedKeys="true" keyProperty="reportId">
-        INSERT INTO REPORTS (TARGET_TYPE, TARGET_ID, TARGET_USER_ID, REASON_DETAIL, REPORTER_ID)
+        INSERT INTO reports (TARGET_TYPE, TARGET_ID, TARGET_USER_ID, REASON_DETAIL, REPORTER_ID)
         VALUES (#{targetType}, #{targetId}, #{targetUserId}, #{reasonDetail}, #{reporterId})
     </insert>
 
@@ -17,10 +17,10 @@
             tu.NICKNAME AS targetUserNickname,
             p.TITLE AS postTitle, p.DELETED_AT AS postDeletedAt, p.DELETED_BY_TYPE AS postDeletedByType,
             cm.CONTENT AS commentContent, cm.DELETED_AT AS commentDeletedAt, cm.DELETED_BY_TYPE AS commentDeletedByType
-        FROM REPORTS r
+        FROM reports r
         LEFT JOIN users u ON u.USER_ID = r.REPORTER_ID
         LEFT JOIN users tu ON tu.USER_ID = r.TARGET_USER_ID
-        LEFT JOIN POSTS p ON r.TARGET_TYPE = 'POST' AND p.POST_ID = r.TARGET_ID
+        LEFT JOIN posts p ON r.TARGET_TYPE = 'POST' AND p.POST_ID = r.TARGET_ID
         LEFT JOIN comments cm ON r.TARGET_TYPE = 'COMMENT' AND cm.COMMENT_ID = r.TARGET_ID
         ORDER BY r.CREATED_AT DESC
     </select>
@@ -28,12 +28,12 @@
     <select id="findById" resultType="com.kh.back.report.dto.ReportDto">
         SELECT REPORT_ID, TARGET_TYPE, TARGET_ID, TARGET_USER_ID, REASON_DETAIL,
                STATUS, RESULT, PROCESSED_BY, PROCESSED_AT, REPORTER_ID, CREATED_AT
-        FROM REPORTS
+        FROM reports
         WHERE REPORT_ID = #{reportId}
     </select>
 
     <update id="resolve">
-        UPDATE REPORTS
+        UPDATE reports
         SET STATUS = 'DONE', RESULT = #{result}, PROCESSED_BY = #{processedBy},
             PROCESSED_AT = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP
         WHERE REPORT_ID = #{reportId}
@@ -41,7 +41,7 @@
     </update>
 
     <update id="resolveOthersForTarget">
-        UPDATE REPORTS
+        UPDATE reports
         SET STATUS = 'DONE', RESULT = #{result}, PROCESSED_BY = #{processedBy},
             PROCESSED_AT = CURRENT_TIMESTAMP, UPDATED_AT = CURRENT_TIMESTAMP
         WHERE TARGET_TYPE = #{targetType}
