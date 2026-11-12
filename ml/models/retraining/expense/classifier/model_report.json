@@ -1,5 +1,5 @@
 {
-  "created_at": "2026-11-10T16:36:07.808698+09:00",
+  "created_at": "2026-11-12T11:49:06.766201+09:00",
   "sklearn_version": "1.9.1",
   "train_count": 529,
   "model_input": [
@@ -16,11 +16,11 @@
     "TELECOMMUNICATION",
     "TRANSPORT"
   ],
-  "source_sha256": "ce62021578ea7fe0ca54edf078638412c216f64c96ac24b209e7f66a2537c336",
-  "source_file": "/Users/juhyogug/Documents/taxjikim/ml/data/expense/training/training_data.csv",
+  "source_sha256": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
+  "source_file": "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv",
   "input_sha256": {
-    "/Users/juhyogug/Documents/taxjikim/ml/data/expense/training/training_data.csv": "ce62021578ea7fe0ca54edf078638412c216f64c96ac24b209e7f66a2537c336",
-    "/Users/juhyogug/Documents/taxjikim/ml/data/expense/user_approved/category_feedback.csv": "e9a426a7661a66a58e28e739b0f9f04ab7b172d42de08adc3bfac5549f773a9a"
+    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\training\\training_data.csv": "08d000b52ff88a1cf6825815e1eb4fc2066a692869c3a5bd78bd6542daabc2b3",
+    "C:\\finalproject\\taxjikim\\ml\\data\\expense\\user_approved\\category_feedback.csv": "2b53271f81654845b41081b1ada28f5a2e598b4b3dde95040e679e13f563fad0"
   },
   "base_count": 528,
   "additional_count": 1,

@@ -1,7 +1,7 @@
 {
   "data_versions": {
-    "data/income/training/training_data.csv": "7f330397e7e99385d23d41d4483fd3929e75a08eadfa3dbb5c8c4bc416650e24"
+    "data\\income\\training\\training_data.csv": "61a21b5909497c21ce084a9a1982a7c1292ff8f5b5ea7d5384d27584aed68430"
   },
-  "trained_at": "2026-11-10T15:54:31.802018+09:00",
-  "duration_seconds": 27.25
+  "trained_at": "2026-11-12T11:49:05.799063+09:00",
+  "duration_seconds": 1.08
 }

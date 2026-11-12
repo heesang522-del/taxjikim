@@ -74,7 +74,7 @@ export default function CalcResultPage() {
     };
   }, [calculated, savedResult, taxInputId, validTaxInputId, state, navigate, toast, authStatus, guestAccessBlocked]);
   // 페이지의 결과 전체를 저장하며 브라우저의 요약 기록으로 대체하지 않는다.
-  const handleSaveResult = useCallback(async () => {
+  const handleSaveResult = useCallback(async (moveToSimulation = false) => {
     if (isSaving) return;
     if (!breakdown || isLoading || errorMessage) {
       toast('계산 결과를 확인한 뒤 저장해주세요');
@@ -84,7 +84,7 @@ export default function CalcResultPage() {
       navigate(ROUTES.auth, {
         state: {
           returnTo: `${ROUTES.calcResult}${search}`,
-          returnState: { taxResult: result, saveAfterLogin: true },
+          returnState: { taxResult: result, saveAfterLogin: true, moveToSimulation },
         },
       });
       return;
@@ -93,6 +93,10 @@ export default function CalcResultPage() {
     try {
       await saveTaxResult(taxInputId, result);
       toast('저장되었습니다');
+      // 저장에 성공한 경우에만 현재 결과를 전달하며 시뮬레이션으로 이동한다.
+      if (moveToSimulation) {
+        navigate(`${ROUTES.calcSim}${search}`, { state: { taxResult: result } });
+      }
     } catch (error) {
       toast(error.message || '결과를 저장하지 못했습니다');
     } finally {
@@ -100,11 +104,11 @@ export default function CalcResultPage() {
     }
   }, [isSaving, breakdown, isLoading, errorMessage, loggedIn, navigate, search, result, taxInputId, toast]);
 
-  // 비회원이 선택한 저장 동작은 로그인 후 한 번만 이어서 실행하고 현재 결과창에 머문다.
+  // 로그인 전에 선택한 저장·이동 동작을 한 번만 이어서 실행한다.
   useEffect(() => {
     if (!state?.saveAfterLogin || !loggedIn || !result || isLoading || autoSaveStarted.current) return;
     autoSaveStarted.current = true;
-    void handleSaveResult();
+    void handleSaveResult(state.moveToSimulation === true);
     navigate(`${ROUTES.calcResult}${search}`, { replace: true, state: { taxResult: result } });
   }, [state, loggedIn, result, isLoading, handleSaveResult, navigate, search]);
 
@@ -141,21 +145,10 @@ export default function CalcResultPage() {
             결과 저장과 시뮬레이션은 회원 전용입니다. 로그인 후 이용해주세요.
           </span>
         )}
-        <Button onClick={handleSaveResult} disabled={isSaving}>
+        <Button onClick={() => handleSaveResult()} disabled={isSaving}>
           {isSaving ? '저장 중…' : '결과 저장만 하기'}
         </Button>
-        <Button
-          variant="primary"
-          to={loggedIn ? `${ROUTES.calcSim}${search}` : ROUTES.auth}
-          state={
-            loggedIn
-              ? { taxResult: result }
-              : {
-                  returnTo: `${ROUTES.calcSim}${search}`,
-                  returnState: { taxResult: result },
-                }
-          }
-        >
+        <Button variant="primary" onClick={() => handleSaveResult(true)} disabled={isSaving}>
           <Icon name="sliders" size={16} /> 시뮬레이션으로 이동
         </Button>
       </div>
