@@ -18,7 +18,7 @@
 
     <!-- 기존 JSON 컬럼에는 추가 가정을, 금액 컬럼에는 저장 당시 결과 합계를 기록한다. -->
     <insert id="insertScenario" useGeneratedKeys="true" keyProperty="scenario.simulationId" keyColumn="SIMULATION_ID">
-        INSERT INTO SIMULATION (USER_ID, TAX_INPUT_ID, TITLE, INPUT_DATA_SNAPSHOT,
+        INSERT INTO simulation (USER_ID, TAX_INPUT_ID, TITLE, INPUT_DATA_SNAPSHOT,
                                 RESULT_EXPECTED_TAX, RESULT_TOTAL_INCOME, RESULT_TOTAL_EXPENSE)
         SELECT #{userId}, TAX_INPUT_ID, #{scenario.name},
                 JSON_OBJECT('extraInc', #{scenario.extraInc}, 'extraExp', #{scenario.extraExp},
@@ -36,14 +36,14 @@
                CAST(INPUT_DATA_SNAPSHOT->>'$.extraDonation' AS DECIMAL(15,2)) AS extraDonation,
                RESULT_EXPECTED_TAX AS totalTax, RESULT_TOTAL_INCOME AS totalIncome,
                RESULT_TOTAL_EXPENSE AS totalExpense
-        FROM SIMULATION
+        FROM simulation
         WHERE USER_ID = #{userId}
           AND TAX_INPUT_ID = #{taxInputId}
         ORDER BY SIMULATION_ID
     </select>
 
     <delete id="deleteScenario">
-        DELETE FROM SIMULATION WHERE SIMULATION_ID = #{simulationId} AND USER_ID = #{userId}
+        DELETE FROM simulation WHERE SIMULATION_ID = #{simulationId} AND USER_ID = #{userId}
     </delete>
 
     <!-- 현재 분석과 귀속연도가 같은 이전 저장본만 삭제하고, 다른 연도와 TEMP 분석은 유지한다. -->

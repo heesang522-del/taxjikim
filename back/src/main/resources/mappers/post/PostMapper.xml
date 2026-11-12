@@ -147,9 +147,9 @@
         SELECT
         <include refid="postColumns"/>
 
-        FROM POSTS p
+        FROM posts p
 
-        LEFT JOIN USERS u
+        LEFT JOIN users u
         ON u.USER_ID = p.USER_ID
 
         WHERE p.POST_ID = #{postId}
@@ -164,7 +164,7 @@
         POST_ID,
         USER_ID,
         BOARD_TYPE
-        FROM POSTS
+        FROM posts
         WHERE POST_ID = #{postId}
         AND DELETED_AT IS NULL
         FOR UPDATE
@@ -174,7 +174,7 @@
     <!-- 하루 1회 제한을 통과한 조회만 반영한다(호출부인 PostServiceImpl이 Redis로 이미 걸러낸다). -->
     <update id="incrementViewCount">
 
-        UPDATE POSTS
+        UPDATE posts
         SET VIEW_COUNT = VIEW_COUNT + 1
         WHERE POST_ID = #{postId}
         AND DELETED_AT IS NULL
@@ -186,9 +186,9 @@
         SELECT
         <include refid="postColumns"/>
 
-        FROM POSTS p
+        FROM posts p
 
-        LEFT JOIN USERS u
+        LEFT JOIN users u
         ON u.USER_ID = p.USER_ID
 
         WHERE p.DELETED_AT IS NULL
@@ -206,7 +206,7 @@
     <select id="countAll" resultType="int">
 
         SELECT COUNT(*)
-        FROM POSTS p
+        FROM posts p
         WHERE p.DELETED_AT IS NULL
 
         <include refid="keyword"/>
@@ -218,7 +218,7 @@
             useGeneratedKeys="true"
             keyProperty="postId">
 
-        INSERT INTO POSTS (
+        INSERT INTO posts (
         USER_ID,
         BOARD_TYPE,
         TITLE,
@@ -244,7 +244,7 @@
     <!-- QNA 글에 관리자 답변(댓글)이 달리면 WAITING -&gt; DONE으로 전환한다. -->
     <update id="updateAnswerStatus">
 
-        UPDATE POSTS
+        UPDATE posts
         SET ANSWER_STATUS = #{answerStatus}
         WHERE POST_ID = #{postId}
         AND BOARD_TYPE = 'QNA'
@@ -255,7 +255,7 @@
     <!-- 수정해도 원래 작성자의 USER_ID는 유지한다. -->
     <update id="update">
 
-        UPDATE POSTS
+        UPDATE posts
         SET
         TITLE = #{title},
         CONTENT = #{content},
@@ -268,7 +268,7 @@
 
     <update id="deleteById">
 
-        UPDATE POSTS
+        UPDATE posts
         SET
         DELETED_AT = CURRENT_TIMESTAMP
         WHERE POST_ID = #{postId}
@@ -279,7 +279,7 @@
     <!-- 신고 처리로 관리자가 지울 때만 쓴다. "관리자에 의해 삭제됨" 표시용으로 DELETED_BY_TYPE을 남긴다. -->
     <update id="deleteByAdmin">
 
-        UPDATE POSTS
+        UPDATE posts
         SET
         DELETED_AT = CURRENT_TIMESTAMP,
         DELETED_BY_TYPE = 'ADMIN'
@@ -291,9 +291,9 @@
     <select id="findFilesByPostId" resultMap="fileMapping">
 
         SELECT f.*
-        FROM FILE_META f
+        FROM file_meta f
 
-        INNER JOIN POSTS p
+        INNER JOIN posts p
         ON p.POST_ID = f.POST_ID
 
         WHERE f.POST_ID = #{postId}
@@ -311,7 +311,7 @@
             useGeneratedKeys="true"
             keyProperty="fileId">
 
-        INSERT INTO FILE_META (
+        INSERT INTO file_meta (
         POST_ID,
         USER_ID,
         STORED_FILE_NAME,
@@ -337,7 +337,7 @@
     <select id="lockPendingFile" resultMap="fileMapping">
 
         SELECT *
-        FROM FILE_META
+        FROM file_meta
         WHERE STORED_FILE_NAME = #{storedFileName}
         AND POST_ID IS NULL
         AND FILE_TYPE = 'POST_PENDING'
@@ -352,7 +352,7 @@
     <!-- 원본 파일명, 크기, 업로더는 보존하고 게시글만 연결한다. -->
     <update id="attachPendingFile">
 
-        UPDATE FILE_META
+        UPDATE file_meta
         SET
         POST_ID = #{postId},
         FILE_TYPE = 'POST',
@@ -367,7 +367,7 @@
     <!-- 다른 게시글의 첨부파일을 삭제하지 못하도록 함께 제한한다. -->
     <update id="deleteFileMeta">
 
-        UPDATE FILE_META
+        UPDATE file_meta
         SET
         DELETED_AT = CURRENT_TIMESTAMP
         WHERE FILE_ID = #{fileId}
