@@ -6,7 +6,7 @@
 
     <!-- 공지사항 게시글 업로드 시 활성 회원 전체에게 알림 생성 -->
     <insert id="insertNoticeBroadcast">
-        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, IS_READ)
+        INSERT INTO notifications (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, IS_READ)
         SELECT USER_ID, 'NOTICE', 'POST', #{targetId}, #{title}, FALSE
         FROM `users`
         WHERE USER_STATUS = 'ACTIVE'
@@ -30,7 +30,7 @@
             MESSAGE         AS message,
             IS_READ         AS isRead,
             CREATED_AT      AS createdAt
-        FROM NOTIFICATIONS
+        FROM notifications
         WHERE USER_ID = #{userId}
           AND IS_READ = FALSE
           AND DELETED_AT IS NULL
@@ -44,7 +44,7 @@
     <!-- 로그인한 회원의 미읽음 알림 수 조회 -->
     <select id="countUnreadByUserId" resultType="long">
         SELECT COUNT(*)
-        FROM NOTIFICATIONS
+        FROM notifications
         WHERE USER_ID = #{userId}
           AND IS_READ = FALSE
           AND DELETED_AT IS NULL
@@ -55,7 +55,7 @@
         목록·미읽음 수 조회에서 바로 빠지게 한다. userId까지 조건에 넣어 본인 알림만 처리한다.
     -->
     <update id="markAsReadById">
-        UPDATE NOTIFICATIONS
+        UPDATE notifications
         SET IS_READ = TRUE,
             DELETED_AT = NOW()
         WHERE NOTIFICATION_ID = #{notificationId}
@@ -65,7 +65,7 @@
 
     <!-- 로그인한 회원의 미읽음 알림을 전부 읽음 처리(+소프트 삭제)한다. -->
     <update id="markAllAsReadByUserId">
-        UPDATE NOTIFICATIONS
+        UPDATE notifications
         SET IS_READ = TRUE,
             DELETED_AT = NOW()
         WHERE USER_ID = #{userId}
@@ -75,13 +75,13 @@
 
     <!-- 게시글(정보공유·팁·QnA)에 댓글이 달렸을 때 게시글 작성자에게 알림 1건 생성 -->
     <insert id="insertCommentNotification">
-        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        INSERT INTO notifications (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
         VALUES (#{userId}, 'COMMENT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
     </insert>
 
     <!-- 내 댓글에 답글이 달렸을 때 부모 댓글 작성자에게 알림 1건 생성 -->
     <insert id="insertReplyNotification">
-        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        INSERT INTO notifications (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
         VALUES (#{userId}, 'REPLY', 'POST', #{targetId}, #{title}, #{message}, FALSE)
     </insert>
 
@@ -97,7 +97,7 @@
 
     <!-- QNA 글이 새로 등록됐을 때 관리자 전원에게 알림 생성 -->
     <insert id="insertQnaPostNotifications">
-        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        INSERT INTO notifications (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
         VALUES
         <foreach collection="userIds" item="userId" separator=",">
             (#{userId}, 'QNA_NEW', 'POST', #{targetId}, #{title}, #{message}, FALSE)
@@ -106,7 +106,7 @@
 
     <!-- 신고 처리 결과를 신고자에게 알린다 -->
     <insert id="insertReportResultNotification">
-        INSERT INTO NOTIFICATIONS (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
+        INSERT INTO notifications (USER_ID, TYPE, TARGET_TYPE, TARGET_ID, TITLE, MESSAGE, IS_READ)
         VALUES (#{userId}, 'REPORT_RESULT', 'POST', #{targetId}, #{title}, #{message}, FALSE)
     </insert>
 
